@@ -8,7 +8,7 @@ AWS 아키텍처 다이어그램을 노드 방식으로 그리고, 규칙에 어
 ```
 data/icons.json        tools/extract_icons.mjs 가 Icon Shelf index.html 에서 뽑은 아이콘 858개 + 그룹 종류 18개
 data/rules.json        아키텍처 규칙 15개 (placement / edge / count, severity block|warn|info = 차단/경고/참고, message + explain)
-templates/*.json       내장 템플릿 8개 (그래프 JSON + meta, 인프라 7 + 카드 모드 구성도 1)
+templates/*.json       내장 템플릿 10개 (그래프 JSON + meta, 인프라 7 + 카드 모드 구성도 3: 솔루션 다크·라이트, Connect CV)
 src/model/schema.js    그래프 JSON 스키마(arch-canvas/graph@1), normalize, 정렬
 src/model/geometry.js  절대 좌표, 연결선 면 선택/경로(직선·직각·곡선), 그룹 안 빈 자리 — 캔버스/이미지/PPT 가 같이 씀
 src/model/rules.js     규칙 평가기: lint(graph) / diffViolations / mergeRuleAnnotations(검수 핀)

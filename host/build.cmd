@@ -7,7 +7,7 @@ rem  - compiler: Roslyn csc from VS 2022 Build Tools (fallback: .NET Framework c
 rem  - target  : .NET Framework 4.8 / x64 / WinExe
 rem  - output  : ..\release\Arch_Canvas_v%VER%\Arch Canvas.exe  (everything embedded)
 rem ================================================================
-set "VER=0.4.0"
+set "VER=0.4.1"
 set "SRC=%~dp0"
 set "OBJ=%SRC%obj"
 set "OUT=%SRC%..\release\Arch_Canvas_v%VER%"

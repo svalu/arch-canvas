@@ -1,12 +1,12 @@
 {
   "meta": {
-    "id": "contact-center-connect",
+    "id": "connect-cv",
     "section": "구성도",
-    "name": "컨택센터 (Amazon Connect + Contact Lens)",
-    "description": "전화·채팅·이메일 채널을 Amazon Connect 로 받고 Contact Lens 로 분석하는 컨택센터 구성도. Connect 는 AWS 관리형이라 고객 VPC 밖에 그립니다"
+    "name": "Connect CV",
+    "description": "컨택센터 · Amazon Connect + Contact Lens. 전화·채팅·이메일을 Connect 로 받고 Contact Lens(CV)로 분석. Connect 는 AWS 관리형이라 고객 VPC 밖"
   },
   "schema": "arch-canvas/graph@1",
-  "title": "컨택센터 구성도 (Amazon Connect)",
+  "title": "Connect CV 구성도 (Amazon Connect + Contact Lens)",
   "mode": "card",
   "theme": "light",
   "context": {
@@ -55,7 +55,7 @@
     {
       "id": "lens",
       "kind": "section",
-      "label": "Contact Lens (Connect 안에서 켜는 분석 기능)",
+      "label": "Connect CV (Contact Lens) · Connect 안에서 켜는 분석 기능",
       "parent": "connect",
       "x": 20,
       "y": 230,
