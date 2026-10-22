@@ -777,3 +777,37 @@ input[type=checkbox] { transition: transform .1s; } input[type=checkbox]:active 
 .upd-notes p { margin: 0 0 4px; }
 .app.theme-dark .upd-notes { background: #142225; color: #cdebe6; }
 .link-btn { font-size: 12px; color: var(--accent); align-self: center; }
+
+/* ----- 레이어 패널 ----- */
+.layers .lyr-order { display: flex; gap: 4px; flex-wrap: wrap; }
+.lyr-tree { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; padding: 4px 0; max-height: 58vh; overflow: auto; }
+.lyr-row { display: flex; align-items: center; gap: 6px; height: 28px; padding-right: 6px; cursor: pointer; font-size: 12.5px; border-top: 2px solid transparent; user-select: none; }
+.lyr-row:hover { background: #f3f6fa; }
+.lyr-row.on { background: #e3ecf7; }
+.lyr-row.drop-in { background: #e3f6ee; outline: 1.5px dashed #2e9e5b; outline-offset: -2px; }
+.lyr-row.drop-before { border-top-color: var(--accent); }
+.lyr-row.locked .lyr-name { color: var(--muted); }
+.lyr-tw { width: 16px; height: 16px; padding: 0; border: 0; background: transparent; font-size: 10px; color: var(--muted); flex: none; display: inline-grid; place-items: center; }
+.lyr-box { width: 14px; height: 11px; border: 1.5px solid #7D8998; border-radius: 2px; flex: none; }
+.lyr-box.txt { border-color: var(--muted); font-size: 9px; line-height: 8px; text-align: center; font-weight: 700; color: var(--muted); }
+.lyr-ic { width: 16px; height: 16px; flex: none; }
+.lyr-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lyr-count { font-size: 10.5px; color: var(--muted); background: #eef0f3; border-radius: 999px; padding: 0 6px; font-variant-numeric: tabular-nums; }
+.lyr-lock { width: 22px; height: 22px; padding: 0; border: 0; background: transparent; font-size: 11px; opacity: 0; flex: none; }
+.lyr-row:hover .lyr-lock, .lyr-lock.on { opacity: 1; }
+.app.theme-dark .lyr-tree { border-color: #1f3a3a; }
+.app.theme-dark .lyr-row:hover { background: #1c3034; } .app.theme-dark .lyr-row.on { background: #163a38; }
+.app.theme-dark .lyr-row.drop-in { background: #163a2a; }
+.app.theme-dark .lyr-count { background: #1f3a3a; color: #a7c7c1; }
+.app.theme-dark .lyr-tw, .app.theme-dark .lyr-lock { background: transparent; }
+/* ----- 상자를 끌 때: 함께 움직이는 것 강조 + 안내 ----- */
+.react-flow__node.follow > .ico, .react-flow__node.follow > .card, .react-flow__node.follow > .grp, .react-flow__node.follow > .textbox, .react-flow__node.follow > .badge-node { outline: 2px dashed rgba(46,115,184,.55); outline-offset: 3px; }
+.app.theme-dark .react-flow__node.follow > * { outline-color: rgba(45,212,191,.6); }
+.drag-hint { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 26; background: var(--ink); color: #fff; font-size: 12.5px; padding: 7px 14px; border-radius: 999px; box-shadow: 0 6px 18px rgba(0,0,0,.18); pointer-events: none; animation: menu-in .14s ease-out both; white-space: nowrap; }
+.app.theme-dark .drag-hint { background: #2dd4bf; color: #06201d; }
+/* ----- 의견 보내기 ----- */
+.feedback { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 6px; }
+.feedback h3 { margin: 0; }
+.feedback .seg { padding: 0; }
+.feedback input { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+.app.theme-dark .feedback { border-color: #1f3a3a; }

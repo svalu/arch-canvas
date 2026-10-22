@@ -174,7 +174,7 @@ const OPS = {
     for (const k of ['x', 'y', 'w', 'h']) if (k in set && k in item) nums[k] = numField(set[k], k === 'w' || k === 'h' ? '크기' : '좌표');
     for (const k of ['label', 'kind', 'icon', 'line', 'shape', 'arrow', 'body', 'accent', 'color', 'fill']) {
       if (!(k in set)) continue;
-      if (!(k in item || (item.type === 'card' && ['body', 'accent', 'icon'].includes(k)) || (item.type === 'text' && ['accent', 'size', 'bold'].includes(k)) || (item.type === 'badge' && k === 'accent') || (item.kind && ['color', 'fill', 'line'].includes(k)))) continue;
+      if (!(k in item || (item.type === 'card' && ['body', 'accent', 'icon'].includes(k)) || (item.type === 'text' && ['accent', 'size', 'bold'].includes(k)) || (item.type === 'badge' && k === 'accent') || k === 'locked' || (item.kind && ['color', 'fill', 'line'].includes(k)))) continue;
       item[k] = k === 'label' || k === 'body' ? toText(set[k]) : set[k];
     }
     for (const [k, v] of Object.entries(nums)) if (v != null) item[k] = k === 'w' || k === 'h' ? Math.max(minOf(item)[k], v) : v;

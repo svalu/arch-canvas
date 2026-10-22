@@ -19,6 +19,8 @@ const P = {
   help: <><circle cx="8" cy="8" r="6.25" /><path d="M6.25 6.25a1.75 1.75 0 1 1 2.5 1.6c-.5.25-.75.6-.75 1.15v.25" /><path strokeWidth="2" d="M8 11.5h.01" /></>,
   settings: <><path d="M2.5 4.5h6M11.5 4.5h2M2.5 11.5h2M7.5 11.5h6" /><circle cx="10" cy="4.5" r="1.5" /><circle cx="6" cy="11.5" r="1.5" /></>,
   spinner: <path d="M8 2a6 6 0 1 0 6 6" />,
+  layers: <><path d="M8 2l6 3.25-6 3.25-6-3.25z" /><path d="M2 8.25l6 3.25 6-3.25" /><path d="M2 11.25l6 3.25 6-3.25" /></>,
+  feedback: <><path d="M2.5 3.5h11v7.5h-6l-3 2.5v-2.5h-2z" /><path d="M5.5 6.5h5M5.5 8.5h3" /></>,
 };
 
 export function Icon({ name, size = 16, className = '' }) {

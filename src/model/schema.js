@@ -97,6 +97,7 @@ export function normalizeGraph(input) {
     return {
       id,
       kind: typeof x.kind === 'string' && x.kind ? x.kind : 'generic',
+      ...(x.locked ? { locked: true } : {}),
       label: toText(x.label),
       parent: p != null && groupIds.has(p) && p !== id ? p : null,
       x: num(x.x, p != null ? 40 : 0),
@@ -115,6 +116,7 @@ export function normalizeGraph(input) {
     const id = idOf(x, 'n'), p = ref(x.parent);
     return {
       id,
+      ...(x.locked ? { locked: true } : {}),
       ...(x.type === 'card' ? { type: 'card', body: toText(x.body), w: Math.max(120, num(x.w, CARD_DEFAULT.w)), h: Math.max(48, num(x.h, CARD_DEFAULT.h)), ...(hex(x.accent) ? { accent: hex(x.accent) } : {}) } : {}),
       ...(x.type === 'text' ? { type: 'text', w: Math.max(40, num(x.w, TEXT_DEFAULT.w)), h: Math.max(20, num(x.h, TEXT_DEFAULT.h)), size: TEXT_SIZES[x.size] ? x.size : 'md', bold: !!x.bold, ...(hex(x.accent) ? { accent: hex(x.accent) } : {}) } : {}),
       ...(x.type === 'badge' ? { type: 'badge', w: Math.min(64, Math.max(20, num(x.w, BADGE_SIZE))), h: Math.min(64, Math.max(20, num(x.w, BADGE_SIZE))), ...(hex(x.accent) ? { accent: hex(x.accent) } : {}) } : {}),

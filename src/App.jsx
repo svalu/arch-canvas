@@ -5,6 +5,8 @@ import {
 } from '@xyflow/react';
 import { alignItems, distributeItems, sameSize, canResizeCount, snapGuides } from './canvas/align.js';
 import { extractSubgraph, insertSubgraph, subgraphSize, CLIP_MARK } from './model/clip.js';
+import { reorder, moveInLayers } from './model/layers.js';
+import { LayersPanel } from './canvas/LayersPanel.jsx';
 
 // 캔버스 격자 보기 설정 (localStorage 에 저장)
 const LS_VIEW = 'arch-canvas:view';
@@ -90,7 +92,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
   return { title: '자주 쓰는 것', items: suggestData.default.map(toItem).filter(valid), target: null };
 }
 
-export const APP_VERSION = '0.4.2';
+export const APP_VERSION = '0.5.0';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -484,6 +486,15 @@ function Editor() {
   const [guideLines, setGuideLines] = useState([]);
   const [find, setFind] = useState({ open: false, q: '', i: 0, n: 0 });
   const onNodesChange = useCallback((changes) => {
+    // Alt+끌기: 상자가 움직인 만큼 바로 안의 것들을 반대로 옮겨 제자리에 둔다
+    if (altDrag.current) {
+      const c = changes.find((x) => x.type === 'position' && x.id === altDrag.current.id && x.position);
+      if (c) {
+        const d = { x: c.position.x - altDrag.current.last.x, y: c.position.y - altDrag.current.last.y };
+        altDrag.current.last = { ...c.position };
+        if (d.x || d.y) for (const k of altDrag.current.kids) { const kn = rf.getNode(k); if (kn) changes.push({ type: 'position', id: k, position: { x: kn.position.x - d.x, y: kn.position.y - d.y }, dragging: false }); }
+      }
+    }
     // 정렬 안내선: 하나만 끌 때, 다른 요소의 가장자리·가운데에 6px(화면 기준) 안으로 오면 붙이고 선을 보여준다
     const drags = changes.filter((c) => c.type === 'position' && c.dragging && c.position);
     if (drags.length === 1 && viewRef.current.guides !== false) {
@@ -537,12 +548,44 @@ function Editor() {
   }, [tryCommit, currentGraph]);
 
   // ----- 드래그: 끝나면 어느 그룹 안에 놓였는지 다시 계산 -----
-  const onNodeDragStart = useCallback(() => { dragSnapshot.current = currentGraph(); }, [currentGraph]);
+  // 상자를 끌 때: 안에 든 것이 함께 움직인다는 걸 보여 주고(강조 + 안내), Alt 를 누르고 끌면 상자만 옮긴다
+  const altDrag = useRef(null);    // { id, last:{x,y}, kids:[id] }
+  const altPressed = useRef(false); // 누르는 순간 Alt 상태 (React Flow 끌기 이벤트에는 안 실려 올 때가 있다)
+  const altHeld = useRef(false);    // 키보드로 Alt 를 누르고 있는지
+  useEffect(() => {
+    const dn = (e) => { if (e.key === 'Alt') { altHeld.current = true; if (dragHintRef.current?.alone === false) e.preventDefault(); } };
+    const up = (e) => { if (e.key === 'Alt') altHeld.current = false; };
+    const blur = () => { altHeld.current = false; };
+    window.addEventListener('keydown', dn); window.addEventListener('keyup', up); window.addEventListener('blur', blur);
+    return () => { window.removeEventListener('keydown', dn); window.removeEventListener('keyup', up); window.removeEventListener('blur', blur); };
+  }, []);
+  const [dragHint, setDragHint] = useState(null);
+  const dragHintRef = useRef(null); dragHintRef.current = dragHint;
+  const onNodeDragStart = useCallback((e, node) => {
+    dragSnapshot.current = currentGraph();
+    if (node?.type !== 'awsGroup') return;
+    const g = dragSnapshot.current;
+    const all = descendants(g, node.id);
+    if (e?.altKey || e?.sourceEvent?.altKey || altPressed.current || altHeld.current) {
+      altDrag.current = { id: node.id, last: { ...node.position }, kids: [...g.groups, ...g.nodes].filter((x) => x.parent === node.id).map((x) => x.id) };
+      setDragHint({ alone: true, n: all.size });
+    } else {
+      altDrag.current = null;
+      if (all.size) {
+        rf.setNodes((ns) => ns.map((n) => (all.has(n.id) ? { ...n, className: 'follow' } : n)));
+        setDragHint({ alone: false, n: all.size });
+      }
+    }
+  }, [currentGraph, rf]);
 
   const onNodeDragStop = useCallback((_e, _node, dragged) => {
+    setDragHint(null);
+    rf.setNodes((ns) => ns.map((n) => (n.className === 'follow' ? { ...n, className: undefined } : n)));
     const g = currentGraph();
     const rects = absoluteRects(g);
     const draggedIds = new Set(dragged.map((n) => n.id));
+    // Alt+끌기: 상자만 옮겼으니 원래 안에 있던 것들의 소속을 놓인 자리 기준으로 다시 정한다
+    if (altDrag.current) { for (const k of altDrag.current.kids) draggedIds.add(k); altDrag.current = null; }
     const byId = new Map([...g.groups, ...g.nodes].map((i) => [i.id, i]));
     const hasDraggedAncestor = (item) => { let p = item.parent, guard = 0; while (p && guard++ < 64) { if (draggedIds.has(p)) return true; p = byId.get(p)?.parent; } return false; };
     for (const id of draggedIds) {
@@ -563,7 +606,7 @@ function Editor() {
     const before = dragSnapshot.current;
     dragSnapshot.current = null;
     if (!tryCommit(g, before) && before) commit(before, null);   // 규칙에 막히면 끌기 전 자리로 되돌림
-  }, [commit, tryCommit, currentGraph]);
+  }, [commit, tryCommit, currentGraph, rf]);
 
   // ----- 팔레트에서 떨어뜨리기 / 클릭으로 추가 -----
   const addAt = useCallback((payload, flowPos) => {
@@ -914,6 +957,23 @@ function Editor() {
   const distributeSel = useCallback((axis, ids = selIds()) => { if (ids.length < 3) { toastMsg('간격 맞추기는 세 개 이상 선택하십시오.'); return; } tryCommit(distributeItems(currentGraph(), ids, axis)); }, [currentGraph, tryCommit, toastMsg]); // eslint-disable-line react-hooks/exhaustive-deps
   const sameSizeSel = useCallback((dim, ids = selIds()) => { if (canResizeCount(currentGraph(), ids) < 2) { toastMsg('크기 맞추기는 그룹이나 카드를 두 개 이상 선택하십시오.'); return; } tryCommit(sameSize(currentGraph(), ids, dim)); }, [currentGraph, tryCommit, toastMsg]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 레이어: 앞뒤 순서, 잠금, 패널에서 끌어 옮기기
+  const orderSel = useCallback((how, ids) => {
+    const list = ids || [...rf.getNodes().filter((n) => n.selected).map((n) => n.id)];
+    if (!list.length) return;
+    tryCommit(reorder(currentGraph(), list, how));
+  }, [rf, currentGraph, tryCommit]);
+  const lockItems = useCallback((ids, on) => {
+    const g = currentGraph(); const want = new Set(ids);
+    for (const x of [...g.groups, ...g.nodes]) if (want.has(x.id)) { if (on) x.locked = true; else delete x.locked; }
+    commit(g);
+    toastMsg(on ? '잠갔습니다. 끌어도 움직이지 않습니다. 오른쪽 클릭이나 레이어 패널에서 풀 수 있습니다.' : '잠금을 풀었습니다.', 3000);
+  }, [currentGraph, commit, toastMsg]);
+  const layerMove = useCallback((id, target) => {
+    const g = currentGraph();
+    tryCommit(moveInLayers(g, id, target, absoluteRects(g)));
+  }, [currentGraph, tryCommit]);
+
   // 화면에 보이는 이름 (id 대신)
   const labelOf = useCallback((id) => {
     const n = rf.getNode(id);
@@ -955,6 +1015,8 @@ function Editor() {
       items.push({ label: '아이콘 바꾸기 (팔레트에서 검색 후 클릭)', action: () => document.querySelector('.palette .search')?.focus() });
     }
     items.push('sep');
+    items.push({ label: '순서', options: [['front', '맨 앞'], ['forward', '앞'], ['backward', '뒤'], ['back', '맨 뒤']], value: null, onPick: (v) => orderSel(v, ids) });
+    items.push({ label: d.locked ? '잠금 해제' : '잠그기', hint: '끌어도 안 움직임', action: () => lockItems(ids, !d.locked) });
     items.push({ label: many ? `${ids.length}개 복사` : '복사', hint: 'Ctrl+C', action: () => copySelection() });
     items.push({ label: many ? `${ids.length}개 잘라내기` : '잘라내기', hint: 'Ctrl+X', action: () => cutSelection() });
     items.push({ label: many ? `${ids.length}개 복제` : node.type === 'awsGroup' ? '안의 것까지 복제' : '복제', hint: 'Ctrl+D', action: () => duplicateItems(ids) });
@@ -970,7 +1032,7 @@ function Editor() {
     items.push('sep');
     items.push({ label: many ? `${ids.length}개 삭제` : '삭제', hint: 'Delete', danger: true, action: () => removeItems(ids) });
     setCtx({ x: e.clientX, y: e.clientY, title: node.type === 'awsGroup' ? (d.label || '그룹') : node.type === 'awsCard' ? (d.label || '카드') : node.type === 'awsText' ? '글상자' : node.type === 'awsBadge' ? `번호 ${d.label || ''}` : (d.label || catalog.icons.get(d.icon)?.name || '아이콘'), items });
-  }, [rf, catalog, selectById, updateItem, currentGraph, duplicateItems, wrapSelection, askAboutNode, removeItems, alignSel, distributeSel, sameSizeSel, copySelection, cutSelection, saveSelectionAsPiece]);
+  }, [rf, catalog, selectById, updateItem, currentGraph, duplicateItems, wrapSelection, askAboutNode, removeItems, alignSel, distributeSel, sameSizeSel, copySelection, cutSelection, saveSelectionAsPiece, orderSel, lockItems]);
 
   // Shift+클릭 다중 선택: Shift 는 영역 선택 키이기도 해서 React Flow 기본 다중 선택이 안 먹는다.
   // 클릭 직전 선택을 기억해 두었다가, Shift+클릭이면 그 선택에 더하거나(이미 있으면 빼기) 되돌린다.
@@ -991,6 +1053,7 @@ function Editor() {
   // 그래서 캡처 단계에서 포인터 아래 요소를 직접 찾아 토글하고, 이 클릭은 React Flow 로 보내지 않는다.
   const shiftHandled = useRef(false);
   const onCanvasPointerDownCapture = useCallback((e) => {
+    altPressed.current = !!e.altKey;
     rememberSelection();
     shiftHandled.current = false;
     if (!(e.shiftKey || e.ctrlKey || e.metaKey) || e.button !== 0) return;
@@ -1265,6 +1328,8 @@ function Editor() {
       else if ((e.ctrlKey || e.metaKey) && k === 'c' && e.shiftKey) { e.preventDefault(); if (isDesktop) copyPpt(rf.getNodes().some((n) => n.selected) || rf.getEdges().some((x) => x.selected)); }
       else if ((e.ctrlKey || e.metaKey) && k === 'c') { if (textSelected) return; e.preventDefault(); copySelection().then((did) => { if (!did) exportImage('clipboard'); }); }
       else if ((e.ctrlKey || e.metaKey) && k === 'x') { if (textSelected) return; e.preventDefault(); cutSelection(); }
+      else if ((e.ctrlKey || e.metaKey) && (e.code === 'BracketRight' || e.code === 'BracketLeft')) { e.preventDefault(); orderSel(e.code === 'BracketRight' ? (e.shiftKey ? 'front' : 'forward') : (e.shiftKey ? 'back' : 'backward')); }
+      else if ((e.ctrlKey || e.metaKey) && k === 'l') { e.preventDefault(); const sel = rf.getNodes().filter((n) => n.selected); if (sel.length) lockItems(sel.map((n) => n.id), !sel.every((n) => n.data?.locked)); }
       else if ((e.ctrlKey || e.metaKey) && k === 'v') { e.preventDefault(); pasteClip(); }
       else if (['arrowleft', 'arrowright', 'arrowup', 'arrowdown'].includes(k) && !e.ctrlKey && !e.metaKey && !e.altKey) {
         const d = e.shiftKey ? 10 : 1;
@@ -1289,7 +1354,7 @@ function Editor() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [undo, redo, copyPpt, exportImage, saveJson, openJson, wrapSelection, rf, isDesktop, addDoc, switchDoc, duplicateItems, reopenDoc, copySelection, cutSelection, pasteClip, nudgeSelection, renameSelected]);
+  }, [undo, redo, copyPpt, exportImage, saveJson, openJson, wrapSelection, rf, isDesktop, addDoc, switchDoc, duplicateItems, reopenDoc, copySelection, cutSelection, pasteClip, nudgeSelection, renameSelected, orderSel, lockItems]);
 
   // 핀 툴팁의 [AI에게 물어보기] → 여기로 온다
   useEffect(() => {
@@ -1381,6 +1446,7 @@ function Editor() {
             </button>
             <button onClick={() => setPanel(panel === 'ai' ? null : 'ai')} className={'tb toolbar-ai ic-half tour-ai' + (panel === 'ai' ? ' on' : '')} title="AI 패널: 제안서 컨텍스트 · 물어보기 · 그리기·고치기" aria-label="AI 패널"><Icon name="panel" /></button>
           </span>
+          <button onClick={() => setPanel(panel === 'layers' ? null : 'layers')} className={'tb ic-only tour-layers' + (panel === 'layers' ? ' on' : '')} title="레이어: 무엇이 어느 상자 안에 있는지, 앞뒤 순서, 잠금" aria-label="레이어"><Icon name="layers" /></button>
           <button onClick={() => setPanel(panel === 'rules' ? null : 'rules')} className={'tb ic-only tour-rules' + (panel === 'rules' ? ' on' : '') + (violations.length ? ' warn' : '')} title={`규칙 검사${violations.length ? ` (${violations.length}건)` : ''}`} aria-label="규칙 검사">
             <Icon name="shield" />{violations.length > 0 && <span className={'badge' + (violations.some((v) => v.severity === 'block') ? ' block' : '')}>{violations.length}</span>}
           </button>
@@ -1493,6 +1559,7 @@ function Editor() {
           <MiniMap pannable zoomable nodeColor={(n) => (n.type === 'awsGroup' ? (catalog.kinds.get(n.data.kind)?.color || '#999') + '33' : '#232F3E')} />
         </ReactFlow>
         {find.open && <FindBar key={find.n} initial={find.q} onClose={(q) => setFind((f) => ({ ...f, open: false, q }))} />}
+        {dragHint && <div className="drag-hint" role="status">{dragHint.alone ? `상자만 옮기는 중 · 안의 ${dragHint.n}개는 제자리에 둡니다` : `안에 든 ${dragHint.n}개가 함께 움직입니다 · 상자만 옮기려면 Alt 를 누른 채 끄세요`}</div>}
         {toastV && (typeof toastV === 'string'
           ? <div className={'toast' + (toastOut ? ' out' : '')}>{toastV}</div>
           : (
@@ -1532,8 +1599,12 @@ function Editor() {
             state={ai} onReview={() => runAi('review')} onDraw={(req) => runAi('draw', req)} onAsk={(q) => runAi('ask', q)}
             onApplyOps={applyAiOps} onCancel={() => aiAbort.current?.abort()} onPick={selectById} nameOf={labelOf} activeDocId={docs.active}
           />
+        ) : panel === 'layers' ? (
+          <LayersPanel graph={currentGraph()} selected={[...selectedNodes.map((n) => n.id)]}
+            onSelect={(id, add) => rf.setNodes((ns) => ns.map((n) => ({ ...n, selected: n.id === id ? (add ? !n.selected : true) : (add ? n.selected : false) })))}
+            onMove={layerMove} onOrder={(how) => orderSel(how)} onLock={(id, on) => lockItems([id], on)} />
         ) : panel === 'help' ? (
-          <Help isDesktop={isDesktop} onPatch={() => setPanel('patch')} onTour={() => { setPanel(null); setTour(true); }} onCheckUpdate={() => checkUpdate(true)} updBusy={upd.busy} updInfo={upd.info} />
+          <Help isDesktop={isDesktop} onPatch={() => setPanel('patch')} onTour={() => { setPanel(null); setTour(true); }} onCheckUpdate={() => checkUpdate(true)} updBusy={upd.busy} updInfo={upd.info} onToast={toastMsg} stats={{ groups: nodes.filter((n) => n.type === 'awsGroup').length, nodes: nodes.filter((n) => n.type !== 'awsGroup').length, edges: edges.length, mode: docMode, theme }} />
         ) : (
           <Inspector allNodes={nodes} nodes={selectedNodes} edges={selectedEdges} onChange={updateItem} onChangeMany={updateMany} onWrap={wrapSelection} onAlign={alignSel} onDistribute={distributeSel} onSameSize={sameSizeSel} annotations={annotationsRef.current} violations={violations} onShowRules={() => setPanel('rules')} onStartGuide={startGuide} onAsk={(p) => runAi('ask', askAboutText(p))} stats={{ groups: nodes.filter((n) => n.type === 'awsGroup').length, icons: nodes.filter((n) => n.type === 'awsIcon').length, edges: edges.length }} />
         )}
@@ -1874,9 +1945,10 @@ function PatchPanel({ onApply }) {
   );
 }
 
-function Help({ isDesktop, onPatch, onTour, onCheckUpdate, updBusy, updInfo }) {
+function Help({ isDesktop, onPatch, onTour, onCheckUpdate, updBusy, updInfo, onToast, stats }) {
   return (
     <div className="insp help">
+      <Feedback isDesktop={isDesktop} onToast={onToast} stats={stats} />
       <h3>쓰는 법</h3>
       <button className="primary" onClick={onTour}>둘러보기 다시 보기 (30초)</button>
       {isDesktop && <div className="row"><button onClick={onCheckUpdate} disabled={updBusy}>{updBusy ? '확인하는 중…' : '업데이트 확인'}</button><span className="hint">현재 {APP_VERSION}{updInfo?.newer ? ` · 새 버전 ${updInfo.version}` : ''}</span></div>}
@@ -1887,6 +1959,7 @@ function Help({ isDesktop, onPatch, onTour, onCheckUpdate, updBusy, updInfo }) {
       <p><b>그룹</b> 그룹 안에 놓으면 들어가고, 밖으로 끌면 나옵니다. 그룹을 선택하면 모서리로 크기 조절. 여러 개 고르고 Ctrl+G 로 묶기.</p>
       <p><b>복사·붙여넣기</b> 요소를 선택하고 Ctrl+C, 마우스를 둔 자리에 Ctrl+V. 다른 탭에도 붙일 수 있습니다. Ctrl+X 잘라내기, Ctrl+D 복제(그룹은 안의 것까지). 선택이 없을 때 Ctrl+C 는 그림(PNG) 복사입니다.</p>
       <p><b>지우기</b> Delete. <b>이름</b> 더블클릭 또는 F2. <b>옮기기</b> 화살표 키(Shift: 10px). <b>되돌리기</b> Ctrl+Z / Ctrl+Y. <b>선택 해제</b> Esc.</p>
+      <p><b>상자와 레이어</b> 상자 안에 놓은 것은 상자를 따라 움직입니다. 상자만 옮기려면 Alt 를 누른 채 끄십시오. 상단 [레이어] 버튼에서 무엇이 어느 상자에 들어 있는지 보고, 줄을 끌어 옮기거나 앞뒤 순서(Ctrl+[ / Ctrl+], Shift 와 함께 맨 앞·맨 뒤)와 잠금(Ctrl+L)을 바꿉니다.</p>
       <p><b>조각 템플릿</b> 자주 쓰는 묶음(예: 2-AZ 웹 계층)을 선택해 오른쪽 클릭 [조각 템플릿으로 저장]. 템플릿 메뉴 [내 조각]에서 고르면 지금 그림에 끼워 넣습니다.</p>
       <p><b>정렬</b> 여러 개를 선택하면 오른쪽 패널과 오른쪽 클릭 메뉴에 정렬·간격·크기 맞추기가 나옵니다. 끌 때는 분홍 안내선에 맞춰 붙습니다.</p>
       <p><b>글상자·번호</b> 팔레트 위쪽 [글상자] [번호]. 번호는 다음 수가 자동으로 붙습니다.</p>
@@ -2052,6 +2125,42 @@ function UpdateDialog({ open, info, busy, onClose, onApply }) {
           <button className={'primary' + (busy ? ' waiting' : '')} onClick={onApply} disabled={busy} autoFocus>{busy ? <Busy label="내려받는 중" /> : '지금 업데이트'}</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// 의견 보내기: 깃허브 이슈 작성 화면을 미리 채워서 연다(깃허브 계정 필요). 계정이 없으면 [내용 복사] 후 메신저로.
+const FEEDBACK_REPO = 'svalu/arch-canvas';
+function Feedback({ isDesktop, onToast, stats }) {
+  const [kind, setKind] = useState('개선');
+  const [text, setText] = useState('');
+  const [name, setName] = useState(() => { try { return localStorage.getItem('arch-canvas:fb-name') || ''; } catch { return ''; } });
+  const [withInfo, setWithInfo] = useState(true);
+  const body = () => {
+    const env = `- 버전: ${APP_VERSION} (${isDesktop ? 'EXE' : '브라우저'})\n- 환경: ${navigator.userAgent.replace(/\s*\(KHTML.*$/, '')}\n- 화면: 그룹 ${stats.groups} · 요소 ${stats.nodes} · 연결선 ${stats.edges} · ${stats.mode === 'card' ? '카드' : '인프라'} 모드 · ${stats.theme === 'dark' ? '다크' : '라이트'}`;
+    return `${text.trim()}\n\n${name.trim() ? `보낸 사람: ${name.trim()}\n` : ''}${withInfo ? `\n---\n${env}\n` : ''}`;
+  };
+  const title = () => `[${kind}] ${text.trim().split('\n')[0].slice(0, 60)}`;
+  const send = () => {
+    if (!text.trim()) { onToast('내용을 적어 주십시오.'); return; }
+    try { localStorage.setItem('arch-canvas:fb-name', name.trim()); } catch { /* */ }
+    const url = `https://github.com/${FEEDBACK_REPO}/issues/new?` + new URLSearchParams({ title: title(), body: body(), labels: 'feedback' }).toString();
+    window.open(url.slice(0, 7800), '_blank');
+    onToast('브라우저에서 깃허브 이슈 화면이 열렸습니다. [Create] 를 누르면 전달됩니다.', 5000);
+  };
+  const copy = async () => {
+    if (!text.trim()) { onToast('내용을 적어 주십시오.'); return; }
+    try { await navigator.clipboard.writeText(`${title()}\n\n${body()}`); onToast('복사했습니다. 메신저나 메일에 붙여 넣어 보내 주십시오.', 3500); } catch { onToast('복사하지 못했습니다.'); }
+  };
+  return (
+    <div className="feedback">
+      <h3>의견 보내기</h3>
+      <div className="seg fb-kind">{['버그', '개선', '질문'].map((k) => <button key={k} className={kind === k ? 'on' : ''} onClick={() => setKind(k)}>{k}</button>)}</div>
+      <textarea className="short" value={text} onChange={(e) => setText(e.target.value)} placeholder={kind === '버그' ? '무엇을 했을 때 어떻게 됐는지 적어 주십시오. 예) 상자를 끌었더니 안의 아이콘이 같이 움직였다' : kind === '질문' ? '궁금한 점을 적어 주십시오' : '이렇게 되면 좋겠다는 점을 적어 주십시오'} />
+      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="이름 (선택)" />
+      <label className="row-check"><input type="checkbox" checked={withInfo} onChange={(e) => setWithInfo(e.target.checked)} /> 버전·환경 정보 함께 보내기 (다이어그램 내용은 보내지 않습니다)</label>
+      <div className="row"><button className="primary" onClick={send}>깃허브로 보내기</button><button onClick={copy}>내용 복사</button></div>
+      <p className="hint">깃허브 계정이 있으면 [깃허브로 보내기], 없으면 [내용 복사] 후 메신저로 보내 주십시오.</p>
     </div>
   );
 }

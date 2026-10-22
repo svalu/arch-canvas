@@ -19,10 +19,11 @@ export function graphToFlow(input) {
       width: x.w,
       height: x.h,
       zIndex: i + 1,
-      data: { kind: x.kind, label: x.label, pins: pins.get(x.id) || [], ...(x.color ? { color: x.color } : {}), ...('fill' in x ? { fill: x.fill } : {}), ...(x.line ? { line: x.line } : {}) },
+      ...(x.locked ? { draggable: false } : {}),
+      data: { locked: !!x.locked, kind: x.kind, label: x.label, pins: pins.get(x.id) || [], ...(x.color ? { color: x.color } : {}), ...('fill' in x ? { fill: x.fill } : {}), ...(x.line ? { line: x.line } : {}) },
     });
   });
-  for (const n of g.nodes) {
+  g.nodes.forEach((n, ni) => {
     const card = n.type === 'card', text = n.type === 'text', badge = n.type === 'badge', box = card || text || badge;
     nodes.push({
       id: n.id,
@@ -31,10 +32,12 @@ export function graphToFlow(input) {
       ...(n.parent ? { parentId: n.parent } : {}),
       width: box ? n.w : ICON_SIZE,
       height: box ? n.h : ICON_SIZE,
-      zIndex: badge ? Z_ICON + 1 : Z_ICON,
-      data: { icon: n.icon, label: n.label, pins: pins.get(n.id) || [], ...(card ? { body: n.body, accent: n.accent } : {}), ...(text ? { size: n.size, bold: n.bold, accent: n.accent } : {}), ...(badge ? { accent: n.accent } : {}) },
+      // 아이콘끼리는 배열 순서가 곧 앞뒤 순서(뒤가 앞). 번호 배지는 늘 맨 위
+      zIndex: (badge ? Z_ICON + 5000 : Z_ICON) + ni,
+      ...(n.locked ? { draggable: false } : {}),
+      data: { locked: !!n.locked, icon: n.icon, label: n.label, pins: pins.get(n.id) || [], ...(card ? { body: n.body, accent: n.accent } : {}), ...(text ? { size: n.size, bold: n.bold, accent: n.accent } : {}), ...(badge ? { accent: n.accent } : {}) },
     });
-  }
+  });
   const edges = g.edges.map((e) => edgeToFlow(e, pins.get(e.id), g.theme));
   return { nodes, edges, title: g.title, annotations: g.annotations, context: g.context, mode: g.mode, theme: g.theme };
 }
@@ -61,23 +64,23 @@ export function flowToGraph(nodes, edges, { title = '새 다이어그램', annot
   for (const n of nodes) {
     if (n.type === 'awsGroup') {
       groups.push({
-        id: n.id, kind: n.data.kind, label: n.data.label ?? '', parent: n.parentId || null,
+        id: n.id, kind: n.data.kind, label: n.data.label ?? '', parent: n.parentId || null, ...(n.data.locked ? { locked: true } : {}),
         x: r1(n.position.x), y: r1(n.position.y),
         w: r1(n.width ?? n.measured?.width ?? 320), h: r1(n.height ?? n.measured?.height ?? 200),
         ...(n.data.color ? { color: n.data.color } : {}), ...('fill' in n.data ? { fill: n.data.fill } : {}), ...(n.data.line ? { line: n.data.line } : {}),
       });
     } else if (n.type === 'awsIcon') {
-      items.push({ id: n.id, icon: n.data.icon, label: n.data.label ?? '', parent: n.parentId || null, x: r1(n.position.x), y: r1(n.position.y) });
+      items.push({ id: n.id, icon: n.data.icon, label: n.data.label ?? '', parent: n.parentId || null, x: r1(n.position.x), y: r1(n.position.y), ...(n.data.locked ? { locked: true } : {}) });
     } else if (n.type === 'awsText' || n.type === 'awsBadge') {
       const text = n.type === 'awsText';
       items.push({
-        id: n.id, type: text ? 'text' : 'badge', icon: null, label: n.data.label ?? '', parent: n.parentId || null,
+        id: n.id, type: text ? 'text' : 'badge', icon: null, label: n.data.label ?? '', parent: n.parentId || null, ...(n.data.locked ? { locked: true } : {}),
         x: r1(n.position.x), y: r1(n.position.y), w: r1(n.width ?? n.measured?.width ?? (text ? 180 : 28)), h: r1(n.height ?? n.measured?.height ?? (text ? 40 : 28)),
         ...(text ? { size: n.data.size || 'md', bold: !!n.data.bold } : {}), ...(n.data.accent ? { accent: n.data.accent } : {}),
       });
     } else if (n.type === 'awsCard') {
       items.push({
-        id: n.id, type: 'card', icon: n.data.icon || null, label: n.data.label ?? '', body: n.data.body ?? '', parent: n.parentId || null,
+        id: n.id, type: 'card', icon: n.data.icon || null, label: n.data.label ?? '', body: n.data.body ?? '', parent: n.parentId || null, ...(n.data.locked ? { locked: true } : {}),
         x: r1(n.position.x), y: r1(n.position.y), w: r1(n.width ?? n.measured?.width ?? 200), h: r1(n.height ?? n.measured?.height ?? 84),
         ...(n.data.accent ? { accent: n.data.accent } : {}),
       });
