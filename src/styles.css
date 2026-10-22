@@ -835,3 +835,12 @@ details > summary { list-style: none; } details > summary::-webkit-details-marke
 
 /* 선을 고르면 끝 손잡이가 아이콘 위로 오게 (라벨 층을 잠깐 노드 위로) */
 .react-flow__edgelabel-renderer:has(.edge-end) { z-index: 20001 !important; }
+
+/* ----- 끄는 동안 들어갈 상자 ----- */
+.react-flow__node.drop-target > .grp { box-shadow: 0 0 0 3px rgba(46,115,184,.55), inset 0 0 0 9999px rgba(46,115,184,.05); }
+.app.theme-dark .react-flow__node.drop-target > .grp { box-shadow: 0 0 0 3px rgba(45,212,191,.6), inset 0 0 0 9999px rgba(45,212,191,.06); }
+/* 겹치는 상자: 채움 없이, 담는 상자 위에 */
+.grp.overlay { background: transparent !important; }
+
+.lyr-tag { font-size: 10px; color: #b45309; border: 1px solid #f0c48a; border-radius: 4px; padding: 0 4px; line-height: 14px; flex: none; }
+.app.theme-dark .lyr-tag { color: #f5b35c; border-color: #6b4a1a; }

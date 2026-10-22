@@ -96,7 +96,8 @@
       "x": 40,
       "y": 330,
       "w": 600,
-      "h": 150
+      "h": 150,
+      "overlay": true
     }
   ],
   "nodes": [
@@ -144,17 +145,17 @@
       "id": "task-a",
       "icon": "Arch_AWS-Fargate",
       "label": "ECS Task",
-      "parent": "cluster",
-      "x": 116,
-      "y": 50
+      "parent": "priv-a",
+      "x": 106,
+      "y": 80
     },
     {
       "id": "task-b",
       "icon": "Arch_AWS-Fargate",
       "label": "ECS Task",
-      "parent": "cluster",
-      "x": 436,
-      "y": 50
+      "parent": "priv-b",
+      "x": 106,
+      "y": 80
     },
     {
       "id": "vpce",

@@ -1,6 +1,7 @@
 // JSON 그래프 <-> React Flow 노드/엣지.
 // 그리는 순서: 그룹은 groups 배열 순서대로 zIndex 를 주고, 엣지는 그룹 위, 아이콘은 맨 위.
 import { normalizeGraph, sortGroups, SCHEMA, ICON_SIZE } from './schema.js';
+import { isOverlay } from './contain.js';
 
 export const Z_EDGE = 9000;
 export const Z_ICON = 10000;
@@ -18,9 +19,10 @@ export function graphToFlow(input) {
       ...(x.parent ? { parentId: x.parent } : {}),
       width: x.w,
       height: x.h,
-      zIndex: i + 1,
+      // 띠: 담는 상자(1~) < 겹치는 상자(3000~) < 연결선(9000) < 아이콘(10000~) < 번호(15000~)
+      zIndex: (isOverlay(x) ? 3000 : 0) + i + 1,
       ...(x.locked ? { draggable: false } : {}),
-      data: { locked: !!x.locked, kind: x.kind, label: x.label, pins: pins.get(x.id) || [], ...(x.color ? { color: x.color } : {}), ...('fill' in x ? { fill: x.fill } : {}), ...(x.line ? { line: x.line } : {}) },
+      data: { locked: !!x.locked, ...(typeof x.overlay === 'boolean' ? { overlay: x.overlay } : {}), kind: x.kind, label: x.label, pins: pins.get(x.id) || [], ...(x.color ? { color: x.color } : {}), ...('fill' in x ? { fill: x.fill } : {}), ...(x.line ? { line: x.line } : {}) },
     });
   });
   g.nodes.forEach((n, ni) => {
@@ -64,7 +66,7 @@ export function flowToGraph(nodes, edges, { title = '새 다이어그램', annot
   for (const n of nodes) {
     if (n.type === 'awsGroup') {
       groups.push({
-        id: n.id, kind: n.data.kind, label: n.data.label ?? '', parent: n.parentId || null, ...(n.data.locked ? { locked: true } : {}),
+        id: n.id, kind: n.data.kind, label: n.data.label ?? '', parent: n.parentId || null, ...(n.data.locked ? { locked: true } : {}), ...(typeof n.data.overlay === 'boolean' ? { overlay: n.data.overlay } : {}),
         x: r1(n.position.x), y: r1(n.position.y),
         w: r1(n.width ?? n.measured?.width ?? 320), h: r1(n.height ?? n.measured?.height ?? 200),
         ...(n.data.color ? { color: n.data.color } : {}), ...('fill' in n.data ? { fill: n.data.fill } : {}), ...(n.data.line ? { line: n.data.line } : {}),

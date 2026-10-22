@@ -164,17 +164,17 @@
       "id": "web-a",
       "icon": "Res_Amazon-EC2_Instance",
       "label": "EC2",
-      "parent": "asg",
-      "x": 176,
-      "y": 26
+      "parent": "app-a",
+      "x": 166,
+      "y": 64
     },
     {
       "id": "web-b",
       "icon": "Res_Amazon-EC2_Instance",
       "label": "EC2",
-      "parent": "asg",
-      "x": 626,
-      "y": 26
+      "parent": "app-b",
+      "x": 166,
+      "y": 64
     },
     {
       "id": "rds-primary",

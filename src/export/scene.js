@@ -11,6 +11,7 @@
 //   text = { value, sz(1/100pt), color, bold, align:'l'|'ctr', anchor:'t'|'ctr', wrap:'square'|'none', l, t, r, b(EMU) }
 
 import { ICON_SIZE, GROUP_ICON_SIZE, LABEL_WIDTH, ICON_LABEL_GAP, ICON_LABEL_H, LABEL_DROP, sortGroups } from '../model/schema.js';
+import { isOverlay } from '../model/contain.js';
 import { absoluteRects, descendants, edgeGeometry, SIDE_IDX } from '../model/geometry.js';
 export { ICON_LABEL_GAP, ICON_LABEL_H };
 
@@ -89,7 +90,8 @@ export function graphToScene(graph, catalog, include = null, { textScale = 1 } =
   const dark = graph.theme === 'dark';
   const inkColor = dark ? '#E6F6F3' : INK, edgeColor = dark ? '#7FE3D6' : INK;
   // 1) 그룹: 배열 순서가 그리는 순서(부모 -> 자식, 뒤 형제가 위). 사각형 + 왼쪽 위 그룹 아이콘
-  const groups = sortGroups(graph.groups).filter((x) => has(x.id));
+  const sortedG = sortGroups(graph.groups).filter((x) => has(x.id));
+  const groups = [...sortedG.filter((x) => !isOverlay(x)), ...sortedG.filter((x) => isOverlay(x))];   // 겹치는 상자는 채움 위에
   for (const grp of groups) {
     const base = catalog.kinds.get(grp.kind) || catalog.kinds.get('generic');
     const kind = { ...base, color: grp.color || base.color, text: grp.color || base.text, line: grp.line || base.line, fill: 'fill' in grp ? grp.fill : base.fill };

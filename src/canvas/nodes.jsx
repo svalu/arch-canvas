@@ -1,5 +1,6 @@
 // 캔버스 노드: 그룹(awsGroup), 아이콘(awsIcon). 연결 핸들은 네 면에 하나씩(ConnectionMode.Loose 라 아무 핸들끼리 연결).
 import React, { memo } from 'react';
+import { isOverlay } from '../model/contain.js';
 import { useExit } from '../useExit.js';
 import { Handle, Position, NodeResizer } from '@xyflow/react';
 import { useCatalog } from '../catalog.js';
@@ -90,7 +91,7 @@ export const AwsGroup = memo(function AwsGroup({ data, selected }) {
     <>
       <NodeResizer isVisible={selected && !data.locked} minWidth={80} minHeight={60} color={kind.color} handleClassName="rsz" lineClassName="rszline" />
       <div
-        className={'grp' + (selected ? ' sel' : '') + (data.kind === 'section' ? ' section' : '')}
+        className={'grp' + (selected ? ' sel' : '') + (data.kind === 'section' ? ' section' : '') + (isOverlay({ kind: data.kind, overlay: data.overlay }) ? ' overlay' : '')}
         style={{
           // 섹션은 라이트에서 연한 색을 읽히게 진하게 (다크는 원래 색)
           '--grp-border-light': data.kind === 'section' ? readable(kind.color, 3) : kind.color,

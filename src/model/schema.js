@@ -97,6 +97,7 @@ export function normalizeGraph(input) {
     return {
       id,
       kind: typeof x.kind === 'string' && x.kind ? x.kind : 'generic',
+      ...(x.overlay === true ? { overlay: true } : x.overlay === false ? { overlay: false } : {}),
       ...(x.locked ? { locked: true } : {}),
       label: toText(x.label),
       parent: p != null && groupIds.has(p) && p !== id ? p : null,

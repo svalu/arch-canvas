@@ -3,6 +3,7 @@
 import { ICON_SIZE, GROUP_ICON_SIZE, LABEL_WIDTH, ICON_LABEL_GAP, LABEL_DROP, sortGroups } from '../model/schema.js';
 import { absoluteRects, edgeGeometry, edgePath } from '../model/geometry.js';
 import { LABEL_PX, INK, GROUP_LABEL_PAD, groupPaint, drawnIds } from './scene.js';
+import { isOverlay } from '../model/contain.js';
 
 export const FONT_FAMILY = 'Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", -apple-system, system-ui, sans-serif';
 const LINE_W = 1.5;
@@ -59,7 +60,9 @@ export function graphToSvg(graph, catalog, include = null, { background = 'trans
   const rects = absoluteRects(graph);
   const has = (id) => !include || include.has(id);
   const labeled = new Set(graph.nodes.filter((n) => n.type !== 'card' && n.label && catalog.icons.has(n.icon)).map((n) => n.id));
-  const groups = sortGroups(graph.groups).filter((g) => has(g.id));
+  // 겹치는 상자(ASG·보안 그룹)는 담는 상자 채움 위에 그린다
+  const sortedG = sortGroups(graph.groups).filter((g) => has(g.id));
+  const groups = [...sortedG.filter((g) => !isOverlay(g)), ...sortedG.filter((g) => isOverlay(g))];
   const cards = graph.nodes.filter((n) => has(n.id) && n.type === 'card');
   const nodes = graph.nodes.filter((n) => has(n.id) && n.type !== 'card' && catalog.icons.has(n.icon));
   const drawn = drawnIds(graph, catalog);   // 아이콘을 모르는 노드로 가는 선은 빼서 끊긴 선이 남지 않게

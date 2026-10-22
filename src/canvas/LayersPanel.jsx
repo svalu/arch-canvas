@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { useCatalog } from '../catalog.js';
 import { layerTree } from '../model/layers.js';
+import { isOverlay } from '../model/contain.js';
 
 export function LayersPanel({ graph, selected, onSelect, onMove, onOrder, onLock }) {
   const catalog = useCatalog();
@@ -46,7 +47,8 @@ export function LayersPanel({ graph, selected, onSelect, onMove, onOrder, onLock
           {isG
             ? <span className="lyr-box" style={{ borderColor: x.color || kind?.color || '#7D8998', borderStyle: (x.line || kind?.line) === 'dashed' ? 'dashed' : 'solid' }} />
             : icon ? <img src={icon.src} alt="" className="lyr-ic" /> : <span className="lyr-box txt">{x.type === 'badge' ? '#' : 'T'}</span>}
-          <span className="lyr-name">{nameOf(row)}</span>
+          <span className="lyr-name" title={nameOf(row)}>{nameOf(row)}</span>
+          {isG && isOverlay(x) && <span className="lyr-tag" title="겹치는 상자: 아무것도 품지 않고 테두리만 움직입니다">겹침</span>}
           {isG && n > 0 && <span className="lyr-count" title="함께 움직이는 요소 수">{n}</span>}
           <button className={'lyr-lock' + (x.locked ? ' on' : '')} title={x.locked ? '잠금 해제' : '잠그기 (끌어도 움직이지 않음)'} aria-label={x.locked ? '잠금 해제' : '잠그기'} onClick={(e) => { e.stopPropagation(); onLock(row.id, !x.locked); }}>{x.locked ? '🔒' : '🔓'}</button>
         </div>
@@ -57,7 +59,7 @@ export function LayersPanel({ graph, selected, onSelect, onMove, onOrder, onLock
   return (
     <div className="insp layers">
       <h3>레이어</h3>
-      <p className="hint">위에 있을수록 앞에 그려집니다. 상자 안에 들어 있는 것은 상자를 따라 움직입니다. 줄을 끌어 상자 위에 놓으면 그 안으로, 다른 줄 위에 놓으면 그 바로 앞으로 옮깁니다.</p>
+      <p className="hint">소속은 화면 위치로 정해집니다: 아이콘은 가운데가 놓인 가장 작은 상자에, 상자는 자기를 완전히 감싸는 가장 작은 상자에 속하고, 속한 것은 상자를 따라 움직입니다. [겹침] 상자(ASG·보안 그룹)는 아무것도 품지 않습니다.</p>
       <div className="lyr-order" role="group" aria-label="앞뒤 순서">
         <button className="small" disabled={!selected.length} onClick={() => onOrder('front')} title="맨 앞으로 (Ctrl+Shift+])">맨 앞</button>
         <button className="small" disabled={!selected.length} onClick={() => onOrder('forward')} title="앞으로 (Ctrl+])">앞으로</button>

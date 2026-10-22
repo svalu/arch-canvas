@@ -6,6 +6,7 @@ import {
 import { alignItems, distributeItems, sameSize, canResizeCount, snapGuides } from './canvas/align.js';
 import { extractSubgraph, insertSubgraph, subgraphSize, CLIP_MARK } from './model/clip.js';
 import { reorder, moveInLayers } from './model/layers.js';
+import { settleContainment, isOverlay, dropPreview } from './model/contain.js';
 import { LayersPanel } from './canvas/LayersPanel.jsx';
 
 // 캔버스 격자 보기 설정 (localStorage 에 저장)
@@ -95,7 +96,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.5.1';
+export const APP_VERSION = '0.6.0';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -254,7 +255,8 @@ function Editor() {
    * coalesce: 같은 키로 1초 안에 연속 호출되면 되돌리기 항목을 하나로 합친다(라벨 타이핑).
    */
   const commit = useCallback((graph, before, { coalesce = null, fit = false } = {}) => {
-    const g = normalizeGraph(graph);
+    // 소속은 화면 위치로만 정한다: 반영할 때마다 다시 계산 (숨은 부모 관계가 화면과 어긋나지 않게)
+    const g = settleContainment(normalizeGraph(graph));
     hidePinTip();
     const h = hist.current;
     if (before !== null) {
@@ -294,7 +296,7 @@ function Editor() {
    * 템플릿 불러오기/되돌리기처럼 "검사만 하고 막지 않는" 경우는 commit 을 직접 쓴다.
    */
   const tryCommit = useCallback((graph, before, opts = {}) => {
-    const g = normalizeGraph(graph);
+    const g = settleContainment(normalizeGraph(graph));
     const fresh = diffViolations(lintRef.current, lint(g));
     const blocks = fresh.filter((v) => v.severity === 'block');
     if (blocks.length) { showRule(blocks[0], true, blocks.length); return false; }
@@ -508,6 +510,28 @@ function Editor() {
   const [guideLines, setGuideLines] = useState([]);
   const [find, setFind] = useState({ open: false, q: '', i: 0, n: 0 });
   const onNodesChange = useCallback((changes) => {
+    // 끄는 동안: 놓으면 들어갈 상자를 테두리로 켜고 이름을 안내에 띄운다
+    if (dragCtx.current) {
+      const c = changes.find((x) => x.type === 'position' && x.dragging && x.id === dragCtx.current.id && x.position);
+      if (c) {
+        const me = rf.getInternalNode(c.id);
+        if (me) {
+          const w = me.measured?.width ?? me.width ?? 48, h = me.measured?.height ?? me.height ?? 48;
+          const pAbs = { x: me.internals.positionAbsolute.x - me.position.x, y: me.internals.positionAbsolute.y - me.position.y };
+          const rect = { x: pAbs.x + c.position.x, y: pAbs.y + c.position.y, w, h };
+          const ctx = dragCtx.current;
+          const pv = dropPreview(dragSnapshot.current, ctx.rects, rect, ctx.kind, ctx.skip);
+          const overKey = pv.over.join(',');
+          if (pv.into !== ctx.into || overKey !== ctx.overKey) {
+            document.querySelectorAll('.react-flow__node.drop-target').forEach((el) => el.classList.remove('drop-target'));
+            if (pv.into) document.querySelector(`.react-flow__node[data-id="${CSS.escape(pv.into)}"]`)?.classList.add('drop-target');
+            ctx.into = pv.into; ctx.overKey = overKey;
+            const name = (id) => labelOfRef.current?.(id) || id;
+            setDragHint((h) => ({ ...(h || {}), into: pv.into ? name(pv.into) : null, over: pv.over.map(name), live: true }));
+          }
+        }
+      }
+    }
     // Alt+끌기: 상자가 움직인 만큼 바로 안의 것들을 반대로 옮겨 제자리에 둔다
     if (altDrag.current) {
       const c = changes.find((x) => x.type === 'position' && x.id === altDrag.current.id && x.position);
@@ -582,11 +606,22 @@ function Editor() {
     return () => { window.removeEventListener('keydown', dn); window.removeEventListener('keyup', up); window.removeEventListener('blur', blur); };
   }, []);
   const [dragHint, setDragHint] = useState(null);
+  const labelOfRef = useRef(null);
   const dragHintRef = useRef(null); dragHintRef.current = dragHint;
+  const dragCtx = useRef(null);   // 끄는 동안 미리보기: { rects, skip, kind, id, into, overKey }
   const onNodeDragStart = useCallback((e, node) => {
     dragSnapshot.current = currentGraph();
+    {
+      const g0 = dragSnapshot.current;
+      // 선택 안 된 것을 끌면 그것만 움직인다 (남아 있던 선택은 같이 안 움직임)
+      const sel = node.selected ? rf.getNodes().filter((n) => n.selected).map((n) => n.id) : [];
+      const moving = new Set([node.id, ...sel]);
+      for (const id of [...moving]) for (const d of descendants(g0, id)) moving.add(d);
+      dragCtx.current = { rects: absoluteRects(g0), skip: moving, id: node.id, kind: node.type === 'awsGroup' ? 'group' : 'node', into: undefined, overKey: '' };
+    }
     if (node?.type !== 'awsGroup') return;
     const g = dragSnapshot.current;
+    if (isOverlay(g.groups.find((x) => x.id === node.id))) { setDragHint({ overlay: true }); return; }   // 겹치는 상자: 테두리만
     const all = descendants(g, node.id);
     if (e?.altKey || e?.sourceEvent?.altKey || altPressed.current || altHeld.current) {
       altDrag.current = { id: node.id, last: { ...node.position }, kids: [...g.groups, ...g.nodes].filter((x) => x.parent === node.id).map((x) => x.id) };
@@ -602,6 +637,8 @@ function Editor() {
 
   const onNodeDragStop = useCallback((_e, _node, dragged) => {
     setDragHint(null);
+    document.querySelectorAll('.react-flow__node.drop-target').forEach((el) => el.classList.remove('drop-target'));
+    dragCtx.current = null;
     rf.setNodes((ns) => ns.map((n) => (n.className === 'follow' ? { ...n, className: undefined } : n)));
     const g = currentGraph();
     const rects = absoluteRects(g);
@@ -1001,13 +1038,14 @@ function Editor() {
     tryCommit(moveInLayers(g, id, target, absoluteRects(g)));
   }, [currentGraph, tryCommit]);
 
-  // 화면에 보이는 이름 (id 대신)
+  // 화면에 보이는 이름 (id 대신)  — labelOfRef 는 위쪽(끄는 중 안내)에서 쓰려고
   const labelOf = useCallback((id) => {
     const n = rf.getNode(id);
     if (!n) return '(없음)';
     return n.data?.label || (n.type === 'awsGroup' ? catalog.kinds.get(n.data?.kind)?.name : catalog.icons.get(n.data?.icon)?.name) || '이름 없음';
   }, [rf, catalog]);
 
+  labelOfRef.current = labelOf;
   const onNodeContextMenu = useCallback((e, node) => {
     e.preventDefault();
     const d = node.data || {};
@@ -1619,7 +1657,11 @@ function Editor() {
         </ReactFlow>
         {find.open && <FindBar key={find.n} initial={find.q} onClose={(q) => setFind((f) => ({ ...f, open: false, q }))} />}
         {webNote && <div className="web-note" role="status"><span><b>웹 버전</b> · 작업은 이 브라우저에 저장됩니다. 중요한 다이어그램은 [저장]으로 파일을 남기십시오. Claude CLI·PowerPoint 도형 복사는 Windows EXE 에서만 됩니다.</span><button className="small" onClick={closeWebNote}>확인</button></div>}
-        {dragHint && <div className="drag-hint" role="status">{dragHint.alone ? `상자만 옮기는 중 · 안의 ${dragHint.n}개는 제자리에 둡니다` : `안에 든 ${dragHint.n}개가 함께 움직입니다 · 상자만 옮기려면 Alt 를 누른 채 끄세요`}</div>}
+        {dragHint && <div className="drag-hint" role="status">{[
+          dragHint.overlay ? '겹치는 상자 · 테두리만 움직입니다' : dragHint.alone ? `상자만 옮기는 중 · 안의 ${dragHint.n}개는 제자리` : dragHint.n ? `안의 ${dragHint.n}개가 함께 움직입니다 · Alt: 상자만` : null,
+          dragHint.live ? (dragHint.into ? `→ ${dragHint.into} 안으로` : '→ 어느 상자에도 속하지 않음') : null,
+          dragHint.over?.length ? `+ ${dragHint.over.join(', ')} 멤버` : null,
+        ].filter(Boolean).join('  ·  ')}</div>}
         {toastV && (typeof toastV === 'string'
           ? <div className={'toast' + (toastOut ? ' out' : '')}>{toastV}</div>
           : (
@@ -1897,6 +1939,12 @@ function Inspector({ nodes, edges, onChange, onChangeMany, onWrap, onAlign, onDi
         </>
       )}
       {isGroup && (
+        <label className="row-check" title="겹치는 상자는 아무것도 품지 않습니다. 끌면 테두리만 움직이고, 안에 보이는 아이콘은 각자의 서브넷에 속한 채 멤버가 됩니다.">
+          <input type="checkbox" checked={isOverlay({ kind: d.kind, overlay: d.overlay })} onChange={(e) => onChange(one.id, { overlay: e.target.checked })} />
+          겹치는 상자 (ASG·보안 그룹처럼 품지 않고 걸쳐 그림)
+        </label>
+      )}
+      {isGroup && (
         <label>종류
           <select value={d.kind} onChange={(e) => onChange(one.id, { kind: e.target.value })}>
             {catalog.groupKinds.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
@@ -2019,7 +2067,7 @@ function Help({ isDesktop, onPatch, onTour, onCheckUpdate, updBusy, updInfo, onT
       <p><b>그룹</b> 그룹 안에 놓으면 들어가고, 밖으로 끌면 나옵니다. 그룹을 선택하면 모서리로 크기 조절. 여러 개 고르고 Ctrl+G 로 묶기.</p>
       <p><b>복사·붙여넣기</b> 요소를 선택하고 Ctrl+C, 마우스를 둔 자리에 Ctrl+V. 다른 탭에도 붙일 수 있습니다. Ctrl+X 잘라내기, Ctrl+D 복제(그룹은 안의 것까지). 선택이 없을 때 Ctrl+C 는 그림(PNG) 복사입니다.</p>
       <p><b>지우기</b> Delete. <b>이름</b> 더블클릭 또는 F2. <b>옮기기</b> 화살표 키(Shift: 10px). <b>되돌리기</b> Ctrl+Z / Ctrl+Y. <b>선택 해제</b> Esc.</p>
-      <p><b>상자와 레이어</b> 상자 안에 놓은 것은 상자를 따라 움직입니다. 상자만 옮기려면 Alt 를 누른 채 끄십시오. 상단 [레이어] 버튼에서 무엇이 어느 상자에 들어 있는지 보고, 줄을 끌어 옮기거나 앞뒤 순서(Ctrl+[ / Ctrl+], Shift 와 함께 맨 앞·맨 뒤)와 잠금(Ctrl+L)을 바꿉니다.</p>
+      <p><b>상자와 레이어</b> 소속은 화면 위치 그대로입니다: 상자 안에 놓은 것은 그 상자를 따라 움직이고, 끄는 동안 들어갈 상자가 빛납니다. 상자만 옮기려면 Alt 를 누른 채 끄십시오. ASG·보안 그룹 같은 겹치는 상자는 아무것도 품지 않고 테두리만 움직입니다. 상단 [레이어] 버튼에서 무엇이 어느 상자에 들어 있는지 보고, 줄을 끌어 옮기거나 앞뒤 순서(Ctrl+[ / Ctrl+], Shift 와 함께 맨 앞·맨 뒤)와 잠금(Ctrl+L)을 바꿉니다.</p>
       <p><b>조각 템플릿</b> 자주 쓰는 묶음(예: 2-AZ 웹 계층)을 선택해 오른쪽 클릭 [조각 템플릿으로 저장]. 템플릿 메뉴 [내 조각]에서 고르면 지금 그림에 끼워 넣습니다.</p>
       <p><b>정렬</b> 여러 개를 선택하면 오른쪽 패널과 오른쪽 클릭 메뉴에 정렬·간격·크기 맞추기가 나옵니다. 끌 때는 분홍 안내선에 맞춰 붙습니다.</p>
       <p><b>글상자·번호</b> 팔레트 위쪽 [글상자] [번호]. 번호는 다음 수가 자동으로 붙습니다.</p>

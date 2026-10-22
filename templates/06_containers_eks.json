@@ -144,17 +144,17 @@
       "id": "node-a",
       "icon": "Res_Amazon-EC2_Instance",
       "label": "워커 노드",
-      "parent": "nodegroup",
-      "x": 116,
-      "y": 50
+      "parent": "priv-a",
+      "x": 106,
+      "y": 80
     },
     {
       "id": "node-b",
       "icon": "Res_Amazon-EC2_Instance",
       "label": "워커 노드",
-      "parent": "nodegroup",
-      "x": 436,
-      "y": 50
+      "parent": "priv-b",
+      "x": 106,
+      "y": 80
     },
     {
       "id": "vpce",

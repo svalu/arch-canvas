@@ -20,6 +20,7 @@
 import { normalizeGraph, sortGroups, uid, allIds, toText, EDGE_DEFAULTS, LINES, SHAPES, ARROWS, LEVELS } from './schema.js';
 import { absoluteRects, descendants, fitGroups, freeSlot, packAutoGroups } from './geometry.js';
 import { placeAutoNodes } from './place.js';
+import { isOverlay } from './contain.js';
 
 // 이번 applyPatch 에서 좌표 없이 놓인 그룹 id (끝에 겹치지 않게 다시 배치).
 // pos: 자리를 자동으로 잡을 그룹, size: 크기를 명시해서 자동 배치 때 줄이지 않을 그룹
@@ -33,7 +34,7 @@ const MIN = { group: { w: 80, h: 60 }, card: { w: 120, h: 48 } };
  */
 export function applyPatch(graph, ops, catalog) {
   const g = structuredClone(normalizeGraph(graph));
-  AUTO.set(g, { pos: new Set(), size: new Set(), nodes: new Set(), parented: new Set() });
+  AUTO.set(g, { pos: new Set(), size: new Set(), nodes: new Set(), parented: new Set(), overlays: new Map() });
   const errors = [];
   let applied = 0;
   const list = Array.isArray(ops) ? ops : ops?.ops || [];
@@ -52,9 +53,11 @@ export function applyPatch(graph, ops, catalog) {
   const auto = AUTO.get(g);
   packAutoGroups(g, auto.pos, auto.size);
   fitGroups(g);
+  hugOverlays(g, auto.overlays);
   // 좌표 없이 들어온 노드는 연결 관계를 보고 자리를 정한다 (그룹 배치가 끝난 뒤)
   placeAutoNodes(g, auto.nodes, auto.parented);
   fitGroups(g);
+  hugOverlays(g, auto.overlays);
   return { graph: g, applied, errors };
 }
 
@@ -89,16 +92,23 @@ const OPS = {
     const id = newId(g, op.id, op.kind || 'group');
     const auto = x == null || y == null;
     const pos = auto ? freeSlot(g, parent) : { x, y };
-    if (auto) AUTO.get(g)?.pos.add(id);
+    const overlay = op.overlay === true || (op.overlay !== false && isOverlay({ kind: op.kind }));
+    // 겹치는 상자(ASG·보안 그룹·클러스터)는 상자 배치에 끼지 않고, 나중에 멤버를 감싸도록 맞춘다
+    if (overlay) AUTO.get(g)?.overlays.set(id, { members: Array.isArray(op.members) ? op.members.map(String) : [], auto });
+    else if (auto) AUTO.get(g)?.pos.add(id);
     if (w != null || h != null) AUTO.get(g)?.size.add(id);   // 크기를 줬으면 자동 배치 때 줄이지 않는다
-    g.groups.push({ id, kind: op.kind || 'generic', label: toText(op.label), parent, x: pos.x, y: pos.y, w: Math.max(MIN.group.w, w ?? 320), h: Math.max(MIN.group.h, h ?? 200), ...(op.color ? { color: op.color } : {}), ...('fill' in op ? { fill: op.fill } : {}), ...(op.line ? { line: op.line } : {}) });
+    g.groups.push({ id, kind: op.kind || 'generic', label: toText(op.label), parent, x: pos.x, y: pos.y, w: Math.max(MIN.group.w, w ?? 320), h: Math.max(MIN.group.h, h ?? 200), ...(op.overlay === true ? { overlay: true } : {}), ...(op.color ? { color: op.color } : {}), ...('fill' in op ? { fill: op.fill } : {}), ...(op.line ? { line: op.line } : {}) });
   },
   add_node(g, op, cat) {
     if (!op.icon) fail('icon 이 필요합니다');
     if (cat && !cat.iconKeys.has(op.icon)) fail(`모르는 아이콘입니다: ${op.icon}`);
-    const parent = checkParent(g, op.parent);
+    let parent = checkParent(g, op.parent);
     const x = numField(op.x), y = numField(op.y);
     const id = newId(g, op.id, 'n');
+    // 겹치는 상자를 parent 로 줬으면: 그 상자의 멤버로 기록하고, 실제 소속은 그 상자가 놓인 담는 상자
+    const ov = parent && AUTO.get(g)?.overlays.get(parent);
+    const pg = parent && g.groups.find((q) => q.id === parent);
+    if (pg && isOverlay(pg)) { if (ov) ov.members.push(String(op.id ?? id)); parent = pg.parent ?? null; }
     const pos = x == null || y == null ? freeSlot(g, parent) : { x, y };
     if (x == null || y == null) { AUTO.get(g)?.nodes.add(id); if (parent) AUTO.get(g)?.parented.add(id); }
     g.nodes.push({ id, icon: op.icon, label: toText(op.label), parent, x: pos.x, y: pos.y });
@@ -174,7 +184,7 @@ const OPS = {
     for (const k of ['x', 'y', 'w', 'h']) if (k in set && k in item) nums[k] = numField(set[k], k === 'w' || k === 'h' ? '크기' : '좌표');
     for (const k of ['label', 'kind', 'icon', 'line', 'shape', 'arrow', 'body', 'accent', 'color', 'fill']) {
       if (!(k in set)) continue;
-      if (!(k in item || (item.type === 'card' && ['body', 'accent', 'icon'].includes(k)) || (item.type === 'text' && ['accent', 'size', 'bold'].includes(k)) || (item.type === 'badge' && k === 'accent') || k === 'locked' || (item.kind && ['color', 'fill', 'line'].includes(k)))) continue;
+      if (!(k in item || (item.type === 'card' && ['body', 'accent', 'icon'].includes(k)) || (item.type === 'text' && ['accent', 'size', 'bold'].includes(k)) || (item.type === 'badge' && k === 'accent') || k === 'locked' || k === 'overlay' || (item.kind && ['color', 'fill', 'line'].includes(k)))) continue;
       item[k] = k === 'label' || k === 'body' ? toText(set[k]) : set[k];
     }
     for (const [k, v] of Object.entries(nums)) if (v != null) item[k] = k === 'w' || k === 'h' ? Math.max(minOf(item)[k], v) : v;
@@ -201,3 +211,19 @@ const OPS = {
 };
 
 export const PATCH_OPS = Object.keys(OPS);
+
+// 겹치는 상자를 멤버(아이콘)를 감싸는 크기로 맞춘다. 부모는 화면 위치로 다시 정해지므로(contain.js) 절대 좌표 기준으로 둔다.
+function hugOverlays(g, overlays) {
+  if (!overlays?.size) return;
+  const rects = absoluteRects(g);
+  for (const [id, { members }] of overlays) {
+    const grp = g.groups.find((q) => q.id === id);
+    const rs = members.map((m) => rects.get(m)).filter(Boolean);
+    if (!grp || !rs.length) continue;
+    const PAD = 22, TOP = 34, LABEL = 34;
+    const x0 = Math.min(...rs.map((r) => r.x)) - PAD - 30, y0 = Math.min(...rs.map((r) => r.y)) - TOP;
+    const x1 = Math.max(...rs.map((r) => r.x + r.w)) + PAD + 30, y1 = Math.max(...rs.map((r) => r.y + r.h)) + LABEL + 8;
+    const pr = grp.parent ? rects.get(grp.parent) : { x: 0, y: 0 };
+    grp.x = Math.round(x0 - pr.x); grp.y = Math.round(y0 - pr.y); grp.w = Math.round(x1 - x0); grp.h = Math.round(y1 - y0);
+  }
+}
