@@ -92,6 +92,9 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
   return { title: '자주 쓰는 것', items: suggestData.default.map(toItem).filter(valid), target: null };
 }
 
+// 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
+export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
 export const APP_VERSION = '0.5.0';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
@@ -331,6 +334,25 @@ function Editor() {
     commit(g || emptyGraph(), null, { fit: !!g });
     loadUserTemplates().then(setUserTemplates);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 웹 버전 첫 안내: 작업은 이 브라우저에 저장된다
+  const [webNote, setWebNote] = useState(() => { try { return !window.desktop && localStorage.getItem('arch-canvas:web-note') !== '1'; } catch { return false; } });
+  const closeWebNote = () => { setWebNote(false); try { localStorage.setItem('arch-canvas:web-note', '1'); } catch { /* */ } };
+  // 맥: 화면의 단축키 표기를 ⌘/⌥ 로 (Ctrl+Tab 은 맥에서도 Ctrl)
+  useEffect(() => {
+    if (!IS_MAC) return undefined;
+    const fix = (t) => t.replace(/Ctrl\s*\+\s*Shift\s*\+\s*/g, '⌘⇧').replace(/Ctrl\s*\+\s*(?!Tab)/g, '⌘').replace(/Alt\s*\+\s*/g, '⌥').replace(/Alt 를/g, 'Option(⌥) 키를').replace(/Alt 를/g, 'Option(⌥) 키를').replace(/\bAlt\b/g, 'Option(⌥)');
+    const walk = (root) => {
+      const it = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const userText = (el) => !!el?.closest?.('.react-flow__nodes, .react-flow__edges, .react-flow__edgelabel-renderer, .ask-a, .ask-q, .summary, .lyr-name, .doctab-title, .ctx-title');
+      for (let n = it.nextNode(); n; n = it.nextNode()) { if (/Ctrl|Alt/.test(n.nodeValue) && !userText(n.parentElement)) { const v = fix(n.nodeValue); if (v !== n.nodeValue) n.nodeValue = v; } }
+      if (root.querySelectorAll) for (const el of root.querySelectorAll('[title],[placeholder],[aria-label]')) for (const at of ['title', 'placeholder', 'aria-label']) { const v = el.getAttribute(at); if (v && /Ctrl|Alt/.test(v)) el.setAttribute(at, fix(v)); }
+    };
+    walk(document.body);
+    const mo = new MutationObserver((ms) => { for (const m of ms) { if (m.type === 'characterData' && /Ctrl|Alt/.test(m.target.nodeValue) && !m.target.parentElement?.closest?.('.react-flow__nodes, .react-flow__edges, .react-flow__edgelabel-renderer, .ask-a, .ask-q, .summary, .lyr-name, .doctab-title, .ctx-title')) m.target.nodeValue = fix(m.target.nodeValue); for (const n of m.addedNodes) if (n.nodeType === 1) walk(n); else if (n.nodeType === 3 && /Ctrl|Alt/.test(n.nodeValue) && !n.parentElement?.closest?.('.react-flow__nodes, .react-flow__edges, .react-flow__edgelabel-renderer, .ask-a, .ask-q, .summary, .lyr-name, .doctab-title, .ctx-title')) n.nodeValue = fix(n.nodeValue); if (m.type === 'attributes' && m.target.getAttribute) { const v = m.target.getAttribute(m.attributeName); if (v && /Ctrl|Alt/.test(v)) m.target.setAttribute(m.attributeName, fix(v)); } } });
+    mo.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['title', 'placeholder', 'aria-label'] });
+    return () => mo.disconnect();
+  }, []);
 
   // 창을 닫거나 숨길 때 0.4초 자동 저장을 기다리지 않고 바로 저장
   useEffect(() => {
@@ -891,7 +913,7 @@ function Editor() {
   const pasteClip = useCallback(async (at) => {
     let piece = clip.current;
     try {
-      const t = await navigator.clipboard.readText();
+      const t = IS_SAFARI ? '' : await navigator.clipboard.readText();
       if (t && t.startsWith(CLIP_MARK)) piece = JSON.parse(t.slice(CLIP_MARK.length));
     } catch { /* 읽기 권한 없으면 앱 안 클립보드 */ }
     if (!piece) { toastMsg('붙여 넣을 것이 없습니다. 먼저 요소를 선택하고 Ctrl+C 를 누르십시오.'); return; }
@@ -1175,6 +1197,17 @@ function Editor() {
         toastMsg(`SVG 저장했습니다 (${r.width}×${r.height}px)${where === 'downloads' ? ' · 다운로드 폴더' : ''}`);
       } else {
         const k = [1, 2, 3, 4].includes(+exp.scale) ? +exp.scale : 2;
+        if (what === 'clipboard') {
+          const pngP = svgToPng(r.svg, r.width, r.height, k);
+          try {
+            await copyPngToClipboard(pngP);
+            toastMsg(`PNG 복사했습니다 (${r.width * k}×${r.height * k}px, ${k}배) · PowerPoint에서 ${IS_MAC ? '⌘V' : 'Ctrl+V'}`);
+          } catch (e) {
+            await saveBlob(await pngP, stem + '.png');
+            toastMsg('클립보드에 못 넣었습니다 (' + (e.message || e) + '). 대신 PNG 파일로 저장했습니다.', 6000);
+          }
+          return;
+        }
         const png = await svgToPng(r.svg, r.width, r.height, k);
         if (what === 'png') {
           const where = await saveBlob(png, stem + '.png');
@@ -1559,6 +1592,7 @@ function Editor() {
           <MiniMap pannable zoomable nodeColor={(n) => (n.type === 'awsGroup' ? (catalog.kinds.get(n.data.kind)?.color || '#999') + '33' : '#232F3E')} />
         </ReactFlow>
         {find.open && <FindBar key={find.n} initial={find.q} onClose={(q) => setFind((f) => ({ ...f, open: false, q }))} />}
+        {webNote && <div className="web-note" role="status"><span><b>웹 버전</b> · 작업은 이 브라우저에 저장됩니다. 중요한 다이어그램은 [저장]으로 파일을 남기십시오. Claude CLI·PowerPoint 도형 복사는 Windows EXE 에서만 됩니다.</span><button className="small" onClick={closeWebNote}>확인</button></div>}
         {dragHint && <div className="drag-hint" role="status">{dragHint.alone ? `상자만 옮기는 중 · 안의 ${dragHint.n}개는 제자리에 둡니다` : `안에 든 ${dragHint.n}개가 함께 움직입니다 · 상자만 옮기려면 Alt 를 누른 채 끄세요`}</div>}
         {toastV && (typeof toastV === 'string'
           ? <div className={'toast' + (toastOut ? ' out' : '')}>{toastV}</div>

@@ -4,7 +4,7 @@ import { ICON_SIZE, GROUP_ICON_SIZE, LABEL_WIDTH, ICON_LABEL_GAP, LABEL_DROP, so
 import { absoluteRects, edgeGeometry, edgePath } from '../model/geometry.js';
 import { LABEL_PX, INK, GROUP_LABEL_PAD, groupPaint, drawnIds } from './scene.js';
 
-export const FONT_FAMILY = 'Pretendard, "Malgun Gothic", "Segoe UI", system-ui, sans-serif';
+export const FONT_FAMILY = 'Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", -apple-system, system-ui, sans-serif';
 const LINE_W = 1.5;
 const LABEL_LINE_H = LABEL_PX * 1.25;
 const EDGE_LABEL_PX = 10.5;
@@ -202,9 +202,10 @@ export function svgToPng(svg, width, height, scale = 2) {
   });
 }
 
-export async function copyPngToClipboard(blob) {
+// blobOrPromise: 사파리는 클릭 직후에 ClipboardItem 을 만들어야 해서, 아직 만드는 중인 PNG(Promise)를 그대로 넘긴다
+export async function copyPngToClipboard(blobOrPromise) {
   if (!navigator.clipboard || !window.ClipboardItem) throw new Error('이 브라우저는 이미지 클립보드 복사를 지원하지 않습니다');
-  await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+  await navigator.clipboard.write([new ClipboardItem({ 'image/png': Promise.resolve(blobOrPromise) })]);
 }
 
 export async function saveBlob(blob, file) {
