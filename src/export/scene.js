@@ -34,9 +34,18 @@ export function mixHex(a, b, t) {
 
 // 다크 테마 그룹: 화면(nodes.jsx)과 같은 섞음. 채움 있는 그룹 = 테두리색 14% + #101d20, 글자 = 테두리색 55% + #e6f6f3
 export const DARK_BG = '#101D20', DARK_INK = '#E6F6F3';
-export function groupPaint(kind, dark) {
-  if (!dark) return { fill: kind.fill || null, text: kind.text };
-  return { fill: kind.fill ? mixHex(kind.color, DARK_BG, 0.14) : null, text: mixHex(kind.color, DARK_INK, 0.55) };
+// 흰 바탕 대비(WCAG). 민트처럼 연한 색은 글자 4.5:1, 선 3:1 이 나올 때까지 잉크 쪽으로 진하게 섞는다.
+const lum = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(String(h || '')); if (!m) return null; return [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)).reduce((s, c, i) => s + c * [0.2126, 0.7152, 0.0722][i], 0); };
+export function contrast(a, b = '#FFFFFF') { const A = lum(a), B = lum(b); if (A == null || B == null) return 21; return (Math.max(A, B) + 0.05) / (Math.min(A, B) + 0.05); }
+export function readable(hex, min = 4.5, bg = '#FFFFFF', ink = '#0F2A2E') {
+  if (contrast(hex, bg) >= min) return hex;
+  for (let t = 0.9; t >= 0; t -= 0.05) { const c = mixHex(hex, ink, t); if (contrast(c, bg) >= min) return c; }
+  return ink;
+}
+// 섹션(카드 모드에서 사용자가 색을 고르는 상자)만 라이트에서 읽히게 보정. AWS 공식 그룹 색은 그대로 둔다
+export function groupPaint(kind, dark, isSection = false) {
+  if (!dark) return { fill: kind.fill || null, text: isSection ? readable(kind.text) : kind.text, stroke: isSection ? readable(kind.color, 3) : kind.color };
+  return { fill: kind.fill ? mixHex(kind.color, DARK_BG, 0.14) : null, text: mixHex(kind.color, DARK_INK, 0.55), stroke: kind.color };
 }
 
 /** 실제로 그려지는 항목 id (아이콘을 모르는 노드는 빠진다). 양 끝이 다 그려지는 연결선만 내보낸다. */
@@ -86,11 +95,11 @@ export function graphToScene(graph, catalog, include = null, { textScale = 1 } =
     const kind = { ...base, color: grp.color || base.color, text: grp.color || base.text, line: grp.line || base.line, fill: 'fill' in grp ? grp.fill : base.fill };
     const r = rects.get(grp.id);
     const withIcon = !!base.icon && catalog.icons.has(base.icon);
-    const paint = groupPaint(kind, dark);
+    const paint = groupPaint(kind, dark, grp.kind === 'section');
     shapes.push({
       t: 'rect', id: grp.id, name: `${kind.name}: ${grp.label || ''}`.trim(),
       x: E(r.x), y: E(r.y), w: E(r.w), h: E(r.h),
-      line: kind.line === 'none' ? null : { color: kind.color, w: LINE_EMU, dash: kind.line === 'dashed' ? 'dash' : null },
+      line: kind.line === 'none' ? null : { color: paint.stroke, w: LINE_EMU, dash: kind.line === 'dashed' ? 'dash' : null },
       fill: paint.fill,
       text: {
         value: grp.label || '', sz: sz(LABEL_PT * 100), color: paint.text, bold: false, align: 'l', anchor: 't', wrap: 'square',

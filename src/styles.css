@@ -4,7 +4,7 @@
   --line: #d9dde3;
   --accent: #2e73b8;
   --text: #1f2933;
-  --muted: #6b7280;
+  --muted: #5b6472;
   font-family: "Pretendard", "Malgun Gothic", system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 13px;
   color: var(--text);
@@ -177,7 +177,7 @@ button:active:not(:disabled) { filter: brightness(.96); }
 /* ----- 선택 위 AI 바 ----- */
 .react-flow__node-toolbar.askbar-wrap { z-index: 20000 !important; }
 .askbar { display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(135deg, #1f3a5f, #2e73b8); color: #fff; border: 0; border-radius: 999px; padding: 6px 14px 6px 10px; font-size: 12px; font-weight: 600; box-shadow: 0 6px 18px rgba(46,115,184,.35); animation: pop .2s cubic-bezier(.2,.8,.25,1.2) both; }
-.askbar:hover:not(:disabled) { background: linear-gradient(135deg, #24476f, #3a84cc); }
+button.askbar:hover:not(:disabled) { background: linear-gradient(135deg, #24476f, #3a84cc); }
 .askbar .spark { font-size: 13px; }
 .askbar.open { background: #fff; color: var(--text); border: 1.5px solid #2e73b8; padding: 4px 6px 4px 10px; border-radius: 12px; gap: 6px; }
 .askbar.open .spark { color: #2e73b8; }
@@ -447,8 +447,8 @@ button:active:not(:disabled) { filter: brightness(.96); }
 .doctab-x { width: 16px; height: 16px; }
 
 /* ===== 테마 토큰: 그룹 채움/글자색은 노드가 인라인 변수로 두 벌을 주고, 여기서 하나를 고른다 ===== */
-.grp, .pal-group-box { --grp-fill: var(--grp-fill-light); --grp-text: var(--grp-text-light); }
-.app.theme-dark .grp, .app.theme-dark .pal-group-box { --grp-fill: var(--grp-fill-dark); --grp-text: var(--grp-text-dark); }
+.grp, .pal-group-box { --grp-fill: var(--grp-fill-light); --grp-text: var(--grp-text-light); --grp-border: var(--grp-border-light, currentColor); }
+.app.theme-dark .grp, .app.theme-dark .pal-group-box { --grp-fill: var(--grp-fill-dark); --grp-text: var(--grp-text-dark); --grp-border: var(--grp-border-dark, currentColor); }
 .app.theme-dark .grp { background-color: var(--grp-fill); }
 .pal-group-box { background: var(--grp-fill); }
 
@@ -580,8 +580,8 @@ button:active:not(:disabled) { filter: brightness(.96); }
 .app.theme-dark .hdl { border-color: #2dd4bf; }
 .app.theme-dark .rsz { background: #2dd4bf !important; }
 .app.theme-dark .resizer:hover::after, .app.theme-dark .resizer.active::after { background: #2dd4bf; }
-.app.theme-dark .askbar { background: linear-gradient(135deg, #1fb8a5, #2dd4bf); color: #06201d; box-shadow: 0 6px 18px rgba(45,212,191,.35); }
-.app.theme-dark .askbar:hover:not(:disabled) { background: linear-gradient(135deg, #2dd4bf, #5ee6d4); }
+.app.theme-dark button.askbar { background: linear-gradient(135deg, #1fb8a5, #2dd4bf); color: #06201d; box-shadow: 0 6px 18px rgba(45,212,191,.35); }
+.app.theme-dark button.askbar:hover:not(:disabled) { background: linear-gradient(135deg, #2dd4bf, #5ee6d4); }
 .app.theme-dark .askbar.open { border-color: #2dd4bf; } .app.theme-dark .askbar.open .spark { color: #7fe3d6; }
 
 /* ===== 테마 전환: 바뀌는 0.6초 동안만 색을 교차 페이드 (모션 줄이기면 즉시) ===== */

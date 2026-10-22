@@ -4,7 +4,7 @@ import { useExit } from '../useExit.js';
 import { Handle, Position, NodeResizer } from '@xyflow/react';
 import { useCatalog } from '../catalog.js';
 import { GROUP_ICON_SIZE, LABEL_WIDTH, ICON_LABEL_GAP } from '../model/schema.js';
-import { GROUP_LABEL_PAD, LABEL_PX, INK } from '../export/scene.js';
+import { GROUP_LABEL_PAD, LABEL_PX, INK, readable } from '../export/scene.js';
 
 const SIDES = [['t', Position.Top], ['l', Position.Left], ['b', Position.Bottom], ['r', Position.Right]];
 
@@ -92,12 +92,15 @@ export const AwsGroup = memo(function AwsGroup({ data, selected }) {
       <div
         className={'grp' + (selected ? ' sel' : '') + (data.kind === 'section' ? ' section' : '')}
         style={{
-          borderColor: kind.color,
+          // 섹션은 라이트에서 연한 색을 읽히게 진하게 (다크는 원래 색)
+          '--grp-border-light': data.kind === 'section' ? readable(kind.color, 3) : kind.color,
+          '--grp-border-dark': kind.color,
+          borderColor: 'var(--grp-border)',
           borderStyle: kind.line === 'none' ? 'none' : kind.line,
           // 라이트는 공식 채움색, 다크는 테두리색을 어두운 바탕에 살짝 섞은 색 (styles.css 의 --grp-fill 이 고른다)
           '--grp-fill-light': kind.fill || 'transparent',
           '--grp-fill-dark': kind.fill ? `color-mix(in srgb, ${kind.color} 14%, #101d20)` : 'transparent',
-          '--grp-text-light': kind.text,
+          '--grp-text-light': data.kind === 'section' ? readable(kind.text) : kind.text,
           '--grp-text-dark': `color-mix(in srgb, ${kind.color} 55%, #e6f6f3)`,
           background: 'var(--grp-fill)',
         }}

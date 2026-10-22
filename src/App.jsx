@@ -90,7 +90,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
   return { title: '자주 쓰는 것', items: suggestData.default.map(toItem).filter(valid), target: null };
 }
 
-export const APP_VERSION = '0.4.1';
+export const APP_VERSION = '0.4.2';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 

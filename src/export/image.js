@@ -97,8 +97,8 @@ export function graphToSvg(graph, catalog, include = null, { background = 'trans
     const kind = { ...base, color: g.color || base.color, text: g.color || base.text, line: g.line || base.line, fill: 'fill' in g ? g.fill : base.fill };
     const r = rects.get(g.id);
     const icon = base.icon ? catalog.icons.get(base.icon) : null;
-    const stroke = kind.line === 'none' ? 'none' : kind.color;
-    const paint = groupPaint(kind, graph.theme === 'dark');   // 다크는 화면과 같은 섞은 색, 채움 없는 그룹은 투명
+    const paint = groupPaint(kind, graph.theme === 'dark', g.kind === 'section');
+    const stroke = kind.line === 'none' ? 'none' : paint.stroke;   // 다크는 화면과 같은 섞은 색, 채움 없는 그룹은 투명
     const fill = paint.fill || 'none';
     out.push(`<rect x="${X(r.x)}" y="${Y(r.y)}" width="${r.w}" height="${r.h}" rx="${g.kind === 'section' ? 8 : 0}" fill="${fill}" stroke="${stroke}" stroke-width="${LINE_W}"${kind.line === 'dashed' ? ' stroke-dasharray="6 4"' : ''}/>`);
     if (icon) out.push(`<image x="${X(r.x)}" y="${Y(r.y)}" width="${GROUP_ICON_SIZE}" height="${GROUP_ICON_SIZE}" href="${icon.src}"/>`);
