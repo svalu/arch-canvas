@@ -1,0 +1,173 @@
+{
+  "version": 1,
+  "about": "아키텍처 규칙. severity: block(막음) | warn(허용하되 경고) | info. 'inside'/'notInside' 는 그룹 종류 id 정규식이며 부모 사슬과 화면상 겹침을 모두 본다. icon 은 아이콘 key 정규식.",
+  "rules": [
+    {
+      "id": "subnet-outside-vpc",
+      "type": "placement",
+      "severity": "block",
+      "subject": {
+        "kind": "^(public|private)-subnet$"
+      },
+      "notInside": "^vpc$",
+      "message": "서브넷이 VPC 밖에 있습니다",
+      "explain": "서브넷은 VPC 안에서만 만들 수 있습니다. VPC 그룹을 먼저 두고 그 안에 서브넷을 넣어 주세요."
+    },
+    {
+      "id": "subnet-outside-az",
+      "type": "placement",
+      "severity": "warn",
+      "subject": {
+        "kind": "^(public|private)-subnet$"
+      },
+      "notInside": "^az$",
+      "message": "서브넷이 AZ 밖에 있습니다",
+      "explain": "서브넷은 하나의 AZ(가용 영역)에 속합니다. 다이어그램에서도 AZ 그룹 안에 서브넷을 두면 어느 AZ에 있는지 한눈에 보입니다."
+    },
+    {
+      "id": "az-outside-region",
+      "type": "placement",
+      "severity": "warn",
+      "subject": {
+        "kind": "^az$"
+      },
+      "notInside": "^(region|vpc)$",
+      "message": "AZ가 Region/VPC 밖에 있습니다",
+      "explain": "가용 영역은 리전 안의 물리적 구역입니다. Region 그룹 안(보통 VPC 안)에 AZ를 그려 주세요."
+    },
+    {
+      "id": "db-in-public-subnet",
+      "type": "placement",
+      "severity": "warn",
+      "subject": {
+        "icon": "^(Arch_Amazon-(RDS|Aurora|ElastiCache|Redshift|DocumentDB|Neptune|MemoryDB)|Res_Amazon-Aurora(-[A-Za-z]+)*-Instance(-Alternate)?|Res_Amazon-Aurora_Amazon-(Aurora-Instance-alternate|RDS-Instance(-Aternate)?)|Res_Amazon-RDS_Multi-AZ(-DB-Cluster)?|Res_Amazon-DocumentDB_Elastic-Clusters|Res_Amazon-ElastiCache_(Cache-Node|ElastiCache-for-[A-Za-z]+)|Res_Amazon-Redshift_(Dense-Compute-Node|Dense-Storage-Node|RA3))$"
+      },
+      "inside": "^public-subnet$",
+      "message": "DB가 Public subnet에 있습니다",
+      "explain": "DB는 인터넷에서 직접 닿으면 안 되므로 Private subnet에 두는 것이 기본입니다. 앱 서버만 ALB 뒤에 두고 DB는 Private subnet으로 옮겨 주세요."
+    },
+    {
+      "id": "db-outside-subnet",
+      "type": "placement",
+      "severity": "warn",
+      "subject": {
+        "icon": "^(Arch_Amazon-(RDS|Aurora|ElastiCache|Redshift|DocumentDB|Neptune|MemoryDB)|Res_Amazon-Aurora(-[A-Za-z]+)*-Instance(-Alternate)?|Res_Amazon-Aurora_Amazon-(Aurora-Instance-alternate|RDS-Instance(-Aternate)?)|Res_Amazon-RDS_Multi-AZ(-DB-Cluster)?|Res_Amazon-DocumentDB_Elastic-Clusters|Res_Amazon-ElastiCache_(Cache-Node|ElastiCache-for-[A-Za-z]+)|Res_Amazon-Redshift_(Dense-Compute-Node|Dense-Storage-Node|RA3))$"
+      },
+      "notInside": "^(public|private)-subnet$",
+      "message": "DB가 서브넷 밖에 있습니다",
+      "explain": "RDS 같은 VPC 안 DB는 서브넷 그룹(보통 Private subnet 2개 이상)에 배치됩니다. 서브넷 안으로 넣어 주세요."
+    },
+    {
+      "id": "ec2-outside-subnet",
+      "type": "placement",
+      "severity": "warn",
+      "subject": {
+        "icon": "^(Arch_Amazon-EC2|Res_Amazon-EC2_Instance)$"
+      },
+      "notInside": "^(public|private)-subnet$",
+      "message": "EC2가 서브넷 밖에 있습니다",
+      "explain": "EC2 인스턴스는 항상 어떤 서브넷 안에서 뜹니다. Public(인터넷 직접 노출) 또는 Private(ALB·NAT 뒤) 서브넷 중 하나에 넣어 주세요."
+    },
+    {
+      "id": "igw-one-per-vpc",
+      "type": "count",
+      "severity": "block",
+      "subject": {
+        "icon": "Internet-Gateway"
+      },
+      "scope": "^vpc$",
+      "max": 1,
+      "message": "VPC에 인터넷 게이트웨이가 2개 이상입니다",
+      "explain": "인터넷 게이트웨이는 VPC당 하나만 붙일 수 있습니다. 이미 있는 IGW를 쓰고, 서브넷별 인터넷 진입은 라우팅 테이블로 나눕니다."
+    },
+    {
+      "id": "igw-outside-vpc",
+      "type": "placement",
+      "severity": "warn",
+      "subject": {
+        "icon": "Internet-Gateway"
+      },
+      "notInside": "^vpc$",
+      "message": "인터넷 게이트웨이가 VPC 밖에 있습니다",
+      "explain": "IGW는 VPC에 붙는 구성 요소이므로 VPC 경계(보통 서브넷 밖, VPC 안)에 그립니다."
+    },
+    {
+      "id": "nat-in-private-subnet",
+      "type": "placement",
+      "severity": "warn",
+      "subject": {
+        "icon": "NAT-Gateway"
+      },
+      "inside": "^private-subnet$",
+      "message": "NAT 게이트웨이가 Private subnet에 있습니다",
+      "explain": "NAT 게이트웨이는 Public subnet에 있어야 IGW로 나갈 수 있습니다. Private subnet의 라우팅이 이 NAT를 가리키는 구조입니다."
+    },
+    {
+      "id": "regional-service-in-subnet",
+      "type": "placement",
+      "severity": "warn",
+      "subject": {
+        "icon": "^(?!.*(DynamoDB-Accelerator|Route-53_Resolver|Access-Points|S3-On-Outposts)).*(Simple-Storage-Service|DynamoDB|CloudFront|Route-53|Simple-Queue-Service|Simple-Notification-Service|Cognito|Amazon-API-Gateway$)"
+      },
+      "inside": "^(public|private)-subnet$",
+      "message": "리전 서비스가 서브넷 안에 있습니다",
+      "explain": "S3, DynamoDB, CloudFront, Route 53, SQS/SNS, Cognito, API Gateway는 VPC 밖에서 동작하는 리전 서비스입니다. VPC/서브넷 밖(Region 안)에 두고, 필요하면 VPC 엔드포인트로 연결을 표현합니다. VPC에 연결한 Lambda, DAX, Route 53 Resolver 엔드포인트, S3 VPC 액세스 포인트, S3 on Outposts는 VPC 안 리소스이므로 서브넷에 두어도 됩니다."
+    },
+    {
+      "id": "users-inside-vpc",
+      "type": "placement",
+      "severity": "warn",
+      "subject": {
+        "icon": "^Res_(Users|User|Client|Mobile-client|Internet|Authenticated-User)(-altd)?_"
+      },
+      "inside": "^(vpc|region|aws-cloud|aws-cloud-logo)$",
+      "message": "사용자/클라이언트가 AWS 안에 있습니다",
+      "explain": "사용자·단말·인터넷은 AWS 바깥의 존재이므로 Region/VPC 밖에 두는 것이 관례입니다. 그래야 진입 경로(CloudFront, ALB, IGW)가 드러납니다."
+    },
+    {
+      "id": "lambda-to-rds-direct",
+      "type": "edge",
+      "severity": "warn",
+      "source": {
+        "icon": "AWS-Lambda"
+      },
+      "target": {
+        "icon": "^(Arch_Amazon-(RDS|Aurora)|Res_Amazon-Aurora(-[A-Za-z]+)*-Instance(-Alternate)?|Res_Amazon-Aurora_Amazon-(Aurora-Instance-alternate|RDS-Instance(-Aternate)?)|Res_Amazon-RDS_Multi-AZ(-DB-Cluster)?)$"
+      },
+      "message": "Lambda가 RDS에 직접 연결됩니다",
+      "explain": "Lambda는 동시에 수백 개가 뜰 수 있어서 각자 DB 커넥션을 열면 RDS 커넥션이 폭주합니다. 사이에 RDS Proxy를 두거나(권장), 동시 실행 수를 제한해 주세요."
+    },
+    {
+      "id": "users-direct-to-private",
+      "type": "edge",
+      "severity": "warn",
+      "source": {
+        "icon": "^Res_(Users|User|Client|Mobile-client|Internet|Authenticated-User)(-altd)?_"
+      },
+      "targetInside": "^private-subnet$",
+      "message": "사용자가 Private subnet 자원에 바로 연결됩니다",
+      "explain": "인터넷에서 Private subnet으로는 바로 들어갈 수 없습니다. ALB, API Gateway, CloudFront 같은 진입점을 거치도록 연결해 주세요."
+    },
+    {
+      "id": "users-direct-to-db",
+      "type": "edge",
+      "severity": "warn",
+      "source": {
+        "icon": "^Res_(Users|User|Client|Mobile-client|Internet|Authenticated-User)(-altd)?_"
+      },
+      "target": {
+        "icon": "^(Arch_Amazon-(RDS|Aurora|ElastiCache|Redshift|DocumentDB|Neptune|MemoryDB)|Res_Amazon-Aurora(-[A-Za-z]+)*-Instance(-Alternate)?|Res_Amazon-Aurora_Amazon-(Aurora-Instance-alternate|RDS-Instance(-Aternate)?)|Res_Amazon-RDS_Multi-AZ(-DB-Cluster)?|Res_Amazon-DocumentDB_Elastic-Clusters|Res_Amazon-ElastiCache_(Cache-Node|ElastiCache-for-[A-Za-z]+)|Res_Amazon-Redshift_(Dense-Compute-Node|Dense-Storage-Node|RA3)|Arch_Amazon-DynamoDB|Res_Amazon-DynamoDB_Table)$"
+      },
+      "message": "사용자가 DB에 바로 연결됩니다",
+      "explain": "DB를 사용자에게 직접 노출하면 안 됩니다. 앱 서버나 API 계층을 거쳐서 DB에 접근하게 해 주세요."
+    },
+    {
+      "id": "edge-group-to-self-child",
+      "type": "edge",
+      "severity": "block",
+      "sourceContainsTarget": true,
+      "message": "그룹과 그 안의 요소를 연결했습니다",
+      "explain": "그룹(VPC·서브넷)은 경계이므로 자기 안의 요소와 화살표로 잇지 않습니다. 안의 아이콘끼리 연결하거나, 그룹 밖의 요소와 그룹을 이어 주세요."
+    }
+  ]
+}

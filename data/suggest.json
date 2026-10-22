@@ -1,0 +1,45 @@
+{
+  "about": "팔레트 추천. inside: 그룹 종류 id → 그 안에 넣을 만한 것(icon key 또는 group:kind). nextTo: 선택한 아이콘 key 정규식 → 옆에 붙여 연결할 만한 것. default: 아무것도 안 골랐을 때.",
+  "default": [
+    "Res_Users_Light", "group:region", "group:vpc", "Res_Elastic-Load-Balancing_Application-Load-Balancer", "Res_Amazon-EC2_Instance",
+    "Res_Amazon-Aurora_Amazon-RDS-Instance", "Arch_Amazon-Simple-Storage-Service", "Arch_AWS-Lambda", "Arch_Amazon-API-Gateway",
+    "Arch_Amazon-DynamoDB", "Arch_Amazon-CloudFront", "Arch_Amazon-Route-53", "Arch_AWS-WAF", "Arch_Amazon-Cognito", "Arch_Amazon-CloudWatch"
+  ],
+  "inside": {
+    "aws-cloud": ["group:region", "Arch_Amazon-Route-53", "Arch_Amazon-CloudFront", "Arch_AWS-WAF", "Arch_Amazon-Cognito", "Arch_AWS-Identity-and-Access-Management", "Arch_AWS-Certificate-Manager"],
+    "aws-cloud-logo": ["group:region", "Arch_Amazon-Route-53", "Arch_Amazon-CloudFront", "Arch_AWS-WAF", "Arch_Amazon-Cognito", "Arch_AWS-Identity-and-Access-Management"],
+    "aws-cloud-dark": ["group:region", "Arch_Amazon-Route-53", "Arch_Amazon-CloudFront", "Arch_AWS-WAF"],
+    "aws-cloud-logo-dark": ["group:region", "Arch_Amazon-Route-53", "Arch_Amazon-CloudFront", "Arch_AWS-WAF"],
+    "region": ["group:vpc", "Arch_Amazon-Simple-Storage-Service", "Arch_AWS-Lambda", "Arch_Amazon-API-Gateway", "Arch_Amazon-DynamoDB", "Arch_Amazon-Simple-Queue-Service", "Arch_Amazon-Simple-Notification-Service", "Arch_Amazon-CloudWatch", "Arch_AWS-Key-Management-Service", "Arch_Amazon-Elastic-Container-Registry", "Arch_Amazon-Elastic-Kubernetes-Service", "Arch_Amazon-Elastic-Container-Service", "Arch_AWS-Backup", "Arch_Amazon-Bedrock"],
+    "vpc": ["group:az", "Res_Amazon-VPC_Internet-Gateway", "Res_Elastic-Load-Balancing_Application-Load-Balancer", "Res_Amazon-VPC_VPN-Gateway", "Arch_AWS-Transit-Gateway", "Res_Amazon-VPC_Endpoints", "group:security-group", "group:auto-scaling"],
+    "az": ["group:public-subnet", "group:private-subnet"],
+    "public-subnet": ["Res_Amazon-VPC_NAT-Gateway", "Res_Elastic-Load-Balancing_Application-Load-Balancer", "Res_Elastic-Load-Balancing_Network-Load-Balancer", "Res_Amazon-EC2_Instance"],
+    "private-subnet": ["Res_Amazon-EC2_Instance", "Res_Amazon-Aurora_Amazon-RDS-Instance", "Arch_Amazon-ElastiCache", "Arch_AWS-Fargate", "Res_Amazon-Elastic-Container-Service_Task", "Arch_AWS-Lambda", "Arch_Amazon-EFS", "Arch_Amazon-OpenSearch-Service"],
+    "security-group": ["Res_Amazon-EC2_Instance", "Res_Amazon-Aurora_Amazon-RDS-Instance", "Res_Elastic-Load-Balancing_Application-Load-Balancer", "Arch_Amazon-ElastiCache"],
+    "auto-scaling": ["Res_Amazon-EC2_Instance", "Res_Amazon-Elastic-Container-Service_Task", "Arch_AWS-Fargate"],
+    "ec2-contents": ["Res_Amazon-Elastic-Container-Service_Container-1", "Res_Amazon-Elastic-Container-Service_Container-2", "Arch_AWS-Systems-Manager", "Arch_Amazon-CloudWatch"],
+    "server-contents": ["Res_Amazon-Elastic-Container-Service_Container-1", "Res_Amazon-Elastic-Container-Service_Container-2", "Res_Server_Light"],
+    "spot-fleet": ["Res_Amazon-EC2_Instance"],
+    "aws-account": ["group:region", "Arch_AWS-Identity-and-Access-Management", "group:vpc"],
+    "corporate-dc": ["Res_Servers_Light", "Res_Server_Light", "Res_Amazon-VPC_Customer-Gateway", "Res_Users_Light"],
+    "greengrass": ["Arch_AWS-IoT-Greengrass", "Arch_AWS-IoT-Core", "Res_AWS-IoT_Thing_Generic", "Arch_AWS-Lambda"],
+    "generic": ["Res_Amazon-EC2_Instance", "Arch_AWS-Lambda", "Res_Amazon-Elastic-Container-Service_Task", "Res_Amazon-Aurora_Amazon-RDS-Instance"]
+  },
+  "nextTo": [
+    { "match": "^Res_(Users|User|Client|Mobile-client|Internet)", "items": ["Arch_Amazon-CloudFront", "Arch_Amazon-Route-53", "Res_Elastic-Load-Balancing_Application-Load-Balancer", "Arch_Amazon-API-Gateway", "Arch_AWS-WAF", "Arch_Amazon-Cognito"] },
+    { "match": "Route-53", "items": ["Arch_Amazon-CloudFront", "Res_Elastic-Load-Balancing_Application-Load-Balancer", "Arch_Amazon-API-Gateway"] },
+    { "match": "CloudFront", "items": ["Arch_Amazon-Simple-Storage-Service", "Res_Elastic-Load-Balancing_Application-Load-Balancer", "Arch_AWS-WAF", "Arch_Amazon-API-Gateway"] },
+    { "match": "AWS-WAF", "items": ["Res_Elastic-Load-Balancing_Application-Load-Balancer", "Arch_Amazon-CloudFront", "Arch_Amazon-API-Gateway"] },
+    { "match": "Load-Balancer|Load-Balancing", "items": ["Res_Amazon-EC2_Instance", "Res_Amazon-Elastic-Container-Service_Task", "Arch_AWS-Fargate", "Arch_AWS-WAF"] },
+    { "match": "EC2", "items": ["Res_Amazon-Aurora_Amazon-RDS-Instance", "Arch_Amazon-ElastiCache", "Arch_Amazon-Simple-Storage-Service", "Arch_Amazon-Simple-Queue-Service", "Arch_Amazon-CloudWatch", "Arch_Amazon-EFS"] },
+    { "match": "Fargate|Container-Service", "items": ["Arch_Amazon-Elastic-Container-Registry", "Res_Amazon-Aurora_Amazon-RDS-Instance", "Arch_Amazon-ElastiCache", "Arch_Amazon-Simple-Storage-Service"] },
+    { "match": "API-Gateway", "items": ["Arch_AWS-Lambda", "Arch_Amazon-Cognito", "Arch_AWS-WAF", "Arch_AWS-Step-Functions"] },
+    { "match": "AWS-Lambda", "items": ["Arch_Amazon-DynamoDB", "Arch_Amazon-Simple-Storage-Service", "Arch_Amazon-Simple-Queue-Service", "Arch_Amazon-Simple-Notification-Service", "Arch_Amazon-EventBridge", "Arch_AWS-Step-Functions", "Arch_Amazon-Bedrock"] },
+    { "match": "RDS|Aurora", "items": ["Arch_AWS-Key-Management-Service", "Arch_AWS-Backup", "Arch_AWS-Secrets-Manager", "Arch_Amazon-CloudWatch"] },
+    { "match": "DynamoDB", "items": ["Arch_AWS-Lambda", "Arch_Amazon-Kinesis", "Arch_AWS-Backup"] },
+    { "match": "Simple-Storage-Service", "items": ["Arch_Amazon-CloudFront", "Arch_AWS-Lambda", "Arch_AWS-Key-Management-Service", "Arch_AWS-Backup"] },
+    { "match": "Customer-Gateway|Servers|Server_", "items": ["Arch_AWS-Direct-Connect", "Arch_AWS-Site-to-Site-VPN", "Res_Amazon-VPC_VPN-Gateway"] },
+    { "match": "Direct-Connect|Site-to-Site-VPN", "items": ["Res_Amazon-VPC_VPN-Gateway", "Arch_AWS-Transit-Gateway"] },
+    { "match": "IoT", "items": ["Arch_AWS-IoT-Core", "Arch_AWS-Lambda", "Arch_Amazon-Kinesis", "Arch_Amazon-DynamoDB"] }
+  ]
+}

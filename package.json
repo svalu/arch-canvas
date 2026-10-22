@@ -1,0 +1,24 @@
+{
+  "name": "arch-canvas",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "description": "AWS 아키텍처 노드 캔버스 (React Flow) + PowerPoint 편집 가능 도형 내보내기",
+  "scripts": {
+    "icons": "node tools/extract_icons.mjs",
+    "dev": "vite",
+    "build": "vite build && node tools/inject_data.mjs",
+    "scene": "node tools/graph_to_scene.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.137.0",
+    "@xyflow/react": "12.8.6",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "4.7.0",
+    "vite": "6.3.6",
+    "vite-plugin-singlefile": "2.3.0"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "schema": "arch-canvas/graph@1",
+  "title": "서버리스 API",
+  "meta": { "id": "serverless-api", "section": "패턴", "name": "서버리스 API", "description": "API Gateway + Lambda + DynamoDB" },
+  "groups": [
+    { "id": "cloud", "kind": "aws-cloud", "label": "AWS Cloud", "parent": null, "x": 160, "y": 20, "w": 640, "h": 250 },
+    { "id": "region", "kind": "region", "label": "AWS Region", "parent": "cloud", "x": 30, "y": 50, "w": 580, "h": 170 }
+  ],
+  "nodes": [
+    { "id": "users", "icon": "Res_Users_Light", "label": "Users", "parent": null, "x": 40, "y": 131 },
+    { "id": "apigw", "icon": "Arch_Amazon-API-Gateway", "label": "Amazon API Gateway", "parent": "region", "x": 70, "y": 61 },
+    { "id": "lambda", "icon": "Arch_AWS-Lambda", "label": "AWS Lambda", "parent": "region", "x": 266, "y": 61 },
+    { "id": "ddb", "icon": "Arch_Amazon-DynamoDB", "label": "Amazon DynamoDB", "parent": "region", "x": 462, "y": 61 }
+  ],
+  "edges": [
+    { "id": "e1", "source": "users", "target": "apigw", "label": "HTTPS", "line": "solid", "shape": "straight", "arrow": "end" },
+    { "id": "e2", "source": "apigw", "target": "lambda", "label": "", "line": "solid", "shape": "straight", "arrow": "end" },
+    { "id": "e3", "source": "lambda", "target": "ddb", "label": "", "line": "solid", "shape": "straight", "arrow": "end" }
+  ],
+  "annotations": []
+}

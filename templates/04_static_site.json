@@ -1,0 +1,21 @@
+{
+  "schema": "arch-canvas/graph@1",
+  "title": "정적 사이트",
+  "meta": { "id": "static-site", "section": "패턴", "name": "정적 사이트", "description": "Route 53 + CloudFront + S3" },
+  "groups": [
+    { "id": "cloud", "kind": "aws-cloud", "label": "AWS Cloud", "parent": null, "x": 160, "y": 20, "w": 660, "h": 250 },
+    { "id": "region", "kind": "region", "label": "AWS Region", "parent": "cloud", "x": 420, "y": 50, "w": 210, "h": 170 }
+  ],
+  "nodes": [
+    { "id": "users", "icon": "Res_Users_Light", "label": "Users", "parent": null, "x": 40, "y": 131 },
+    { "id": "r53", "icon": "Arch_Amazon-Route-53", "label": "Amazon Route 53", "parent": "cloud", "x": 70, "y": 111 },
+    { "id": "cf", "icon": "Arch_Amazon-CloudFront", "label": "Amazon CloudFront", "parent": "cloud", "x": 250, "y": 111 },
+    { "id": "s3", "icon": "Arch_Amazon-Simple-Storage-Service", "label": "Amazon S3 (정적 파일)", "parent": "region", "x": 81, "y": 61 }
+  ],
+  "edges": [
+    { "id": "e1", "source": "users", "target": "r53", "label": "DNS", "line": "solid", "shape": "straight", "arrow": "end" },
+    { "id": "e2", "source": "r53", "target": "cf", "label": "", "line": "solid", "shape": "straight", "arrow": "end" },
+    { "id": "e3", "source": "cf", "target": "s3", "label": "OAC", "line": "solid", "shape": "straight", "arrow": "end" }
+  ],
+  "annotations": []
+}

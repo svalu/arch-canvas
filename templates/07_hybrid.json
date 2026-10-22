@@ -1,0 +1,283 @@
+{
+  "schema": "arch-canvas/graph@1",
+  "title": "하이브리드",
+  "meta": {
+    "id": "hybrid",
+    "section": "패턴",
+    "name": "하이브리드",
+    "description": "Corporate data center + Site-to-Site VPN / Direct Connect, AZ 2개"
+  },
+  "groups": [
+    {
+      "id": "dc",
+      "kind": "corporate-dc",
+      "label": "Corporate data center",
+      "parent": null,
+      "x": 20,
+      "y": 100,
+      "w": 310,
+      "h": 480
+    },
+    {
+      "id": "region",
+      "kind": "region",
+      "label": "AWS Region",
+      "parent": null,
+      "x": 680,
+      "y": 20,
+      "w": 690,
+      "h": 620
+    },
+    {
+      "id": "vpc",
+      "kind": "vpc",
+      "label": "VPC",
+      "parent": "region",
+      "x": 30,
+      "y": 50,
+      "w": 630,
+      "h": 540
+    },
+    {
+      "id": "az-a",
+      "kind": "az",
+      "label": "Availability Zone A",
+      "parent": "vpc",
+      "x": 160,
+      "y": 40,
+      "w": 440,
+      "h": 220
+    },
+    {
+      "id": "priv-a",
+      "kind": "private-subnet",
+      "label": "Private subnet",
+      "parent": "az-a",
+      "x": 20,
+      "y": 40,
+      "w": 400,
+      "h": 160
+    },
+    {
+      "id": "az-b",
+      "kind": "az",
+      "label": "Availability Zone B",
+      "parent": "vpc",
+      "x": 160,
+      "y": 290,
+      "w": 440,
+      "h": 220
+    },
+    {
+      "id": "priv-b",
+      "kind": "private-subnet",
+      "label": "Private subnet",
+      "parent": "az-b",
+      "x": 20,
+      "y": 40,
+      "w": 400,
+      "h": 160
+    }
+  ],
+  "nodes": [
+    {
+      "id": "servers",
+      "icon": "Res_Servers_Light",
+      "label": "온프레미스 서버",
+      "parent": "dc",
+      "x": 30,
+      "y": 225
+    },
+    {
+      "id": "cgw",
+      "icon": "Res_Amazon-VPC_Customer-Gateway",
+      "label": "Customer Gateway (VPN 장비)",
+      "parent": "dc",
+      "x": 210,
+      "y": 100
+    },
+    {
+      "id": "router",
+      "icon": "Res_Amazon-VPC_Router",
+      "label": "사내 라우터 (전용선)",
+      "parent": "dc",
+      "x": 210,
+      "y": 350
+    },
+    {
+      "id": "vpn",
+      "icon": "Arch_AWS-Site-to-Site-VPN",
+      "label": "Site-to-Site VPN",
+      "parent": null,
+      "x": 430,
+      "y": 200
+    },
+    {
+      "id": "dx",
+      "icon": "Arch_AWS-Direct-Connect",
+      "label": "AWS Direct Connect",
+      "parent": null,
+      "x": 430,
+      "y": 450
+    },
+    {
+      "id": "dxgw",
+      "icon": "Res_AWS-Direct-Connect_Gateway",
+      "label": "Direct Connect Gateway",
+      "parent": null,
+      "x": 570,
+      "y": 450
+    },
+    {
+      "id": "vgw",
+      "icon": "Res_Amazon-VPC_VPN-Gateway",
+      "label": "Virtual Private Gateway",
+      "parent": "vpc",
+      "x": 40,
+      "y": 255
+    },
+    {
+      "id": "app-a",
+      "icon": "Res_Amazon-EC2_Instance",
+      "label": "EC2",
+      "parent": "priv-a",
+      "x": 60,
+      "y": 50
+    },
+    {
+      "id": "db-a",
+      "icon": "Res_Amazon-Aurora_Amazon-RDS-Instance",
+      "label": "RDS Primary",
+      "parent": "priv-a",
+      "x": 290,
+      "y": 50
+    },
+    {
+      "id": "app-b",
+      "icon": "Res_Amazon-EC2_Instance",
+      "label": "EC2",
+      "parent": "priv-b",
+      "x": 60,
+      "y": 50
+    },
+    {
+      "id": "db-b",
+      "icon": "Res_Amazon-Aurora_Amazon-RDS-Instance",
+      "label": "RDS Standby",
+      "parent": "priv-b",
+      "x": 290,
+      "y": 50
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "servers",
+      "target": "cgw",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "both"
+    },
+    {
+      "id": "e2",
+      "source": "servers",
+      "target": "router",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "both"
+    },
+    {
+      "id": "e3",
+      "source": "cgw",
+      "target": "vpn",
+      "label": "IPsec (백업)",
+      "line": "dashed",
+      "shape": "straight",
+      "arrow": "both"
+    },
+    {
+      "id": "e4",
+      "source": "vpn",
+      "target": "vgw",
+      "label": "",
+      "line": "dashed",
+      "shape": "elbow",
+      "arrow": "both"
+    },
+    {
+      "id": "e5",
+      "source": "router",
+      "target": "dx",
+      "label": "전용선",
+      "line": "solid",
+      "shape": "straight",
+      "arrow": "both"
+    },
+    {
+      "id": "e6",
+      "source": "dx",
+      "target": "dxgw",
+      "label": "Private VIF",
+      "line": "solid",
+      "shape": "straight",
+      "arrow": "both"
+    },
+    {
+      "id": "e7",
+      "source": "dxgw",
+      "target": "vgw",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "both"
+    },
+    {
+      "id": "e8",
+      "source": "vgw",
+      "target": "app-a",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e9",
+      "source": "vgw",
+      "target": "app-b",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e10",
+      "source": "app-a",
+      "target": "db-a",
+      "label": "",
+      "line": "solid",
+      "shape": "straight",
+      "arrow": "end"
+    },
+    {
+      "id": "e11",
+      "source": "app-b",
+      "target": "db-a",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e12",
+      "source": "db-a",
+      "target": "db-b",
+      "label": "동기 복제",
+      "line": "dashed",
+      "shape": "straight",
+      "arrow": "end"
+    }
+  ],
+  "annotations": []
+}

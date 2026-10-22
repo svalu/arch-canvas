@@ -1,0 +1,295 @@
+{
+  "schema": "arch-canvas/graph@1",
+  "title": "컨테이너 (EKS)",
+  "meta": {
+    "id": "containers-eks",
+    "section": "패턴",
+    "name": "컨테이너 (EKS)",
+    "description": "ALB + EKS 노드 그룹(2 AZ) + NAT · VPC 엔드포인트 + ECR"
+  },
+  "groups": [
+    {
+      "id": "region",
+      "kind": "region",
+      "label": "AWS Region",
+      "parent": null,
+      "x": 160,
+      "y": 20,
+      "w": 900,
+      "h": 740
+    },
+    {
+      "id": "vpc",
+      "kind": "vpc",
+      "label": "VPC",
+      "parent": "region",
+      "x": 30,
+      "y": 50,
+      "w": 680,
+      "h": 660
+    },
+    {
+      "id": "az-a",
+      "kind": "az",
+      "label": "Availability Zone A",
+      "parent": "vpc",
+      "x": 30,
+      "y": 110,
+      "w": 300,
+      "h": 430
+    },
+    {
+      "id": "pub-a",
+      "kind": "public-subnet",
+      "label": "Public subnet",
+      "parent": "az-a",
+      "x": 20,
+      "y": 40,
+      "w": 260,
+      "h": 130
+    },
+    {
+      "id": "priv-a",
+      "kind": "private-subnet",
+      "label": "Private subnet",
+      "parent": "az-a",
+      "x": 20,
+      "y": 190,
+      "w": 260,
+      "h": 210
+    },
+    {
+      "id": "az-b",
+      "kind": "az",
+      "label": "Availability Zone B",
+      "parent": "vpc",
+      "x": 350,
+      "y": 110,
+      "w": 300,
+      "h": 430
+    },
+    {
+      "id": "pub-b",
+      "kind": "public-subnet",
+      "label": "Public subnet",
+      "parent": "az-b",
+      "x": 20,
+      "y": 40,
+      "w": 260,
+      "h": 130
+    },
+    {
+      "id": "priv-b",
+      "kind": "private-subnet",
+      "label": "Private subnet",
+      "parent": "az-b",
+      "x": 20,
+      "y": 190,
+      "w": 260,
+      "h": 210
+    },
+    {
+      "id": "nodegroup",
+      "kind": "auto-scaling",
+      "label": "EKS 관리형 노드 그룹",
+      "parent": "vpc",
+      "x": 40,
+      "y": 330,
+      "w": 600,
+      "h": 150
+    }
+  ],
+  "nodes": [
+    {
+      "id": "users",
+      "icon": "Res_Users_Light",
+      "label": "Users",
+      "parent": null,
+      "x": 40,
+      "y": 84
+    },
+    {
+      "id": "igw",
+      "icon": "Res_Amazon-VPC_Internet-Gateway",
+      "label": "Internet Gateway",
+      "parent": "vpc",
+      "x": 316,
+      "y": 14
+    },
+    {
+      "id": "alb",
+      "icon": "Res_Elastic-Load-Balancing_Application-Load-Balancer",
+      "label": "Application Load Balancer",
+      "parent": "vpc",
+      "x": 316,
+      "y": 180
+    },
+    {
+      "id": "nat-a",
+      "icon": "Res_Amazon-VPC_NAT-Gateway",
+      "label": "NAT Gateway",
+      "parent": "pub-a",
+      "x": 30,
+      "y": 40
+    },
+    {
+      "id": "nat-b",
+      "icon": "Res_Amazon-VPC_NAT-Gateway",
+      "label": "NAT Gateway",
+      "parent": "pub-b",
+      "x": 182,
+      "y": 40
+    },
+    {
+      "id": "node-a",
+      "icon": "Res_Amazon-EC2_Instance",
+      "label": "워커 노드",
+      "parent": "nodegroup",
+      "x": 116,
+      "y": 50
+    },
+    {
+      "id": "node-b",
+      "icon": "Res_Amazon-EC2_Instance",
+      "label": "워커 노드",
+      "parent": "nodegroup",
+      "x": 436,
+      "y": 50
+    },
+    {
+      "id": "vpce",
+      "icon": "Res_Amazon-VPC_Endpoints",
+      "label": "VPC 엔드포인트 (ECR)",
+      "parent": "vpc",
+      "x": 316,
+      "y": 560
+    },
+    {
+      "id": "eks",
+      "icon": "Arch_Amazon-Elastic-Kubernetes-Service",
+      "label": "Amazon EKS (컨트롤 플레인)",
+      "parent": "region",
+      "x": 790,
+      "y": 431
+    },
+    {
+      "id": "ecr",
+      "icon": "Arch_Amazon-Elastic-Container-Registry",
+      "label": "Amazon ECR",
+      "parent": "region",
+      "x": 790,
+      "y": 610
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "users",
+      "target": "igw",
+      "label": "HTTPS",
+      "line": "solid",
+      "shape": "straight",
+      "arrow": "end"
+    },
+    {
+      "id": "e2",
+      "source": "igw",
+      "target": "alb",
+      "label": "",
+      "line": "solid",
+      "shape": "straight",
+      "arrow": "end"
+    },
+    {
+      "id": "e3",
+      "source": "alb",
+      "target": "node-a",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e4",
+      "source": "alb",
+      "target": "node-b",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e5",
+      "source": "node-a",
+      "target": "nat-a",
+      "label": "아웃바운드",
+      "line": "dashed",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e6",
+      "source": "node-b",
+      "target": "nat-b",
+      "label": "",
+      "line": "dashed",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e7",
+      "source": "nat-a",
+      "target": "igw",
+      "label": "",
+      "line": "dashed",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e8",
+      "source": "nat-b",
+      "target": "igw",
+      "label": "",
+      "line": "dashed",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e9",
+      "source": "node-a",
+      "target": "vpce",
+      "label": "",
+      "line": "dashed",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e10",
+      "source": "node-b",
+      "target": "vpce",
+      "label": "",
+      "line": "dashed",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e11",
+      "source": "vpce",
+      "target": "ecr",
+      "label": "이미지 pull",
+      "line": "dashed",
+      "shape": "straight",
+      "arrow": "end"
+    },
+    {
+      "id": "e12",
+      "source": "eks",
+      "target": "nodegroup",
+      "label": "API 서버 통신",
+      "line": "dashed",
+      "shape": "straight",
+      "arrow": "both"
+    }
+  ],
+  "annotations": []
+}

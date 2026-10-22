@@ -1,0 +1,326 @@
+{
+  "schema": "arch-canvas/graph@1",
+  "title": "솔루션 구성도 (예시)",
+  "mode": "card",
+  "theme": "light",
+  "meta": {
+    "id": "solution-light",
+    "section": "구성도",
+    "name": "솔루션 구성도 (라이트)",
+    "description": "흰 슬라이드에 바로 붙이는 밝은 솔루션 구성도. 카드·섹션으로 기능 블록과 연동을 보여 줍니다"
+  },
+  "context": {
+    "title": "",
+    "requirements": "",
+    "constraints": ""
+  },
+  "groups": [
+    {
+      "id": "channels",
+      "kind": "section",
+      "label": "채널",
+      "parent": null,
+      "x": 20,
+      "y": 40,
+      "w": 240,
+      "h": 400,
+      "color": "#2DD4BF",
+      "line": "dashed",
+      "fill": null
+    },
+    {
+      "id": "app",
+      "kind": "section",
+      "label": "애플리케이션 · AWS 관리형 · 다중 AZ",
+      "parent": null,
+      "x": 320,
+      "y": 40,
+      "w": 620,
+      "h": 400,
+      "color": "#2DD4BF",
+      "line": "solid",
+      "fill": null
+    },
+    {
+      "id": "ai",
+      "kind": "section",
+      "label": "AI 기능",
+      "parent": "app",
+      "x": 20,
+      "y": 190,
+      "w": 580,
+      "h": 190,
+      "color": "#7FE3D6",
+      "line": "dashed",
+      "fill": null
+    },
+    {
+      "id": "data",
+      "kind": "section",
+      "label": "데이터",
+      "parent": null,
+      "x": 1000,
+      "y": 40,
+      "w": 300,
+      "h": 400,
+      "color": "#2DD4BF",
+      "line": "dashed",
+      "fill": null
+    },
+    {
+      "id": "ops",
+      "kind": "section",
+      "label": "운영 · 보안",
+      "parent": null,
+      "x": 320,
+      "y": 480,
+      "w": 980,
+      "h": 130,
+      "color": "#7FE3D6",
+      "line": "dashed",
+      "fill": null
+    }
+  ],
+  "nodes": [
+    {
+      "id": "web",
+      "type": "card",
+      "icon": null,
+      "label": "웹 · 모바일 앱",
+      "body": "고객용 화면 · 반응형 웹",
+      "parent": "channels",
+      "x": 20,
+      "y": 50,
+      "w": 200,
+      "h": 70
+    },
+    {
+      "id": "partner",
+      "type": "card",
+      "icon": null,
+      "label": "파트너 · 외부 시스템",
+      "body": "API 연동 · 배치 파일",
+      "parent": "channels",
+      "x": 20,
+      "y": 150,
+      "w": 200,
+      "h": 70
+    },
+    {
+      "id": "admin",
+      "type": "card",
+      "icon": null,
+      "label": "관리자 화면",
+      "body": "운영자 · 내부 사용자",
+      "parent": "channels",
+      "x": 20,
+      "y": 250,
+      "w": 200,
+      "h": 70
+    },
+    {
+      "id": "entry",
+      "type": "card",
+      "icon": "Arch_Amazon-API-Gateway",
+      "label": "서비스 진입",
+      "body": "API · 인증 · 트래픽 제어",
+      "parent": "app",
+      "x": 20,
+      "y": 50,
+      "w": 260,
+      "h": 84
+    },
+    {
+      "id": "service",
+      "type": "card",
+      "icon": "Arch_Amazon-Elastic-Container-Service",
+      "label": "업무 서비스",
+      "body": "핵심 업무 로직 · 자동 확장",
+      "parent": "app",
+      "x": 320,
+      "y": 50,
+      "w": 280,
+      "h": 84
+    },
+    {
+      "id": "genai",
+      "type": "card",
+      "icon": "Arch_Amazon-Bedrock",
+      "label": "생성형 AI 어시스턴트",
+      "body": "질의응답 · 요약 · 문서 초안",
+      "parent": "ai",
+      "x": 20,
+      "y": 50,
+      "w": 270,
+      "h": 84
+    },
+    {
+      "id": "search",
+      "type": "card",
+      "icon": "Arch_Amazon-OpenSearch-Service",
+      "label": "검색 · 추천",
+      "body": "지식 검색 · 개인화 추천",
+      "parent": "ai",
+      "x": 310,
+      "y": 50,
+      "w": 250,
+      "h": 84
+    },
+    {
+      "id": "db",
+      "type": "card",
+      "icon": "Arch_Amazon-Aurora",
+      "label": "운영 데이터베이스",
+      "body": "트랜잭션 데이터 · 다중 AZ",
+      "parent": "data",
+      "x": 20,
+      "y": 50,
+      "w": 260,
+      "h": 84
+    },
+    {
+      "id": "lake",
+      "type": "card",
+      "icon": "Arch_Amazon-Simple-Storage-Service",
+      "label": "데이터 레이크 · 분석",
+      "body": "이력 데이터 적재 · 대시보드",
+      "parent": "data",
+      "x": 20,
+      "y": 170,
+      "w": 260,
+      "h": 84
+    },
+    {
+      "id": "legacy",
+      "type": "card",
+      "icon": null,
+      "label": "기존 시스템 연계",
+      "body": "사내 시스템 API · 데이터 동기화",
+      "parent": "data",
+      "x": 20,
+      "y": 290,
+      "w": 260,
+      "h": 84
+    },
+    {
+      "id": "monitor",
+      "type": "card",
+      "icon": "Arch_Amazon-CloudWatch",
+      "label": "모니터링",
+      "body": "지표 · 로그 · 알람",
+      "parent": "ops",
+      "x": 20,
+      "y": 40,
+      "w": 280,
+      "h": 70
+    },
+    {
+      "id": "security",
+      "type": "card",
+      "icon": "Arch_AWS-WAF",
+      "label": "보안 · 접근 제어",
+      "body": "웹 방화벽 · 권한 관리 · 감사",
+      "parent": "ops",
+      "x": 350,
+      "y": 40,
+      "w": 280,
+      "h": 70
+    },
+    {
+      "id": "deploy",
+      "type": "card",
+      "icon": "Arch_AWS-CodePipeline",
+      "label": "배포 자동화",
+      "body": "빌드 · 테스트 · 무중단 배포",
+      "parent": "ops",
+      "x": 680,
+      "y": 40,
+      "w": 280,
+      "h": 70
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "web",
+      "target": "entry",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e2",
+      "source": "partner",
+      "target": "entry",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e3",
+      "source": "admin",
+      "target": "entry",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e4",
+      "source": "entry",
+      "target": "service",
+      "label": "",
+      "line": "solid",
+      "shape": "straight",
+      "arrow": "end"
+    },
+    {
+      "id": "e5",
+      "source": "genai",
+      "target": "service",
+      "label": "",
+      "line": "dashed",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e6",
+      "source": "search",
+      "target": "service",
+      "label": "",
+      "line": "dashed",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e7",
+      "source": "service",
+      "target": "db",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e8",
+      "source": "db",
+      "target": "lake",
+      "label": "데이터 적재",
+      "line": "dashed",
+      "shape": "straight",
+      "arrow": "end"
+    },
+    {
+      "id": "e9",
+      "source": "service",
+      "target": "legacy",
+      "label": "API 연계",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    }
+  ],
+  "annotations": []
+}

@@ -1,0 +1,298 @@
+{
+  "schema": "arch-canvas/graph@1",
+  "title": "3티어 웹",
+  "meta": {
+    "id": "three-tier-web",
+    "section": "패턴",
+    "name": "3티어 웹",
+    "description": "ALB + Auto Scaling EC2 + RDS Multi-AZ"
+  },
+  "groups": [
+    {
+      "id": "region",
+      "kind": "region",
+      "label": "AWS Region",
+      "parent": null,
+      "x": 160,
+      "y": 20,
+      "w": 990,
+      "h": 740
+    },
+    {
+      "id": "vpc",
+      "kind": "vpc",
+      "label": "VPC",
+      "parent": "region",
+      "x": 30,
+      "y": 50,
+      "w": 930,
+      "h": 660
+    },
+    {
+      "id": "az-a",
+      "kind": "az",
+      "label": "Availability Zone A",
+      "parent": "vpc",
+      "x": 30,
+      "y": 120,
+      "w": 420,
+      "h": 510
+    },
+    {
+      "id": "pub-a",
+      "kind": "public-subnet",
+      "label": "Public subnet",
+      "parent": "az-a",
+      "x": 20,
+      "y": 40,
+      "w": 380,
+      "h": 130
+    },
+    {
+      "id": "app-a",
+      "kind": "private-subnet",
+      "label": "Private subnet (App)",
+      "parent": "az-a",
+      "x": 20,
+      "y": 190,
+      "w": 380,
+      "h": 150
+    },
+    {
+      "id": "db-a",
+      "kind": "private-subnet",
+      "label": "Private subnet (DB)",
+      "parent": "az-a",
+      "x": 20,
+      "y": 360,
+      "w": 380,
+      "h": 130
+    },
+    {
+      "id": "az-b",
+      "kind": "az",
+      "label": "Availability Zone B",
+      "parent": "vpc",
+      "x": 480,
+      "y": 120,
+      "w": 420,
+      "h": 510
+    },
+    {
+      "id": "pub-b",
+      "kind": "public-subnet",
+      "label": "Public subnet",
+      "parent": "az-b",
+      "x": 20,
+      "y": 40,
+      "w": 380,
+      "h": 130
+    },
+    {
+      "id": "app-b",
+      "kind": "private-subnet",
+      "label": "Private subnet (App)",
+      "parent": "az-b",
+      "x": 20,
+      "y": 190,
+      "w": 380,
+      "h": 150
+    },
+    {
+      "id": "db-b",
+      "kind": "private-subnet",
+      "label": "Private subnet (DB)",
+      "parent": "az-b",
+      "x": 20,
+      "y": 360,
+      "w": 380,
+      "h": 130
+    },
+    {
+      "id": "asg",
+      "kind": "auto-scaling",
+      "label": "Auto Scaling group",
+      "parent": "vpc",
+      "x": 40,
+      "y": 348,
+      "w": 850,
+      "h": 108
+    }
+  ],
+  "nodes": [
+    {
+      "id": "users",
+      "icon": "Res_Users_Light",
+      "label": "Users",
+      "parent": null,
+      "x": 40,
+      "y": 160
+    },
+    {
+      "id": "igw",
+      "icon": "Res_Amazon-VPC_Internet-Gateway",
+      "label": "Internet Gateway",
+      "parent": "vpc",
+      "x": 441,
+      "y": 30
+    },
+    {
+      "id": "alb",
+      "icon": "Res_Elastic-Load-Balancing_Application-Load-Balancer",
+      "label": "Application Load Balancer",
+      "parent": "vpc",
+      "x": 441,
+      "y": 201
+    },
+    {
+      "id": "nat-a",
+      "icon": "Res_Amazon-VPC_NAT-Gateway",
+      "label": "NAT Gateway",
+      "parent": "pub-a",
+      "x": 60,
+      "y": 45
+    },
+    {
+      "id": "nat-b",
+      "icon": "Res_Amazon-VPC_NAT-Gateway",
+      "label": "NAT Gateway",
+      "parent": "pub-b",
+      "x": 272,
+      "y": 45
+    },
+    {
+      "id": "web-a",
+      "icon": "Res_Amazon-EC2_Instance",
+      "label": "EC2",
+      "parent": "asg",
+      "x": 176,
+      "y": 26
+    },
+    {
+      "id": "web-b",
+      "icon": "Res_Amazon-EC2_Instance",
+      "label": "EC2",
+      "parent": "asg",
+      "x": 626,
+      "y": 26
+    },
+    {
+      "id": "rds-primary",
+      "icon": "Res_Amazon-Aurora_Amazon-RDS-Instance",
+      "label": "RDS Primary",
+      "parent": "db-a",
+      "x": 166,
+      "y": 45
+    },
+    {
+      "id": "rds-standby",
+      "icon": "Res_Amazon-Aurora_Amazon-RDS-Instance",
+      "label": "RDS Standby",
+      "parent": "db-b",
+      "x": 166,
+      "y": 45
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-users-igw",
+      "source": "users",
+      "target": "igw",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e-igw-alb",
+      "source": "igw",
+      "target": "alb",
+      "label": "",
+      "line": "solid",
+      "shape": "straight",
+      "arrow": "end"
+    },
+    {
+      "id": "e-alb-web-a",
+      "source": "alb",
+      "target": "web-a",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e-alb-web-b",
+      "source": "alb",
+      "target": "web-b",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e-web-a-db",
+      "source": "web-a",
+      "target": "rds-primary",
+      "label": "",
+      "line": "solid",
+      "shape": "straight",
+      "arrow": "end"
+    },
+    {
+      "id": "e-web-b-db",
+      "source": "web-b",
+      "target": "rds-primary",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e-db-sync",
+      "source": "rds-primary",
+      "target": "rds-standby",
+      "label": "동기 복제",
+      "line": "dashed",
+      "shape": "straight",
+      "arrow": "end"
+    },
+    {
+      "id": "e-web-a-nat",
+      "source": "web-a",
+      "target": "nat-a",
+      "label": "아웃바운드",
+      "line": "dashed",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e-web-b-nat",
+      "source": "web-b",
+      "target": "nat-b",
+      "label": "",
+      "line": "dashed",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e-nat-a-igw",
+      "source": "nat-a",
+      "target": "igw",
+      "label": "",
+      "line": "dashed",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e-nat-b-igw",
+      "source": "nat-b",
+      "target": "igw",
+      "label": "",
+      "line": "dashed",
+      "shape": "elbow",
+      "arrow": "end"
+    }
+  ],
+  "annotations": []
+}
