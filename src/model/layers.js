@@ -3,83 +3,86 @@
 //  - 아이콘·카드·글상자는 항상 상자보다 위. 아이콘끼리는 nodes 배열 순서(뒤가 앞).
 //  - 상자 안에 든 것은 상자를 따라 움직인다(부모-자식). 상자만 옮기려면 Alt+끌기.
 import { sortGroups } from './schema.js';
-import { freeSlot } from './geometry.js';
+import { isOverlay } from './contain.js';
 
 const isGroup = (g, id) => g.groups.some((x) => x.id === id);
 
-/** how: 'front' | 'forward' | 'backward' | 'back'. 같은 부모 안에서만 순서를 바꾼다. */
+/** how: 'front' | 'forward' | 'backward' | 'back'. 화면 전체에서 하나의 순서. 상자는 상자끼리(담는/겹치는 띠 안에서), 아이콘은 아이콘끼리. */
 export function reorder(graph, ids, how) {
   const g = structuredClone(graph);
   const want = new Set(ids);
-  for (const key of ['groups', 'nodes']) {
-    const arr = g[key];
-    // 상자는 같은 부모 안 형제끼리, 아이콘은 부모와 상관없이 전체에서 (아이콘은 서로 다른 상자에 있어도 겹칠 수 있으므로)
-    const scopeOf = (x) => (key === 'nodes' ? '*' : (x.parent ?? null));
-    const parents = [...new Set(arr.filter((x) => want.has(x.id)).map(scopeOf))];
-    for (const p of parents) {
-      // 형제 목록(배열 안 위치 포함)
-      const sib = arr.map((x, i) => ({ x, i })).filter((o) => scopeOf(o.x) === p);
-      const order = sib.map((o) => o.x);
-      const picked = order.filter((x) => want.has(x.id));
-      let rest = order.filter((x) => !want.has(x.id));
-      let next;
-      if (how === 'front') next = [...rest, ...picked];
-      else if (how === 'back') next = [...picked, ...rest];
-      else {
-        next = [...order];
-        const step = how === 'forward' ? 1 : -1;
-        const idxs = next.map((x, i) => (want.has(x.id) ? i : -1)).filter((i) => i >= 0);
-        if (step > 0) idxs.reverse();
-        for (const i of idxs) {
-          const j = i + step;
-          if (j < 0 || j >= next.length || want.has(next[j].id)) continue;
-          [next[i], next[j]] = [next[j], next[i]];
-        }
-      }
-      // 형제 자리(배열 인덱스)에 새 순서로 다시 넣는다
-      sib.forEach((o, k) => { arr[o.i] = next[k]; });
-    }
-  }
-  g.groups = sortGroups(g.groups);
+  g.nodes = reorderList(g.nodes, want, how, (x) => (x.type === 'badge' ? 1 : 0), () => false);
+  const byId = new Map(g.groups.map((x) => [x.id, x]));
+  const under = (x, root) => { for (let p = x.parent; p; p = byId.get(p)?.parent) if (p === root) return true; return false; };
+  g.groups = sortGroups(reorderList(g.groups, want, how, (x) => (isOverlay(x) ? 1 : 0), under));
   return g;
 }
 
-/** 레이어 목록(위가 앞). 상자 안의 것은 children 으로. */
-export function layerTree(g) {
-  const kids = (pid) => {
-    const nodes = g.nodes.filter((n) => (n.parent ?? null) === pid).map((n) => ({ id: n.id, kind: 'node', item: n, children: [] }));
-    const groups = g.groups.filter((x) => (x.parent ?? null) === pid).map((x) => ({ id: x.id, kind: 'group', item: x, children: kids(x.id) }));
-    // 앞에 그려지는 것이 위로: 아이콘(뒤가 앞) → 상자(뒤가 앞)
-    return [...nodes.reverse(), ...groups.reverse()];
+// arr: 그리는 순서(뒤가 앞). 고른 것은 자기 안의 것(under)과 함께 옮긴다. 같은 띠(band)의 다른 것만 건너뛴다.
+function reorderList(arr, want, how, band, under) {
+  const roots = arr.filter((x) => want.has(x.id) && !arr.some((y) => want.has(y.id) && y !== x && under(x, y.id)));
+  if (!roots.length) return arr;
+  let list = [...arr];
+  const moveOne = (root, how) => {
+    const block = list.filter((x) => x === root || under(x, root.id));
+    const at = list.indexOf(root);
+    const rest = list.filter((x) => !block.includes(x));
+    let k = rest.filter((x) => list.indexOf(x) < at).length;   // rest 안에서 root 가 있던 자리
+    const same = (x) => band(x) === band(root) && !roots.some((r) => r === x || under(x, r.id));
+    if (how === 'front') k = rest.length;
+    else if (how === 'back') k = 0;
+    else if (how === 'forward') {
+      let j = k; while (j < rest.length && !same(rest[j])) j++;
+      if (j >= rest.length) return;
+      const step = rest[j]; j++;
+      while (j < rest.length && under(rest[j], step.id)) j++;   // 그 상자 안의 것도 넘는다
+      k = j;
+    } else {
+      let j = k - 1; while (j >= 0 && !same(rest[j])) j--;
+      if (j < 0) return;
+      k = j;
+    }
+    list = [...rest.slice(0, k), ...block, ...rest.slice(k)];
   };
-  return kids(null);
+  // 앞으로 보낼 때는 앞쪽 것부터, 뒤로는 뒤쪽 것부터 옮겨야 서로 순서가 유지된다
+  const order = [...roots].sort((a, b) => arr.indexOf(a) - arr.indexOf(b));
+  if (how === 'front' || how === 'forward') order.reverse();
+  if (how === 'front') order.reverse();   // 맨 앞: 원래 순서대로 끝에 붙인다
+  if (how === 'back') order.reverse();    // 맨 뒤: 뒤쪽 것부터 0 에 넣는다
+  for (const r of order) moveOne(r, how);
+  return list;
 }
 
-/** 레이어 패널에서 끌어 놓기: target 이 상자면 그 안으로, 아니면 target 바로 앞(위)에 같은 부모로. 화면 위치는 유지. */
-export function moveInLayers(graph, id, targetId, rects) {
+/** 레이어 목록: 실제 그리는 순서 그대로 한 줄 목록(위가 앞). 번호 → 아이콘·글 → 겹치는 상자 → 담는 상자 */
+export function layerList(g) {
+  const row = (x, kind) => ({ id: x.id, kind, item: x });
+  const nodes = [...g.nodes].reverse();
+  const groups = [...g.groups].reverse();
+  return [
+    ...nodes.filter((n) => n.type === 'badge').map((n) => row(n, 'node')),
+    ...nodes.filter((n) => n.type !== 'badge').map((n) => row(n, 'node')),
+    ...groups.filter((x) => isOverlay(x)).map((x) => row(x, 'group')),
+    ...groups.filter((x) => !isOverlay(x)).map((x) => row(x, 'group')),
+  ];
+}
+
+/** 레이어 목록에서 끌어 놓기: id 를 target 바로 앞(위)에. 같은 띠끼리만, 아니면 그대로(같은 객체) 돌려준다. */
+export function placeFront(graph, id, targetId) {
+  const isG = (x) => graph.groups.some((y) => y.id === x);
+  const band = (x) => (isG(x) ? (isOverlay(graph.groups.find((y) => y.id === x)) ? 'o' : 'c') : (graph.nodes.find((y) => y.id === x)?.type === 'badge' ? 'b' : 'n'));
+  if (id === targetId || band(id) !== band(targetId)) return graph;
   const g = structuredClone(graph);
-  const item = g.groups.find((x) => x.id === id) || g.nodes.find((x) => x.id === id);
-  const target = g.groups.find((x) => x.id === targetId) || g.nodes.find((x) => x.id === targetId);
-  if (!item || !target || id === targetId) return g;
-  // 자기 안(자기 자신, 또는 자기 안에 든 것의 자리)으로는 못 넣는다
-  const parentOf = (pid) => g.groups.find((x) => x.id === pid)?.parent;
-  for (let p = isGroup(g, targetId) ? targetId : target.parent; p; p = parentOf(p)) if (p === id) return g;
-  const newParent = isGroup(g, targetId) ? targetId : (target.parent ?? null);
-  const abs = rects.get(id), pr = newParent ? rects.get(newParent) : { x: 0, y: 0 };
-  item.parent = newParent;
-  item.x = Math.round(abs.x - pr.x); item.y = Math.round(abs.y - pr.y);
-  // 화면에서 그 상자 밖에 있으면 상자 안 빈자리로 옮긴다 (목록과 화면이 어긋나지 않게)
-  if (newParent) {
-    const P = rects.get(newParent), w = abs.w || 48, h = abs.h || 48;
-    const inside = abs.x >= P.x && abs.y >= P.y && abs.x + w <= P.x + P.w && abs.y + h <= P.y + P.h;
-    if (!inside) { const s = freeSlot(g, newParent); item.x = s.x; item.y = s.y; }
-  }
-  // 순서: 같은 종류 배열에서 target 뒤(=앞에 그려짐)로
-  const key = isGroup(g, id) ? 'groups' : 'nodes';
-  const arr = g[key];
-  const from = arr.indexOf(item); arr.splice(from, 1);
-  const ti = arr.findIndex((x) => x.id === targetId);
-  if (ti >= 0 && !isGroup(g, targetId)) arr.splice(ti + 1, 0, item); else arr.push(item);
-  g.groups = sortGroups(g.groups);
+  const key = isG(id) ? 'groups' : 'nodes';
+  let arr = g[key];
+  const byId = new Map(g.groups.map((x) => [x.id, x]));
+  const under = (x, root) => { if (key !== 'groups') return false; for (let p = x.parent; p; p = byId.get(p)?.parent) if (p === root) return true; return false; };
+  const item = arr.find((x) => x.id === id), target = arr.find((x) => x.id === targetId);
+  if (under(target, id)) return graph;   // 자기 안의 것 앞으로는 못 간다(이미 그 위)
+  const block = arr.filter((x) => x === item || under(x, id));
+  arr = arr.filter((x) => !block.includes(x));
+  let k = arr.indexOf(target) + 1;
+  while (k < arr.length && under(arr[k], targetId)) k++;
+  arr.splice(k, 0, ...block);
+  g[key] = key === 'groups' ? sortGroups(arr) : arr;
   return g;
 }

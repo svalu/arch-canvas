@@ -782,7 +782,7 @@ input[type=checkbox] { transition: transform .1s; } input[type=checkbox]:active 
 /* ----- 레이어 패널 ----- */
 .layers .lyr-order { display: flex; gap: 4px; flex-wrap: wrap; }
 .lyr-tree { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; padding: 4px 0; max-height: 58vh; overflow: auto; }
-.lyr-row { display: flex; align-items: center; gap: 6px; height: 28px; padding-right: 6px; cursor: pointer; font-size: 12.5px; border-top: 2px solid transparent; user-select: none; }
+.lyr-row { display: flex; flex: none; align-items: center; gap: 6px; min-height: 28px; padding: 3px 6px 3px 8px; cursor: pointer; font-size: 12.5px; border-top: 2px solid transparent; user-select: none; }
 .lyr-row:hover { background: #f3f6fa; }
 .lyr-row.on { background: #e3ecf7; }
 .lyr-row.drop-in { background: #e3f6ee; outline: 1.5px dashed #2e9e5b; outline-offset: -2px; }
@@ -792,10 +792,13 @@ input[type=checkbox] { transition: transform .1s; } input[type=checkbox]:active 
 .lyr-box { width: 14px; height: 11px; border: 1.5px solid #7D8998; border-radius: 2px; flex: none; }
 .lyr-box.txt { border-color: var(--muted); font-size: 9px; line-height: 8px; text-align: center; font-weight: 700; color: var(--muted); }
 .lyr-ic { width: 16px; height: 16px; flex: none; }
-.lyr-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lyr-text { flex: 1; min-width: 0; line-height: 1.3; overflow-wrap: anywhere; }
+.lyr-name { }
+.lyr-sub { display: block; color: var(--muted); font-size: 11px; }
 .lyr-count { font-size: 10.5px; color: var(--muted); background: #eef0f3; border-radius: 999px; padding: 0 6px; font-variant-numeric: tabular-nums; }
 .lyr-lock { width: 22px; height: 22px; padding: 0; border: 0; background: transparent; font-size: 11px; opacity: 0; flex: none; }
 .lyr-row:hover .lyr-lock, .lyr-lock.on { opacity: 1; }
+.lyr-lock:not(.on) { opacity: .35; }
 .app.theme-dark .lyr-tree { border-color: #1f3a3a; }
 .app.theme-dark .lyr-row:hover { background: #1c3034; } .app.theme-dark .lyr-row.on { background: #163a38; }
 .app.theme-dark .lyr-row.drop-in { background: #163a2a; }
@@ -844,3 +847,15 @@ details > summary { list-style: none; } details > summary::-webkit-details-marke
 
 .lyr-tag { font-size: 10px; color: #b45309; border: 1px solid #f0c48a; border-radius: 4px; padding: 0 4px; line-height: 14px; flex: none; }
 .app.theme-dark .lyr-tag { color: #f5b35c; border-color: #6b4a1a; }
+
+/* ----- 3단계: 레이어 목록 · 묶음 · 잠금 ----- */
+.lyr-band { font-size: 10.5px; color: var(--muted); padding: 6px 8px 2px; letter-spacing: .02em; }
+.lyr-band:not(:first-child) { border-top: 1px solid var(--line); margin-top: 4px; }
+.layers h3 { display: flex; align-items: center; justify-content: space-between; }
+.lyr-close { font-weight: 400; }
+.row-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+/* 잠금: 캔버스에 자물쇠 */
+.lock-mark { position: absolute; top: -9px; right: -9px; width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 1px solid #c9d1db; font-size: 10px; display: grid; place-items: center; line-height: 1; z-index: 2; pointer-events: auto; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.react-flow__node-awsGroup .lock-mark { top: 6px; right: 6px; }
+.app.theme-dark .lock-mark { background: #12262a; border-color: #2c4a4a; }
+.react-flow__node.is-locked { cursor: grab; }   /* 잠근 것(끌 수 없음)을 끌면 화면이 움직인다 */

@@ -57,8 +57,16 @@ export function insertSubgraph(g, piece, { at = { x: 0, y: 0 }, parent } = {}) {
     if (rootSet.has(old)) { x.parent = target || null; x.x = Math.round(at.x - po.x + x.x); x.y = Math.round(at.y - po.y + x.y); }
     else x.parent = map.get(x.parent) || null;
   }
+  renewSets([...groups, ...nodes]);
   const edges = piece.edges.map((e) => ({ ...e, id: uid('e', taken), source: map.get(e.source), target: map.get(e.target) })).filter((e) => e.source && e.target);
   edges.forEach((e) => taken.add(e.id));
   g.groups.push(...groups); g.nodes.push(...nodes); g.edges.push(...edges);
   return piece.roots.map((r) => map.get(r));
 }
+
+/** 복사본의 묶음(Ctrl+G)은 원본 묶음과 섞이지 않게 새 묶음 id 로 바꾼다 */
+export function renewSets(items) {
+  const m = new Map();
+  for (const x of items) if (x.set) { if (!m.has(x.set)) m.set(x.set, newSetId()); x.set = m.get(x.set); }
+}
+export const newSetId = () => 'set-' + Math.random().toString(36).slice(2, 9);

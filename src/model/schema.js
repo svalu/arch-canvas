@@ -99,6 +99,7 @@ export function normalizeGraph(input) {
       kind: typeof x.kind === 'string' && x.kind ? x.kind : 'generic',
       ...(x.overlay === true ? { overlay: true } : x.overlay === false ? { overlay: false } : {}),
       ...(x.locked ? { locked: true } : {}),
+      ...(setOf(x) ? { set: setOf(x) } : {}),
       label: toText(x.label),
       parent: p != null && groupIds.has(p) && p !== id ? p : null,
       x: num(x.x, p != null ? 40 : 0),
@@ -118,6 +119,7 @@ export function normalizeGraph(input) {
     return {
       id,
       ...(x.locked ? { locked: true } : {}),
+      ...(setOf(x) ? { set: setOf(x) } : {}),
       ...(x.type === 'card' ? { type: 'card', body: toText(x.body), w: Math.max(120, num(x.w, CARD_DEFAULT.w)), h: Math.max(48, num(x.h, CARD_DEFAULT.h)), ...(hex(x.accent) ? { accent: hex(x.accent) } : {}) } : {}),
       ...(x.type === 'text' ? { type: 'text', w: Math.max(40, num(x.w, TEXT_DEFAULT.w)), h: Math.max(20, num(x.h, TEXT_DEFAULT.h)), size: TEXT_SIZES[x.size] ? x.size : 'md', bold: !!x.bold, ...(hex(x.accent) ? { accent: hex(x.accent) } : {}) } : {}),
       ...(x.type === 'badge' ? { type: 'badge', w: Math.min(64, Math.max(20, num(x.w, BADGE_SIZE))), h: Math.min(64, Math.max(20, num(x.w, BADGE_SIZE))), ...(hex(x.accent) ? { accent: hex(x.accent) } : {}) } : {}),
@@ -128,6 +130,10 @@ export function normalizeGraph(input) {
       y: num(x.y, p != null ? 40 : 0),
     };
   });
+  // 묶음(Ctrl+G): 둘 이상 남은 묶음만 유지
+  const setCount = new Map();
+  for (const x of [...out.groups, ...out.nodes]) if (x.set) setCount.set(x.set, (setCount.get(x.set) || 0) + 1);
+  for (const x of [...out.groups, ...out.nodes]) if (x.set && setCount.get(x.set) < 2) delete x.set;
   const ids = new Set([...out.groups.map((x) => x.id), ...out.nodes.map((x) => x.id)]);
   out.edges = [];
   for (const e of raw.edges) {
@@ -158,6 +164,9 @@ export function normalizeGraph(input) {
   return out;
 }
 
+// 묶음 id: 짧은 문자열만
+const setOf = (x) => (typeof x.set === 'string' && /^[\w-]{1,40}$/.test(x.set) ? x.set : null);
+
 function breakCycles(groups) {
   const byId = new Map(groups.map((x) => [x.id, x]));
   for (const g of groups) {
@@ -172,39 +181,36 @@ function breakCycles(groups) {
 }
 
 /**
- * 그룹 순서 = 그리는 순서(z). 부모 바로 뒤에 자식들이 오는 전위 순회로 정렬한다.
- * 그래서 형제 그룹끼리는 뒤에 있는 쪽이 위에 그려진다(예: AZ 두 개 위에 걸친 Auto Scaling group).
+ * 그룹 순서 = 그리는 순서(z). 배열 순서를 최대한 그대로 두되, 부모가 자식보다 앞(뒤에 그려짐)에 오게만 고친다.
+ * 자식이 부모보다 먼저 나오면 부모 바로 다음으로 미룬다. 그래서 "맨 앞으로"는 상자 전체에서 맨 앞,
+ * "맨 뒤로"는 자기 부모 바로 위(부모 채움에 가려지지 않는 가장 뒤)가 된다.
  */
 export function sortGroups(groups) {
   const ids = new Set(groups.map((g) => g.id));
-  const kids = new Map();
+  for (const g of groups) if (g.parent && !ids.has(g.parent)) g.parent = null;   // 없는 부모 -> 최상위
+  const byId = new Map(groups.map((g) => [g.id, g]));
+  // 순환은 끊는다(최상위로)
   for (const g of groups) {
-    if (g.parent && !ids.has(g.parent)) g.parent = null;   // 없는 부모 -> 최상위
-    const k = g.parent || '';
-    (kids.get(k) || kids.set(k, []).get(k)).push(g);
+    const path = new Set([g.id]);
+    for (let p = g.parent; p; p = byId.get(p)?.parent) { if (path.has(p)) { g.parent = null; break; } path.add(p); }
   }
-  // 깊이 제한 없는 반복 전위 순회
-  const out = [], seen = new Set();
-  const visit = (root) => {
-    const stack = [root];
+  const out = [], done = new Set(), waiting = new Map();
+  const emit = (g) => {
+    const stack = [g];
     while (stack.length) {
-      const g = stack.pop();
-      if (seen.has(g)) continue;
-      seen.add(g); out.push(g);
-      const ks = kids.get(g.id) || [];
-      for (let i = ks.length - 1; i >= 0; i--) stack.push(ks[i]);
+      const x = stack.pop();
+      if (done.has(x.id)) continue;
+      done.add(x.id); out.push(x);
+      const w = waiting.get(x.id) || [];
+      for (let i = w.length - 1; i >= 0; i--) stack.push(w[i]);
     }
   };
-  for (const g of kids.get('') || []) visit(g);
-  // 순환 등으로 못 놓인 그룹은 버리지 않고 최상위로 올린다
-  const byId = new Map(groups.map((g) => [g.id, g]));
   for (const g of groups) {
-    if (seen.has(g)) continue;
-    let r = g; const path = new Set();
-    while (r.parent && byId.has(r.parent) && !path.has(r)) { path.add(r); r = byId.get(r.parent); }
-    if (seen.has(r)) r = g;   // (id 중복 같은 이상한 경우) 자기 자신을 올린다
-    r.parent = null; visit(r);
+    if (done.has(g.id)) continue;
+    if (!g.parent || done.has(g.parent)) emit(g);
+    else (waiting.get(g.parent) || waiting.set(g.parent, []).get(g.parent)).push(g);
   }
+  for (const g of groups) if (!done.has(g.id)) { g.parent = null; emit(g); }   // (id 중복 같은 이상한 경우)
   return out;
 }
 

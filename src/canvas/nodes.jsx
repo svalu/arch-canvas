@@ -13,6 +13,8 @@ function Handles() {
   return SIDES.map(([k, pos]) => <Handle key={k} id={k} type="source" position={pos} className="hdl" />);
 }
 
+const LockMark = ({ on }) => (on ? <span className="lock-mark" title="잠김 · 오른쪽 클릭 [잠금 해제] 또는 Ctrl+L">🔒</span> : null);
+
 const PIN_COLOR = { error: '#DD344C', warn: '#ED7100', info: '#2E73B8' };
 
 // 핀에 마우스를 올리면 바로 뜨는 툴팁. 본체는 App 의 <PinTip/> 이 window 이벤트로 그린다(노드 overflow 에 안 잘리게).
@@ -115,6 +117,7 @@ export const AwsGroup = memo(function AwsGroup({ data, selected }) {
         </div>
         <Pins pins={data.pins} />
         <Handles />
+        <LockMark on={data.locked} />
       </div>
     </>
   );
@@ -133,6 +136,7 @@ export const AwsIcon = memo(function AwsIcon({ data, selected }) {
       )}
       <Pins pins={data.pins} />
       <Handles />
+        <LockMark on={data.locked} />
     </div>
   );
 });
@@ -152,6 +156,7 @@ export const AwsCard = memo(function AwsCard({ data, selected }) {
         </div>
         <Pins pins={data.pins} />
         <Handles />
+        <LockMark on={data.locked} />
       </div>
     </>
   );
@@ -166,6 +171,7 @@ export const AwsText = memo(function AwsText({ data, selected }) {
       <div className={'textbox' + (selected ? ' sel' : '') + (data.label ? '' : ' empty')} style={{ fontSize: `calc(${TEXT_PX[data.size] || 13}px * var(--label-scale, 1))`, fontWeight: data.bold ? 700 : 400, ...(data.accent ? { color: data.accent } : {}) }}>
         {data.label || '텍스트'}
         <Handles />
+        <LockMark on={data.locked} />
       </div>
     </>
   );
@@ -177,6 +183,7 @@ export const AwsBadge = memo(function AwsBadge({ data, selected }) {
     <div className={'badge-node' + (selected ? ' sel' : '')} style={data.accent ? { background: data.accent } : undefined}>
       {data.label || '1'}
       <Handles />
+        <LockMark on={data.locked} />
     </div>
   );
 });
