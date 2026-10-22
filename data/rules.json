@@ -114,6 +114,18 @@
       "explain": "S3, DynamoDB, CloudFront, Route 53, SQS/SNS, Cognito, API Gateway는 VPC 밖에서 동작하는 리전 서비스입니다. VPC/서브넷 밖(Region 안)에 두고, 필요하면 VPC 엔드포인트로 연결을 표현합니다. VPC에 연결한 Lambda, DAX, Route 53 Resolver 엔드포인트, S3 VPC 액세스 포인트, S3 on Outposts는 VPC 안 리소스이므로 서브넷에 두어도 됩니다."
     },
     {
+      "id": "managed-service-in-vpc",
+      "type": "placement",
+      "severity": "warn",
+      "subject": {
+        "icon": "Amazon-Connect(?!-Customer)|Amazon-Connect-Customer_Template"
+      },
+      "inside": "^vpc$",
+      "message": "Amazon Connect 가 VPC 안에 있습니다",
+      "explain": "Amazon Connect 와 Contact Lens 는 AWS 가 운영하는 관리형 서비스라 고객 VPC 안에 들어가지 않습니다. VPC 밖(Region 안)에 두십시오. VPC 는 컨택 플로우에서 호출하는 Lambda 가 사내 시스템에 붙을 때만 그 Lambda 에 필요합니다.",
+      "fix": "Connect 아이콘을 VPC 밖으로 옮기고, 사내 연동이 있으면 Lambda 만 VPC 안에 둡니다."
+    },
+    {
       "id": "users-inside-vpc",
       "type": "placement",
       "severity": "warn",

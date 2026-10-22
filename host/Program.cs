@@ -886,16 +886,40 @@ static class Updater
         string newExe = Path.Combine(UpdateDir, "Arch Canvas.new.exe");
         try { File.Delete(zipPath); } catch { } try { File.Delete(newExe); } catch { }
 
-        // 받기: 토큰이 있으면 API 자산 주소(비공개 저장소), 아니면 공개 다운로드 주소
+        // 받기: 토큰이 있으면 API 자산 주소(비공개 저장소), 아니면 공개 다운로드 주소.
+        // GitHub 은 실제 파일을 다른 호스트로 302 돌려보내는데, 거기엔 Authorization 을 보내면 안 되므로 redirect 는 직접 따라간다.
         bool useApi = Token != null && !string.IsNullOrEmpty(apiUrl);
-        var req = Make(useApi ? apiUrl : url, useApi ? "application/octet-stream" : "*/*");
+        string log = Path.Combine(UpdateDir, "update.log");
+        Action<string> L = (m) => { try { File.AppendAllText(log, DateTime.Now.ToString("HH:mm:ss ") + m + Environment.NewLine); } catch { } };
+        L("start " + (useApi ? apiUrl : url));
         try
         {
-            using (var res = (HttpWebResponse)req.GetResponse())
-            using (var rs = res.GetResponseStream())
-            using (var fs = File.Create(zipPath)) rs.CopyTo(fs);
+            string cur = useApi ? apiUrl : url; bool auth = useApi;
+            for (int hop = 0; hop < 6; hop++)
+            {
+                var req = Make(cur, useApi ? "application/octet-stream" : "*/*");
+                req.AllowAutoRedirect = false;
+                if (!auth) req.Headers.Remove("Authorization");
+                using (var res = (HttpWebResponse)req.GetResponse())
+                {
+                    int code = (int)res.StatusCode;
+                    L("hop " + hop + " " + code + " " + cur);
+                    if (code >= 300 && code < 400)
+                    {
+                        string loc = res.Headers["Location"];
+                        if (string.IsNullOrEmpty(loc)) throw new Exception("이동 주소가 없습니다");
+                        // 서명이 붙은 주소라 글자를 다시 인코딩하면 안 된다. 받은 그대로 쓴다
+                        cur = Uri.IsWellFormedUriString(loc, UriKind.Absolute) ? loc : new Uri(new Uri(cur), loc).AbsoluteUri; auth = false; continue;
+                    }
+                    using (var rs = res.GetResponseStream())
+                    using (var fs = File.Create(zipPath)) rs.CopyTo(fs);
+                    break;
+                }
+            }
         }
-        catch (WebException ex) { throw new Exception("업데이트 파일을 내려받지 못했습니다: " + ex.Message); }
+        catch (WebException ex) { L("fail " + ex.Message); throw new Exception("업데이트 파일을 내려받지 못했습니다: " + ex.Message); }
+        if (!File.Exists(zipPath)) throw new Exception("업데이트 파일을 내려받지 못했습니다");
+        L("downloaded " + new FileInfo(zipPath).Length);
 
         // zip 안의 Arch Canvas.exe 꺼내기
         bool found = false;
@@ -936,6 +960,7 @@ static class Updater
         sb.AppendLine(":end");
         sb.AppendLine("del \"%~f0\" >nul 2>&1");
         File.WriteAllText(cmd, sb.ToString(), new UTF8Encoding(false));
+        L("launch updater");
         var psi = new ProcessStartInfo("cmd.exe", "/d /c \"" + cmd + "\"") { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = UpdateDir };
         Process.Start(psi);
         if (exit != null) exit();

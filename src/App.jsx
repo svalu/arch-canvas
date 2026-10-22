@@ -177,37 +177,6 @@ function Editor() {
   const [histVer, setHistVer] = useState(0);
   const [toast, setToastState] = useState(null);
   const toastEx = useExit(toast, 220); const toastV = toast || toastEx.v; const toastOut = !toast && toastEx.closing;   // 문자열 또는 { kind:'block'|'warn', title, explain }
-  // ----- 업데이트 (EXE 전용): 하루 한 번 자동 확인, 도움말에서 수동 확인 -----
-  const [upd, setUpd] = useState({ info: null, open: false, busy: false });
-  const checkUpdate = useCallback(async (manual = false) => {
-    if (!window.desktop?.call) { if (manual) toastMsg('업데이트 확인은 EXE 에서만 할 수 있습니다.'); return null; }
-    setUpd((u) => ({ ...u, busy: true }));
-    try {
-      const r = await window.desktop.call('update.check', {});
-      try { localStorage.setItem('arch-canvas:upd-check', String(Date.now())); } catch { /* */ }
-      setUpd((u) => ({ ...u, info: r, busy: false, open: manual && r?.newer ? true : u.open }));
-      if (manual && !r?.newer) toastMsg(`최신 버전입니다 (${r?.current || APP_VERSION}).`);
-      return r;
-    } catch (e) {
-      setUpd((u) => ({ ...u, busy: false }));
-      if (manual) toastMsg('업데이트를 확인하지 못했습니다: ' + (e.message || e), 6000);
-      return null;
-    }
-  }, [toastMsg]);
-  const applyUpdate = useCallback(async () => {
-    const a = upd.info?.asset; if (!a) return;
-    setUpd((u) => ({ ...u, busy: true }));
-    toastMsg('업데이트를 내려받습니다. 끝나면 자동으로 다시 시작합니다.', 20000);
-    try { await window.desktop.call('update.apply', { url: a.url, apiUrl: a.apiUrl, name: a.name, version: upd.info.version }); }
-    catch (e) { setUpd((u) => ({ ...u, busy: false })); toastMsg({ kind: 'block', title: '업데이트하지 못했습니다', explain: String(e.message || e) }, 12000); }
-  }, [upd.info, toastMsg]);
-  useEffect(() => {
-    if (!window.desktop?.call) return;
-    let last = 0; try { last = +localStorage.getItem('arch-canvas:upd-check') || 0; } catch { /* */ }
-    if (Date.now() - last < 24 * 3600 * 1000) return;
-    const t = setTimeout(() => checkUpdate(false), 4000);
-    return () => clearTimeout(t);
-  }, [checkUpdate]);
   const [userTemplates, setUserTemplates] = useState([]);
   const [panel, setPanel] = useState(null); // 'patch' | 'help' | 'rules' | null
   // 내보내기 설정 (배율·배경·여백·제목·범례·16:9). PNG 복사(Ctrl+C)도 이 설정을 쓴다
@@ -229,6 +198,39 @@ function Editor() {
     toastMsg.t = setTimeout(() => setToastState(null), ms);
   }, []);
 
+  // ----- 업데이트 (EXE 전용): 하루 한 번 자동 확인, 도움말에서 수동 확인 -----
+  const [upd, setUpd] = useState({ info: null, open: false, busy: false });
+  const updRef = useRef(upd); updRef.current = upd;
+  const checkUpdate = useCallback(async (manual = false) => {
+    if (!window.desktop?.call) { if (manual) toastMsg('업데이트 확인은 EXE 에서만 할 수 있습니다.'); return null; }
+    setUpd((u) => ({ ...u, busy: true }));
+    try {
+      const r = await window.desktop.call('update.check', {});
+      try { localStorage.setItem('arch-canvas:upd-check', String(Date.now())); } catch { /* */ }
+      setUpd((u) => ({ ...u, info: r, busy: false, open: manual && r?.newer ? true : u.open }));
+      if (manual && !r?.newer) toastMsg(`최신 버전입니다 (${r?.current || APP_VERSION}).`);
+      return r;
+    } catch (e) {
+      setUpd((u) => ({ ...u, busy: false }));
+      if (manual) toastMsg('업데이트를 확인하지 못했습니다: ' + (e.message || e), 6000);
+      return null;
+    }
+  }, [toastMsg]);
+  const applyUpdate = useCallback(async () => {
+    const info = updRef.current.info; const a = info?.asset;
+    if (!a) throw new Error('먼저 업데이트를 확인하십시오');
+    setUpd((u) => ({ ...u, busy: true }));
+    toastMsg('업데이트를 내려받습니다. 끝나면 자동으로 다시 시작합니다.', 20000);
+    try { return await window.desktop.call('update.apply', { url: a.url, apiUrl: a.apiUrl, name: a.name, version: info.version }); }
+    catch (e) { setUpd((u) => ({ ...u, busy: false })); toastMsg({ kind: 'block', title: '업데이트하지 못했습니다', explain: String(e.message || e) }, 12000); throw e; }
+  }, [toastMsg]);
+  useEffect(() => {
+    if (!window.desktop?.call) return;
+    let last = 0; try { last = +localStorage.getItem('arch-canvas:upd-check') || 0; } catch { /* */ }
+    if (Date.now() - last < 24 * 3600 * 1000) return;
+    const t = setTimeout(() => checkUpdate(false), 4000);
+    return () => clearTimeout(t);
+  }, [checkUpdate]);
   // 규칙 위반을 설명과 함께 보여준다. 막은 건 빨강, 경고는 주황. 토스트에서 바로 AI에게 물어볼 수 있다.
   const showRule = useCallback((v, blocked, more = 0) => {
     toastMsg({ kind: blocked ? 'block' : 'warn', title: (blocked ? '차단: ' : '경고: ') + v.message + (more > 1 ? ` (외 ${more - 1}건)` : ''), explain: v.explain, ask: askAboutText(v) }, blocked ? 9000 : 8000);
@@ -1304,7 +1306,7 @@ function Editor() {
       patch: (ops) => { const r = applyPatch(currentGraph(), ops, catalog.check); const ok = tryCommit(r.graph); return { ...r, blocked: !ok }; },
       lint: () => lintRef.current,
       load: (graph) => commit(normalizeGraph(graph), undefined, { fit: true }),
-      update: { check: () => checkUpdate(false), apply: applyUpdate, state: () => upd },
+      update: { check: () => checkUpdate(false), apply: applyUpdate, state: () => updRef.current },
       select: (ids) => { const set = new Set(ids); rf.setNodes((ns) => ns.map((n) => ({ ...n, selected: set.has(n.id) }))); rf.setEdges((es) => es.map((x) => ({ ...x, selected: set.has(x.id) }))); },
       ai: { review: () => runAi('review'), draw: (req) => runAi('draw', req), ask: (q) => runAi('ask', q), state: () => ai, settings: () => aiSettings, setSettings: setAiSettings, applyOps: applyAiOps, setContext: updateContext },
       guide: {
@@ -1318,7 +1320,7 @@ function Editor() {
       copySelected: () => copyPpt(true),
     };
     return () => { delete window.__arch; };
-  }, [catalog, commit, tryCommit, currentGraph, copyPpt, renderSvg, runAi, ai, aiSettings, setAiSettings, applyAiOps, updateContext, guide, setGuide, startGuide, loadTemplateById, applyOpsRaw]);
+  }, [catalog, commit, tryCommit, currentGraph, copyPpt, renderSvg, runAi, ai, aiSettings, setAiSettings, applyAiOps, updateContext, guide, setGuide, startGuide, loadTemplateById, applyOpsRaw, checkUpdate, applyUpdate]);
 
   const selectedNodes = useMemo(() => nodes.filter((n) => n.selected), [nodes]);
   const selectedEdges = useMemo(() => edges.filter((e) => e.selected), [edges]);

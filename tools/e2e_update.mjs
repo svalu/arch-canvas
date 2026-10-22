@@ -20,12 +20,21 @@ async function connect(timeoutMs = 60000) {
     try { page = (await (await fetch(`http://127.0.0.1:${PORT}/json`)).json()).find((p) => p.type === 'page' && p.url.includes('archcanvas.local')); } catch { /* 아직 */ }
   }
   if (!page) throw new Error('WebView2 페이지를 찾지 못했습니다');
-  const ws = new WebSocket(page.webSocketDebuggerUrl);
-  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
+  // 막 끝난 옛 프로세스의 페이지가 아직 목록에 남아 있을 수 있어서, 연결이 바로 닫히면 다시 찾는다
+  let ws = null;
+  for (let attempt = 0; attempt < 10 && !ws; attempt++) {
+    const w = new WebSocket(page.webSocketDebuggerUrl);
+    const ok = await new Promise((res) => { w.onopen = () => res(true); w.onerror = () => res(false); w.onclose = () => res(false); setTimeout(() => res(false), 5000); });
+    if (ok) ws = w;
+    else { await sleep(1000); try { page = (await (await fetch(`http://127.0.0.1:${PORT}/json`)).json()).find((p) => p.type === 'page' && p.url.includes('archcanvas.local')) || page; } catch { /* */ } }
+  }
+  if (!ws) throw new Error('디버깅 소켓에 연결하지 못했습니다');
   let seq = 0; const pending = new Map();
   ws.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id && pending.has(d.id)) { pending.get(d.id)(d); pending.delete(d.id); } };
   const evaluate = async (expression) => { const id = ++seq; const r = await new Promise((res) => { pending.set(id, res); ws.send(JSON.stringify({ id, method: 'Runtime.evaluate', params: { expression, awaitPromise: true, returnByValue: true } })); }); if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || 'eval 오류'); return r.result?.result?.value; };
-  for (let i = 0; i < 60 && !(await evaluate('!!window.__arch && !!window.desktop')); i++) await sleep(500);
+  let ready = false;
+  for (let i = 0; i < 240 && !ready; i++) { await sleep(500); try { ready = await evaluate('!!window.__arch && !!window.desktop'); } catch { /* 페이지 전환 중 */ } }
+  if (!ready) { const body = await evaluate('document.body ? document.body.innerText.slice(0, 300) : ""').catch(() => ''); throw new Error('앱이 준비되지 않았습니다: ' + body); }
   return { ws, evaluate };
 }
 
@@ -44,10 +53,18 @@ if (expectVersion && info.version !== expectVersion) { console.log(`기대 버�
 
 // 3) 적용 → 앱이 스스로 닫히고 배치가 바꿔치기한 뒤 다시 띄운다
 const t0 = Date.now();
-c.evaluate(`window.__arch.update.apply()`).catch(() => {});
+// 적용이 끝나면 앱이 스스로 닫히므로 답이 안 올 수 있다(소켓이 끊김). 오류 답만 실패로 본다.
+let closed = false; c.ws.addEventListener('close', () => { closed = true; });
+const applied = await Promise.race([
+  c.evaluate(`window.__arch.update.apply().then(r => JSON.stringify(r)).catch(e => 'ERROR ' + (e.message || e))`).catch(() => 'CLOSED'),
+  (async () => { for (let i = 0; i < 180 && !closed; i++) await sleep(1000); return closed ? 'CLOSED' : 'TIMEOUT'; })(),
+]);
+console.log('apply:', applied);
 try { c.ws.close(); } catch { /* */ }
-// 옛 프로세스가 끝날 때까지 (디버깅 포트가 닫힘)
+if (String(applied).startsWith('ERROR') || applied === 'TIMEOUT') process.exit(1);
+// 옛 프로세스가 끝나고 배치가 바꿔치기할 때까지 (디버깅 포트가 닫히고, apply.cmd 가 스스로 지워진다)
 for (let i = 0; i < 120; i++) { await sleep(1000); try { await fetch(`http://127.0.0.1:${PORT}/json`); } catch { break; } }
+for (let i = 0; i < 60; i++) { await sleep(1000); if (!fs.existsSync(path.join(path.dirname(exe), 'data', 'update', 'apply.cmd'))) break; }
 console.log(`old process exited after ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 
 // 4) 새 프로세스: 배치가 start 로 띄우므로 디버깅 포트 환경변수를 물려받지 않는다 → 우리가 직접 다시 띄워서 버전만 확인

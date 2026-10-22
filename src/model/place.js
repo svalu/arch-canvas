@@ -8,7 +8,7 @@ import { ICON_SIZE } from './schema.js';
 import { absoluteRects, freeSlot } from './geometry.js';
 
 // VPC 밖에 그리는 서비스 (리전·글로벌·사용자 측)
-const OUTSIDE_VPC = /CloudFront|WAF|Shield|Route-53|Simple-Storage-Service|Users|User_|Client|Mobile|Internet(?!-Gateway)|Cognito|CloudWatch|Identity-and-Access|IAM|DynamoDB|API-Gateway|Simple-Queue|Simple-Notification|EventBridge|Step-Functions|Certificate-Manager|Global-Accelerator|Organizations|Bedrock|Elastic-Container-Registry|Key-Management|Secrets-Manager|Systems-Manager|CloudTrail|Config|GuardDuty|Backup/;
+const OUTSIDE_VPC = /Amazon-Connect|CloudFront|WAF|Shield|Route-53|Simple-Storage-Service|Users|User_|Client|Mobile|Internet(?!-Gateway)|Cognito|CloudWatch|Identity-and-Access|IAM|DynamoDB|API-Gateway|Simple-Queue|Simple-Notification|EventBridge|Step-Functions|Certificate-Manager|Global-Accelerator|Organizations|Bedrock|Elastic-Container-Registry|Key-Management|Secrets-Manager|Systems-Manager|CloudTrail|Config|GuardDuty|Backup/;
 // 대상에 붙는 형태(옆이 아니라 위·아래가 자연스러운 것)
 const ATTACH = /WAF|Shield|Certificate-Manager|Key-Management|CloudWatch|CloudTrail|GuardDuty/;
 

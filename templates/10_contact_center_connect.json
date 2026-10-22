@@ -1,0 +1,541 @@
+{
+  "meta": {
+    "id": "contact-center-connect",
+    "section": "구성도",
+    "name": "컨택센터 (Amazon Connect + Contact Lens)",
+    "description": "전화·채팅·이메일 채널을 Amazon Connect 로 받고 Contact Lens 로 분석하는 컨택센터 구성도. Connect 는 AWS 관리형이라 고객 VPC 밖에 그립니다"
+  },
+  "schema": "arch-canvas/graph@1",
+  "title": "컨택센터 구성도 (Amazon Connect)",
+  "mode": "card",
+  "theme": "light",
+  "context": {
+    "title": "",
+    "requirements": "",
+    "constraints": ""
+  },
+  "groups": [
+    {
+      "id": "channels",
+      "kind": "section",
+      "label": "고객 채널",
+      "parent": null,
+      "x": 20,
+      "y": 40,
+      "w": 240,
+      "h": 440,
+      "color": "#2DD4BF",
+      "fill": null
+    },
+    {
+      "id": "carrier",
+      "kind": "section",
+      "label": "통신사",
+      "parent": null,
+      "x": 300,
+      "y": 40,
+      "w": 200,
+      "h": 150,
+      "color": "#7D8998",
+      "fill": null,
+      "line": "dashed"
+    },
+    {
+      "id": "connect",
+      "kind": "section",
+      "label": "Amazon Connect · AWS 관리형 (고객 VPC 밖)",
+      "parent": null,
+      "x": 540,
+      "y": 40,
+      "w": 640,
+      "h": 440,
+      "color": "#2DD4BF",
+      "fill": null
+    },
+    {
+      "id": "lens",
+      "kind": "section",
+      "label": "Contact Lens (Connect 안에서 켜는 분석 기능)",
+      "parent": "connect",
+      "x": 20,
+      "y": 230,
+      "w": 600,
+      "h": 190,
+      "color": "#7FE3D6",
+      "fill": null
+    },
+    {
+      "id": "agents",
+      "kind": "section",
+      "label": "상담사",
+      "parent": null,
+      "x": 1220,
+      "y": 40,
+      "w": 220,
+      "h": 150,
+      "color": "#2DD4BF",
+      "fill": null
+    },
+    {
+      "id": "integration",
+      "kind": "section",
+      "label": "연동 · 사내 시스템",
+      "parent": null,
+      "x": 1220,
+      "y": 230,
+      "w": 220,
+      "h": 250,
+      "color": "#7FE3D6",
+      "fill": null
+    },
+    {
+      "id": "data",
+      "kind": "section",
+      "label": "데이터 · 분석",
+      "parent": null,
+      "x": 540,
+      "y": 520,
+      "w": 640,
+      "h": 130,
+      "color": "#7FE3D6",
+      "fill": null
+    },
+    {
+      "id": "ops",
+      "kind": "section",
+      "label": "운영 · 보안",
+      "parent": null,
+      "x": 1220,
+      "y": 520,
+      "w": 220,
+      "h": 200,
+      "color": "#7FE3D6",
+      "fill": null
+    }
+  ],
+  "nodes": [
+    {
+      "id": "phone",
+      "type": "card",
+      "icon": "Res_Mobile-client_Light",
+      "label": "전화 (PSTN)",
+      "body": "고객 음성 통화 · 콜백",
+      "parent": "channels",
+      "x": 20,
+      "y": 50,
+      "w": 200,
+      "h": 70
+    },
+    {
+      "id": "chat",
+      "type": "card",
+      "icon": "Res_Chat_Light",
+      "label": "채팅 · 웹",
+      "body": "웹 위젯 · 앱 내 채팅",
+      "parent": "channels",
+      "x": 20,
+      "y": 150,
+      "w": 200,
+      "h": 70
+    },
+    {
+      "id": "email",
+      "type": "card",
+      "icon": "Res_Email_Light",
+      "label": "이메일",
+      "body": "문의 메일 자동 접수",
+      "parent": "channels",
+      "x": 20,
+      "y": 250,
+      "w": 200,
+      "h": 70
+    },
+    {
+      "id": "mobile",
+      "type": "card",
+      "icon": "Res_Users_Light",
+      "label": "모바일 · 메신저",
+      "body": "앱 · 카카오톡 등 외부 채널",
+      "parent": "channels",
+      "x": 20,
+      "y": 350,
+      "w": 200,
+      "h": 70
+    },
+    {
+      "id": "pstn",
+      "type": "card",
+      "icon": "Res_Internet_Light",
+      "label": "통신사 (PSTN)",
+      "body": "대표번호 · 전화만 거침",
+      "parent": "carrier",
+      "x": 20,
+      "y": 50,
+      "w": 160,
+      "h": 70
+    },
+    {
+      "id": "cc",
+      "type": "card",
+      "icon": "Arch_Amazon-Connect",
+      "label": "Amazon Connect",
+      "body": "옴니채널 컨택센터 · 인스턴스 단위 운영",
+      "parent": "connect",
+      "x": 20,
+      "y": 50,
+      "w": 270,
+      "h": 84
+    },
+    {
+      "id": "ivr",
+      "type": "card",
+      "icon": "Arch_Amazon-Lex",
+      "label": "IVR · Contact Flow",
+      "body": "콜 플로우 · Lex 봇 · Polly 음성",
+      "parent": "connect",
+      "x": 320,
+      "y": 50,
+      "w": 280,
+      "h": 84
+    },
+    {
+      "id": "routing",
+      "type": "card",
+      "icon": null,
+      "label": "큐 · 라우팅 프로필",
+      "body": "스킬 기반 배분 · 우선순위",
+      "parent": "connect",
+      "x": 20,
+      "y": 150,
+      "w": 180,
+      "h": 64
+    },
+    {
+      "id": "ccp",
+      "type": "card",
+      "icon": null,
+      "label": "상담 화면 (CCP)",
+      "body": "브라우저 소프트폰 · 상담 메모",
+      "parent": "connect",
+      "x": 220,
+      "y": 150,
+      "w": 180,
+      "h": 64
+    },
+    {
+      "id": "recording",
+      "type": "card",
+      "icon": null,
+      "label": "통화 녹취",
+      "body": "자동 녹음 · S3 저장",
+      "parent": "connect",
+      "x": 420,
+      "y": 150,
+      "w": 180,
+      "h": 64
+    },
+    {
+      "id": "transcript",
+      "type": "card",
+      "icon": "Arch_Amazon-Transcribe",
+      "label": "실시간 · 통화 후 텍스트 변환",
+      "body": "통화·채팅 트랜스크립트",
+      "parent": "lens",
+      "x": 20,
+      "y": 40,
+      "w": 280,
+      "h": 64
+    },
+    {
+      "id": "sentiment",
+      "type": "card",
+      "icon": "Arch_Amazon-Comprehend",
+      "label": "감정 분석",
+      "body": "고객·상담사 감정 추이",
+      "parent": "lens",
+      "x": 320,
+      "y": 40,
+      "w": 260,
+      "h": 64
+    },
+    {
+      "id": "category",
+      "type": "card",
+      "icon": null,
+      "label": "카테고리 (키워드 · 주제)",
+      "body": "규칙 기반 자동 분류 · 알림",
+      "parent": "lens",
+      "x": 20,
+      "y": 116,
+      "w": 180,
+      "h": 64
+    },
+    {
+      "id": "summary",
+      "type": "card",
+      "icon": "Arch_Amazon-Bedrock",
+      "label": "생성형 AI 통화 요약",
+      "body": "상담 후 자동 요약",
+      "parent": "lens",
+      "x": 220,
+      "y": 116,
+      "w": 180,
+      "h": 64
+    },
+    {
+      "id": "eval",
+      "type": "card",
+      "icon": null,
+      "label": "상담사 품질 평가",
+      "body": "평가 양식 · 자동 채점",
+      "parent": "lens",
+      "x": 420,
+      "y": 116,
+      "w": 160,
+      "h": 64
+    },
+    {
+      "id": "agent",
+      "type": "card",
+      "icon": "Res_Users_Light",
+      "label": "상담사",
+      "body": "브라우저 CCP 로 응대 · 재택 가능",
+      "parent": "agents",
+      "x": 20,
+      "y": 50,
+      "w": 180,
+      "h": 70
+    },
+    {
+      "id": "lambda",
+      "type": "card",
+      "icon": "Arch_AWS-Lambda",
+      "label": "Lambda 연동",
+      "body": "컨택 플로우에서 호출 · 사내망 연동이 필요하면 이 부분만 VPC",
+      "parent": "integration",
+      "x": 20,
+      "y": 40,
+      "w": 180,
+      "h": 84
+    },
+    {
+      "id": "crm",
+      "type": "card",
+      "icon": null,
+      "label": "CRM · 고객 DB",
+      "body": "고객 조회 · 이력 저장",
+      "parent": "integration",
+      "x": 20,
+      "y": 140,
+      "w": 180,
+      "h": 64
+    },
+    {
+      "id": "s3",
+      "type": "card",
+      "icon": "Arch_Amazon-Simple-Storage-Service",
+      "label": "S3",
+      "body": "녹취 · Contact Lens 결과",
+      "parent": "data",
+      "x": 20,
+      "y": 40,
+      "w": 180,
+      "h": 70
+    },
+    {
+      "id": "athena",
+      "type": "card",
+      "icon": "Arch_Amazon-Athena",
+      "label": "Athena",
+      "body": "SQL 로 조회",
+      "parent": "data",
+      "x": 230,
+      "y": 40,
+      "w": 170,
+      "h": 70
+    },
+    {
+      "id": "dash",
+      "type": "card",
+      "icon": "Arch_Amazon-Quick",
+      "label": "대시보드",
+      "body": "KPI · 상담 품질 리포트",
+      "parent": "data",
+      "x": 430,
+      "y": 40,
+      "w": 190,
+      "h": 70
+    },
+    {
+      "id": "cw",
+      "type": "card",
+      "icon": "Arch_Amazon-CloudWatch",
+      "label": "CloudWatch",
+      "body": "지표 · 알람",
+      "parent": "ops",
+      "x": 20,
+      "y": 40,
+      "w": 180,
+      "h": 64
+    },
+    {
+      "id": "ct",
+      "type": "card",
+      "icon": "Arch_AWS-CloudTrail",
+      "label": "CloudTrail",
+      "body": "감사 로그",
+      "parent": "ops",
+      "x": 20,
+      "y": 116,
+      "w": 180,
+      "h": 64
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "phone",
+      "target": "pstn",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e2",
+      "source": "pstn",
+      "target": "cc",
+      "label": "음성",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e3",
+      "source": "chat",
+      "target": "cc",
+      "label": "채팅",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e4",
+      "source": "email",
+      "target": "cc",
+      "label": "이메일",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e5",
+      "source": "mobile",
+      "target": "cc",
+      "label": "메시지",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e6",
+      "source": "cc",
+      "target": "ivr",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e7",
+      "source": "cc",
+      "target": "routing",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e8",
+      "source": "routing",
+      "target": "ccp",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e9",
+      "source": "ccp",
+      "target": "agent",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "both"
+    },
+    {
+      "id": "e10",
+      "source": "ivr",
+      "target": "lambda",
+      "label": "고객 조회",
+      "line": "dashed",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e11",
+      "source": "lambda",
+      "target": "crm",
+      "label": "",
+      "line": "dashed",
+      "shape": "elbow",
+      "arrow": "both"
+    },
+    {
+      "id": "e12",
+      "source": "recording",
+      "target": "s3",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e13",
+      "source": "transcript",
+      "target": "s3",
+      "label": "분석 결과",
+      "line": "dashed",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e14",
+      "source": "s3",
+      "target": "athena",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e15",
+      "source": "athena",
+      "target": "dash",
+      "label": "",
+      "line": "solid",
+      "shape": "elbow",
+      "arrow": "end"
+    },
+    {
+      "id": "e16",
+      "source": "summary",
+      "target": "ccp",
+      "label": "요약 표시",
+      "line": "dashed",
+      "shape": "elbow",
+      "arrow": "end"
+    }
+  ],
+  "annotations": []
+}
