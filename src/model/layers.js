@@ -3,6 +3,7 @@
 //  - 아이콘·카드·글상자는 항상 상자보다 위. 아이콘끼리는 nodes 배열 순서(뒤가 앞).
 //  - 상자 안에 든 것은 상자를 따라 움직인다(부모-자식). 상자만 옮기려면 Alt+끌기.
 import { sortGroups } from './schema.js';
+import { freeSlot } from './geometry.js';
 
 const isGroup = (g, id) => g.groups.some((x) => x.id === id);
 
@@ -60,12 +61,19 @@ export function moveInLayers(graph, id, targetId, rects) {
   const item = g.groups.find((x) => x.id === id) || g.nodes.find((x) => x.id === id);
   const target = g.groups.find((x) => x.id === targetId) || g.nodes.find((x) => x.id === targetId);
   if (!item || !target || id === targetId) return g;
-  // 자기 안으로는 못 넣는다
-  for (let p = targetId; p; p = g.groups.find((x) => x.id === p)?.parent) if (p === id) return g;
+  // 자기 안(자기 자신, 또는 자기 안에 든 것의 자리)으로는 못 넣는다
+  const parentOf = (pid) => g.groups.find((x) => x.id === pid)?.parent;
+  for (let p = isGroup(g, targetId) ? targetId : target.parent; p; p = parentOf(p)) if (p === id) return g;
   const newParent = isGroup(g, targetId) ? targetId : (target.parent ?? null);
   const abs = rects.get(id), pr = newParent ? rects.get(newParent) : { x: 0, y: 0 };
   item.parent = newParent;
   item.x = Math.round(abs.x - pr.x); item.y = Math.round(abs.y - pr.y);
+  // 화면에서 그 상자 밖에 있으면 상자 안 빈자리로 옮긴다 (목록과 화면이 어긋나지 않게)
+  if (newParent) {
+    const P = rects.get(newParent), w = abs.w || 48, h = abs.h || 48;
+    const inside = abs.x >= P.x && abs.y >= P.y && abs.x + w <= P.x + P.w && abs.y + h <= P.y + P.h;
+    if (!inside) { const s = freeSlot(g, newParent); item.x = s.x; item.y = s.y; }
+  }
   // 순서: 같은 종류 배열에서 target 뒤(=앞에 그려짐)로
   const key = isGroup(g, id) ? 'groups' : 'nodes';
   const arr = g[key];

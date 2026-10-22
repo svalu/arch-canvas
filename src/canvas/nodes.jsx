@@ -88,7 +88,7 @@ export const AwsGroup = memo(function AwsGroup({ data, selected }) {
   const icon = base.icon ? icons.get(base.icon) : null;
   return (
     <>
-      <NodeResizer isVisible={selected} minWidth={80} minHeight={60} color={kind.color} handleClassName="rsz" lineClassName="rszline" />
+      <NodeResizer isVisible={selected && !data.locked} minWidth={80} minHeight={60} color={kind.color} handleClassName="rsz" lineClassName="rszline" />
       <div
         className={'grp' + (selected ? ' sel' : '') + (data.kind === 'section' ? ' section' : '')}
         style={{
@@ -142,7 +142,7 @@ export const AwsCard = memo(function AwsCard({ data, selected }) {
   const icon = data.icon ? icons.get(data.icon) : null;
   return (
     <>
-      <NodeResizer isVisible={selected} minWidth={120} minHeight={48} handleClassName="rsz" lineClassName="rszline" />
+      <NodeResizer isVisible={selected && !data.locked} minWidth={120} minHeight={48} handleClassName="rsz" lineClassName="rszline" />
       <div className={'card' + (selected ? ' sel' : '')} style={data.accent ? { borderColor: data.accent } : undefined}>
         {icon && <img src={icon.src} className="card-icon" draggable={false} alt="" />}
         <div className="card-text">
@@ -161,7 +161,7 @@ const TEXT_PX = { sm: 11, md: 13, lg: 16, xl: 22 };
 export const AwsText = memo(function AwsText({ data, selected }) {
   return (
     <>
-      <NodeResizer isVisible={selected} minWidth={40} minHeight={20} handleClassName="rsz" lineClassName="rszline" />
+      <NodeResizer isVisible={selected && !data.locked} minWidth={40} minHeight={20} handleClassName="rsz" lineClassName="rszline" />
       <div className={'textbox' + (selected ? ' sel' : '') + (data.label ? '' : ' empty')} style={{ fontSize: `calc(${TEXT_PX[data.size] || 13}px * var(--label-scale, 1))`, fontWeight: data.bold ? 700 : 400, ...(data.accent ? { color: data.accent } : {}) }}>
         {data.label || '텍스트'}
         <Handles />

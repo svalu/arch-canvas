@@ -95,7 +95,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.5.0';
+export const APP_VERSION = '0.5.1';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -547,10 +547,10 @@ function Editor() {
       if (c.type === 'dimensions' && c.resizing === false && resizeSnapshot.current) {
         const before = resizeSnapshot.current;
         resizeSnapshot.current = null;
-        setTimeout(() => commit(currentGraph(), before), 0);
+        setTimeout(() => { if (!tryCommit(currentGraph(), before)) commit(before, null); }, 0);   // 규칙에 막히면 크기 조절 전으로
       }
     }
-  }, [onNodesChangeBase, commit, currentGraph, rf]);
+  }, [onNodesChangeBase, commit, tryCommit, currentGraph, rf]);
 
   // Delete 키: React Flow 가 직접 지우게 두지 않고, 같은 결과를 규칙 검사·되돌리기를 거쳐 반영한다
   const onBeforeDelete = useCallback(async ({ nodes: dn = [], edges: de = [] }) => {
@@ -607,12 +607,13 @@ function Editor() {
     const rects = absoluteRects(g);
     const draggedIds = new Set(dragged.map((n) => n.id));
     // Alt+끌기: 상자만 옮겼으니 원래 안에 있던 것들의 소속을 놓인 자리 기준으로 다시 정한다
-    if (altDrag.current) { for (const k of altDrag.current.kids) draggedIds.add(k); altDrag.current = null; }
+    const altKids = new Set(altDrag.current ? altDrag.current.kids : []);
+    if (altDrag.current) { for (const k of altKids) draggedIds.add(k); altDrag.current = null; }
     const byId = new Map([...g.groups, ...g.nodes].map((i) => [i.id, i]));
     const hasDraggedAncestor = (item) => { let p = item.parent, guard = 0; while (p && guard++ < 64) { if (draggedIds.has(p)) return true; p = byId.get(p)?.parent; } return false; };
     for (const id of draggedIds) {
       const item = byId.get(id);
-      if (!item || hasDraggedAncestor(item)) continue;
+      if (!item || (hasDraggedAncestor(item) && !altKids.has(id))) continue;   // Alt 로 상자만 옮겼으면 안의 것은 각자 소속을 다시 정한다
       const r = rects.get(id);
       const isGroup = 'w' in item;
       const pt = isGroup ? { x: r.x + 8, y: r.y + 8 } : { x: r.x + r.w / 2, y: r.y + r.h / 2 };
@@ -691,6 +692,7 @@ function Editor() {
     const r = wrapRef.current.getBoundingClientRect();
     const id = addAt(payload, rf.screenToFlowPosition({ x: r.left + r.width / 2, y: r.top + r.height / 2 }));
     if (id) setTimeout(() => rf.setNodes((ns) => ns.map((n) => ({ ...n, selected: n.id === id }))), 0);
+    return id;
   }, [addAt, rf]);
 
   // 추천 클릭: 그룹 안 빈 자리에 넣거나(into), 선택한 아이콘 오른쪽에 놓고 연결(next)
@@ -933,7 +935,10 @@ function Editor() {
     const ids = new Set(rf.getNodes().filter((n) => n.selected).map((n) => n.id));
     if (!ids.size) return false;
     const g = currentGraph();
-    for (const x of [...g.groups, ...g.nodes]) if (ids.has(x.id)) { x.x += dx; x.y += dy; }
+    const parentOf = (id) => (g.groups.find((q) => q.id === id) || g.nodes.find((q) => q.id === id))?.parent;
+    // 부모가 함께 선택돼 있으면 부모만 옮긴다(안의 것은 따라온다). 잠긴 것은 움직이지 않는다
+    const top = (x) => { for (let p = x.parent; p; p = parentOf(p)) if (ids.has(p)) return false; return true; };
+    for (const x of [...g.groups, ...g.nodes]) if (ids.has(x.id) && !x.locked && top(x)) { x.x += dx; x.y += dy; }
     tryCommit(g, undefined, { coalesce: 'nudge' });
     return true;
   }, [rf, currentGraph, tryCommit]);
@@ -1144,11 +1149,11 @@ function Editor() {
     e.preventDefault();
     const flowPos = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY });
     const items = [
+      { label: '여기에 글상자 추가', hint: '제목·설명·메모', action: () => addAt({ type: 'text' }, flowPos) },
       ...(docMode === 'card'
         ? [{ label: '여기에 카드 추가', action: () => addAt({ type: 'card' }, flowPos) }, { label: '여기에 섹션 추가', action: () => addAt({ type: 'group', kind: 'section' }, flowPos) }]
         : [{ label: '여기에 그룹 추가', action: () => addAt({ type: 'group', kind: 'generic' }, flowPos) }]),
       { label: '여기에 붙여넣기', hint: 'Ctrl+V', action: () => pasteClip(flowPos) },
-      { label: '여기에 글상자 추가', action: () => addAt({ type: 'text' }, flowPos) },
       { label: '여기에 번호 추가', hint: '①②③', action: () => addAt({ type: 'badge' }, flowPos) },
       'sep',
       { label: '전체 선택', hint: 'Ctrl+A', action: () => rf.setNodes((ns) => ns.map((n) => ({ ...n, selected: true }))) },
@@ -1389,6 +1394,24 @@ function Editor() {
     return () => window.removeEventListener('keydown', onKey);
   }, [undo, redo, copyPpt, exportImage, saveJson, openJson, wrapSelection, rf, isDesktop, addDoc, switchDoc, duplicateItems, reopenDoc, copySelection, cutSelection, pasteClip, nudgeSelection, renameSelected, orderSel, lockItems]);
 
+  // 선 끝을 다른 노드로 옮기기
+  useEffect(() => {
+    const on = (ev) => {
+      const { id, end, node } = ev.detail;
+      const g = currentGraph();
+      const e = g.edges.find((x) => x.id === id);
+      if (!e || e[end] === node) return;
+      const other = end === 'source' ? e.target : e.source;
+      if (node === other) { toastMsg('같은 요소끼리는 연결할 수 없습니다.'); return; }
+      const s2 = end === 'source' ? node : e.source, t2 = end === 'target' ? node : e.target;
+      if (g.edges.some((x) => x.id !== id && x.source === s2 && x.target === t2)) { toastMsg('이미 같은 연결선이 있습니다.'); return; }
+      e[end] = node;
+      if (tryCommit(g)) toastMsg(`연결 대상을 "${labelOf(node)}"(으)로 바꿨습니다. Ctrl+Z 로 되돌릴 수 있습니다.`, 3000);
+    };
+    window.addEventListener('arch-reconnect', on);
+    return () => window.removeEventListener('arch-reconnect', on);
+  }, [currentGraph, tryCommit, toastMsg, labelOf]);
+
   // 핀 툴팁의 [AI에게 물어보기] → 여기로 온다
   useEffect(() => {
     const on = (e) => runAiRef.current('ask', e.detail);
@@ -1479,6 +1502,7 @@ function Editor() {
             </button>
             <button onClick={() => setPanel(panel === 'ai' ? null : 'ai')} className={'tb toolbar-ai ic-half tour-ai' + (panel === 'ai' ? ' on' : '')} title="AI 패널: 제안서 컨텍스트 · 물어보기 · 그리기·고치기" aria-label="AI 패널"><Icon name="panel" /></button>
           </span>
+          <button onClick={() => { setPanel(null); const id = addAtCenter({ type: 'text' }); if (id) setTimeout(() => { rf.setNodes((ns) => ns.map((n) => ({ ...n, selected: n.id === id }))); setTimeout(() => { const inp = document.querySelector('.side .insp textarea'); inp?.focus(); inp?.select(); }, 80); }, 0); }} className="tb ic-only" title="글상자 추가: 화면 가운데에 넣고 바로 글을 씁니다" aria-label="글상자 추가"><Icon name="text" /></button>
           <button onClick={() => setPanel(panel === 'layers' ? null : 'layers')} className={'tb ic-only tour-layers' + (panel === 'layers' ? ' on' : '')} title="레이어: 무엇이 어느 상자 안에 있는지, 앞뒤 순서, 잠금" aria-label="레이어"><Icon name="layers" /></button>
           <button onClick={() => setPanel(panel === 'rules' ? null : 'rules')} className={'tb ic-only tour-rules' + (panel === 'rules' ? ' on' : '') + (violations.length ? ' warn' : '')} title={`규칙 검사${violations.length ? ` (${violations.length}건)` : ''}`} aria-label="규칙 검사">
             <Icon name="shield" />{violations.length > 0 && <span className={'badge' + (violations.some((v) => v.severity === 'block') ? ' block' : '')}>{violations.length}</span>}
@@ -1570,6 +1594,8 @@ function Editor() {
           maxZoom={3}
           snapToGrid
           snapGrid={[4, 4]}
+          elevateNodesOnSelect={false}
+          elevateEdgesOnSelect={false}
           onMoveStart={() => hidePinTip()}
           proOptions={{ hideAttribution: true }}
           fitView
