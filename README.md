@@ -1,5 +1,8 @@
 # Arch Canvas
 
+- **Windows 버전 받기:** https://svalu.github.io/arch-canvas/download/ (항상 최신. 직접 링크: https://github.com/svalu/arch-canvas/releases/latest/download/Arch_Canvas_Windows.zip)
+- **웹 버전 (설치 없음, 맥 포함):** https://svalu.github.io/arch-canvas/
+
 AWS 아키텍처 다이어그램을 노드 방식으로 그리고, 규칙에 어긋나면 이유를 알려주고, PNG/SVG 로 내보내는 도구. 1단계 프로토타입.
 `dist/index.html` 하나를 브라우저에서 바로 열면 된다(오프라인, 외부 CDN 없음). EXE 포장은 덤.
 

@@ -3,7 +3,7 @@ name: Deploy web version
 on:
   push:
     branches: [main]
-    paths: ['src/**', 'data/**', 'templates/**', 'index.html', 'package.json', 'package-lock.json', 'vite.config.js', 'tools/inject_data.mjs', '.github/workflows/pages.yml']
+    paths: ['src/**', 'web/**', 'data/**', 'templates/**', 'index.html', 'package.json', 'package-lock.json', 'vite.config.js', 'tools/inject_data.mjs', '.github/workflows/pages.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,7 +28,7 @@ jobs:
           test -s dist/index.html
           grep -q 'id="icons"' dist/index.html
           grep -q 'id="root"' dist/index.html
-      - run: mkdir -p site && cp dist/index.html site/index.html && touch site/.nojekyll
+      - run: mkdir -p site && cp dist/index.html site/index.html && cp -r web/. site/ && touch site/.nojekyll   # web/download → /download/ (Windows 버전 받기)
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
