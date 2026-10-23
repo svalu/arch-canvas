@@ -859,3 +859,10 @@ details > summary { list-style: none; } details > summary::-webkit-details-marke
 .react-flow__node-awsGroup .lock-mark { top: 6px; right: 6px; }
 .app.theme-dark .lock-mark { background: #12262a; border-color: #2c4a4a; }
 .react-flow__node.is-locked { cursor: grab; }   /* 잠근 것(끌 수 없음)을 끌면 화면이 움직인다 */
+
+/* ----- 4단계: 직각선 꺾이는 위치 손잡이 ----- */
+.edge-bend { position: absolute; width: 10px; height: 18px; border-radius: 4px; background: #fff; border: 2px solid #2E73B8; pointer-events: all; box-shadow: 0 1px 3px rgba(0,0,0,.25); z-index: 1; }
+.edge-bend.h { cursor: ew-resize; }
+.edge-bend.v { width: 18px; height: 10px; cursor: ns-resize; }
+.edge-bend:hover { background: #2E73B8; }
+.app.theme-dark .edge-end, .app.theme-dark .edge-bend { background: #12262a; border-color: #2DD4BF; }

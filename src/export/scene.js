@@ -12,7 +12,7 @@
 
 import { ICON_SIZE, GROUP_ICON_SIZE, LABEL_WIDTH, ICON_LABEL_GAP, ICON_LABEL_H, LABEL_DROP, sortGroups } from '../model/schema.js';
 import { isOverlay } from '../model/contain.js';
-import { absoluteRects, descendants, edgeGeometry, SIDE_IDX } from '../model/geometry.js';
+import { absoluteRects, descendants, edgeGeometry, edgePath, bendOf, SIDE_IDX } from '../model/geometry.js';
 export { ICON_LABEL_GAP, ICON_LABEL_H };
 
 export const EMU_PER_PX = 11250;
@@ -141,7 +141,7 @@ export function graphToScene(graph, catalog, include = null, { textScale = 1 } =
     const anchor = (id, side) => ({ id: side === 'b' && labeled.has(id) ? id + '#label' : id, idx: SIDE_IDX[side] });
     shapes.push({
       t: 'cxn', id: e.id, name: e.label ? `연결: ${e.label}` : '연결선',
-      ...connectorXfrm(geo, e.shape),
+      ...connectorXfrm(geo, e.shape, e.bend),
       st: anchor(e.source, geo.s),
       end: anchor(e.target, geo.t),
       line: { color: edgeColor, w: LINE_EMU, dash: e.line === 'dashed' ? 'dash' : null },
@@ -149,7 +149,8 @@ export function graphToScene(graph, catalog, include = null, { textScale = 1 } =
       tail: e.arrow === 'none' ? 'none' : 'triangle',
     });
     if (e.label) {
-      const mx = (geo.p1.x + geo.p2.x) / 2, my = (geo.p1.y + geo.p2.y) / 2;
+      const { mid } = edgePath(geo, e.shape, e.bend);
+      const mx = mid.x, my = mid.y;
       edgeLabels.push({
         t: 'text', id: e.id + '#label', name: e.label, x: E(mx - 50), y: E(my - 18), w: E(100), h: E(16),
         text: { value: e.label, sz: sz(900), color: inkColor, bold: false, align: 'ctr', anchor: 'ctr', wrap: 'square', l: 0, t: 0, r: 0, b: 0 },
@@ -216,18 +217,20 @@ function bbox(s) {
  * - 꺾은선(세로 시작): bentConnector3 를 90도 돌린다(rot=5400000). 이때 상자의 가로세로가 바뀌고
  *   시작점이 왼쪽 위로 오려면 flipV = (dx>0), flipH = (dy<0).
  */
-export function connectorXfrm(geo, shape) {
+export function connectorXfrm(geo, shape, bendV) {
   const { p1, p2, horizontal } = geo;
   const dx = p2.x - p1.x, dy = p2.y - p1.y;
   const bent = (shape === 'elbow' || shape === 'curve') && Math.abs(dx) >= 1 && Math.abs(dy) >= 1;
   const prst = shape === 'curve' ? 'curvedConnector3' : 'bentConnector3';
   const box = { x: E(Math.min(p1.x, p2.x)), y: E(Math.min(p1.y, p2.y)), w: E(Math.abs(dx)), h: E(Math.abs(dy)) };
   if (!bent) return { ...box, rot: 0, flipH: dx < 0, flipV: dy < 0, prst: 'straightConnector1' };
-  if (horizontal) return { ...box, rot: 0, flipH: dx < 0, flipV: dy < 0, prst };
+  // 꺾이는 위치를 옮긴 직각선: adj1 = 시작점에서의 비율 × 100000 (뒤집기·회전해도 시작점 기준이라 그대로)
+  const adj = shape === 'elbow' && Math.abs(bendOf(bendV) - 0.5) > 0.001 ? { adj: Math.round(bendOf(bendV) * 100000) } : {};
+  if (horizontal) return { ...box, rot: 0, flipH: dx < 0, flipV: dy < 0, prst, ...adj };
   const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
   return {
     x: Math.round(cx - box.h / 2), y: Math.round(cy - box.w / 2), w: box.h, h: box.w,
-    rot: 5400000, flipH: dy < 0, flipV: dx > 0, prst,
+    rot: 5400000, flipH: dy < 0, flipV: dx > 0, prst, ...adj,
   };
 }
 

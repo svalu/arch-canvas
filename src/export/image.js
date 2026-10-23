@@ -78,7 +78,7 @@ export function graphToSvg(graph, catalog, include = null, { background = 'trans
   for (const c of texts) { const r = rects.get(c.id); grow(r.x, r.y, r.w, r.h); }
   const edgeGeos = edges.map((e) => {
     const geo = edgeGeometry(rects.get(e.source), rects.get(e.target), labeled.has(e.source) ? LABEL_DROP : 0, labeled.has(e.target) ? LABEL_DROP : 0);
-    const path = edgePath(geo, e.shape);
+    const path = edgePath(geo, e.shape, e.bend);
     grow(Math.min(geo.p1.x, geo.p2.x), Math.min(geo.p1.y, geo.p2.y), Math.abs(geo.p1.x - geo.p2.x), Math.abs(geo.p1.y - geo.p2.y));
     return { e, geo, path };
   });

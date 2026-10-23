@@ -49,7 +49,7 @@ import { ContextMenu } from './canvas/ContextMenu.jsx';
 import { AskBar } from './canvas/AskBar.jsx';
 import { edgeTypes } from './canvas/edges.jsx';
 import { graphToFlow, flowToGraph } from './model/convert.js';
-import { normalizeGraph, emptyGraph, uid, allIds, ICON_SIZE, LINES, SHAPES, ARROWS, EDGE_DEFAULTS, setEdgeDefaults, sortGroups, CARD_DEFAULT } from './model/schema.js';
+import { normalizeGraph, emptyGraph, uid, allIds, ICON_SIZE, LINES, SHAPES, ARROWS, EDGE_DEFAULTS, setEdgeDefaults, sortGroups, CARD_DEFAULT, LABEL_DROP } from './model/schema.js';
 import { absoluteRects, innermostGroupAt, descendants } from './model/geometry.js';
 import { applyPatch, PATCH_OPS } from './model/patch.js';
 import { graphToScene, selectionIds, sceneStats } from './export/scene.js';
@@ -96,7 +96,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.7.0';
+export const APP_VERSION = '0.8.0';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -575,6 +575,37 @@ function Editor() {
         setGuideLines(s.lines);
       }
     } else if (changes.some((c) => c.type === 'position' && c.dragging === false)) setGuideLines([]);
+    // 상자 크기 조절: 안에 든 것보다 작게 줄일 수 없다. 왼쪽·위를 끌어도 안의 것은 제자리
+    const rs = changes.filter((c) => c.type === 'dimensions' && c.resizing && c.dimensions && rf.getNode(c.id)?.type === 'awsGroup');
+    if (rs.length) {
+      const g0 = resizeSnapshot.current || currentGraph();
+      const rects = absoluteRects(g0);
+      for (const c of rs) {
+        const grp = g0.groups.find((x) => x.id === c.id); if (!grp) continue;
+        const self = rects.get(c.id), pAbs = { x: self.x - grp.x, y: self.y - grp.y };
+        const kids = [...g0.groups, ...g0.nodes].filter((x) => x.parent === c.id);
+        const pc = changes.find((x) => x.type === 'position' && x.id === c.id && x.position);
+        const cur = rf.getNode(c.id).position;
+        let L = pAbs.x + (pc ? pc.position.x : cur.x), T = pAbs.y + (pc ? pc.position.y : cur.y);
+        let R = L + c.dimensions.width, B = T + c.dimensions.height;
+        if (kids.length) {
+          const M = 8;
+          let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+          for (const k of kids) {
+            const r = rects.get(k.id); if (!r) continue;
+            const lab = !('w' in k) && k.label ? LABEL_DROP : 0;   // 아이콘 아래 이름까지
+            x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, r.x + r.w); y1 = Math.max(y1, r.y + r.h + lab);
+          }
+          L = Math.min(L, x0 - M); T = Math.min(T, y0 - 30); R = Math.max(R, x1 + M); B = Math.max(B, y1 + M);   // 위는 상자 이름 자리
+        }
+        c.dimensions = { width: R - L, height: B - T };
+        if (pc) pc.position = { x: L - pAbs.x, y: T - pAbs.y };
+        // 안의 것은 화면 위치 그대로 (새 왼쪽 위 기준으로 다시 계산)
+        const kidIds = new Set(kids.map((k) => k.id));
+        changes = changes.filter((x) => !(x.type === 'position' && kidIds.has(x.id)));
+        if (pc) for (const k of kids) { const r = rects.get(k.id); if (r) changes.push({ type: 'position', id: k.id, position: { x: r.x - L, y: r.y - T } }); }
+      }
+    }
     onNodesChangeBase(changes);
     for (const c of changes) {
       if (c.type === 'dimensions' && c.resizing === true && !resizeSnapshot.current) resizeSnapshot.current = currentGraph();
@@ -1502,6 +1533,20 @@ function Editor() {
     return () => window.removeEventListener('arch-reconnect', on);
   }, [currentGraph, tryCommit, toastMsg, labelOf]);
 
+  // 직각선 꺾이는 위치
+  useEffect(() => {
+    const on = (ev) => {
+      const { id, bend } = ev.detail;
+      const g = currentGraph();
+      const e = g.edges.find((x) => x.id === id);
+      if (!e) return;
+      if (Math.abs(bend - 0.5) < 0.001) delete e.bend; else e.bend = bend;
+      commit(g);
+    };
+    window.addEventListener('arch-bend', on);
+    return () => window.removeEventListener('arch-bend', on);
+  }, [currentGraph, commit]);
+
   // 핀 툴팁의 [AI에게 물어보기] → 여기로 온다
   useEffect(() => {
     const on = (e) => runAiRef.current('ask', e.detail);
@@ -2125,7 +2170,7 @@ function Help({ isDesktop, onPatch, onTour, onCheckUpdate, updBusy, updInfo, onT
       <p><b>그룹</b> 그룹 안에 놓으면 들어가고, 밖으로 끌면 나옵니다. 그룹을 선택하면 모서리로 크기 조절. 여러 개 고르고 Ctrl+G 로 묶기.</p>
       <p><b>복사·붙여넣기</b> 요소를 선택하고 Ctrl+C, 마우스를 둔 자리에 Ctrl+V. 다른 탭에도 붙일 수 있습니다. Ctrl+X 잘라내기, Ctrl+D 복제(그룹은 안의 것까지). 선택이 없을 때 Ctrl+C 는 그림(PNG) 복사입니다.</p>
       <p><b>지우기</b> Delete. <b>이름</b> 더블클릭 또는 F2. <b>옮기기</b> 화살표 키(Shift: 10px). <b>되돌리기</b> Ctrl+Z / Ctrl+Y. <b>선택 해제</b> Esc.</p>
-      <p><b>상자와 레이어</b> 소속은 화면 위치 그대로입니다: 상자 안에 놓은 것은 그 상자를 따라 움직이고, 끄는 동안 들어갈 상자가 빛납니다. 상자만 옮기려면 Alt 를 누른 채 끄십시오. ASG·보안 그룹 같은 겹치는 상자는 아무것도 품지 않고 테두리만 움직입니다. 앞뒤 순서는 오른쪽 클릭 [맨 앞으로 가져오기 · 뒤로 보내기] 또는 Ctrl+[ / Ctrl+] 로 바꾸고, Ctrl+G 로 여러 개를 묶으면 하나를 클릭해도 함께 선택되고 함께 움직입니다(풀기 Ctrl+Shift+G). 잠근 것(Ctrl+L)은 어떤 방법으로도 움직이지 않고 자물쇠가 보입니다. 전체 순서를 한눈에 보려면 오른쪽 클릭 [레이어 목록 보기]를 누르십시오(보기 설정 › 고급에서 툴바 버튼으로 둘 수 있습니다).</p>
+      <p><b>상자와 레이어</b> 소속은 화면 위치 그대로입니다: 상자 안에 놓은 것은 그 상자를 따라 움직이고, 끄는 동안 들어갈 상자가 빛납니다. 상자만 옮기려면 Alt 를 누른 채 끄십시오. ASG·보안 그룹 같은 겹치는 상자는 아무것도 품지 않고 테두리만 움직입니다. 앞뒤 순서는 오른쪽 클릭 [맨 앞으로 가져오기 · 뒤로 보내기] 또는 Ctrl+[ / Ctrl+] 로 바꾸고, Ctrl+G 로 여러 개를 묶으면 하나를 클릭해도 함께 선택되고 함께 움직입니다(풀기 Ctrl+Shift+G). 잠근 것(Ctrl+L)은 어떤 방법으로도 움직이지 않고 자물쇠가 보입니다. 직각선을 선택하면 가운데 구간에 손잡이가 생겨 꺾이는 위치를 옮길 수 있고(두 번 클릭하면 가운데로), PowerPoint 로 보낼 때도 같은 위치로 갑니다. 상자는 안에 든 것보다 작게 줄어들지 않습니다. 전체 순서를 한눈에 보려면 오른쪽 클릭 [레이어 목록 보기]를 누르십시오(보기 설정 › 고급에서 툴바 버튼으로 둘 수 있습니다).</p>
       <p><b>조각 템플릿</b> 자주 쓰는 묶음(예: 2-AZ 웹 계층)을 선택해 오른쪽 클릭 [조각 템플릿으로 저장]. 템플릿 메뉴 [내 조각]에서 고르면 지금 그림에 끼워 넣습니다.</p>
       <p><b>정렬</b> 여러 개를 선택하면 오른쪽 패널과 오른쪽 클릭 메뉴에 정렬·간격·크기 맞추기가 나옵니다. 끌 때는 분홍 안내선에 맞춰 붙습니다.</p>
       <p><b>글상자·번호</b> 팔레트 위쪽 [글상자] [번호]. 번호는 다음 수가 자동으로 붙습니다.</p>

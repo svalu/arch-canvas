@@ -146,6 +146,7 @@ export function normalizeGraph(input) {
       line: LINES.includes(e.line) ? e.line : EDGE_DEFAULTS.line,
       shape: SHAPES.includes(e.shape) ? e.shape : EDGE_DEFAULTS.shape,
       arrow: ARROWS.includes(e.arrow) ? e.arrow : EDGE_DEFAULTS.arrow,
+      ...(typeof e.bend === 'number' && Number.isFinite(e.bend) && Math.abs(e.bend - 0.5) > 0.001 ? { bend: Math.round(Math.min(3, Math.max(-2, e.bend)) * 1000) / 1000 } : {}),
     });
   }
   const all = new Set([...ids, ...out.edges.map((e) => e.id)]);

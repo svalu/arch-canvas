@@ -55,7 +55,7 @@ export function edgeToFlow(e, pins = [], theme = 'light') {
     zIndex: Z_EDGE,
     ...(e.arrow !== 'none' ? { markerEnd: ARROW(theme) } : {}),
     ...(e.arrow === 'both' ? { markerStart: ARROW(theme) } : {}),
-    data: { label: e.label, line: e.line, shape: e.shape, arrow: e.arrow, pins },
+    data: { label: e.label, line: e.line, shape: e.shape, arrow: e.arrow, pins, ...(typeof e.bend === 'number' ? { bend: e.bend } : {}) },
   };
 }
 
@@ -98,6 +98,7 @@ export function flowToGraph(nodes, edges, { title = '새 다이어그램', annot
     edges: edges.map((e) => ({
       id: e.id, source: e.source, target: e.target,
       label: e.data?.label ?? '', line: e.data?.line ?? 'solid', shape: e.data?.shape ?? 'straight', arrow: e.data?.arrow ?? 'end',
+      ...(typeof e.data?.bend === 'number' ? { bend: e.data.bend } : {}),
     })),
     annotations,
   };

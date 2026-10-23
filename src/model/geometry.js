@@ -62,8 +62,13 @@ export function edgeGeometry(a, b, dropA = 0, dropB = 0) {
   return { s, t, p1, p2, horizontal: s === 'l' || s === 'r' };
 }
 
-export function edgePath(geo, shape) {
+/** 직각선 꺾이는 위치: 시작점→끝점 사이 비율(0.5 = 가운데). PowerPoint bentConnector3 의 adj1 과 같은 뜻. */
+export const bendOf = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0.5);
+export const isBent = (geo, shape) => shape === 'elbow' && Math.abs(geo.p1.x - geo.p2.x) >= 1 && Math.abs(geo.p1.y - geo.p2.y) >= 1;
+
+export function edgePath(geo, shape, bend) {
   const { p1, p2, horizontal } = geo;
+  const k = bendOf(bend);
   const straightish = Math.abs(p1.x - p2.x) < 1 || Math.abs(p1.y - p2.y) < 1;
   if (shape === 'curve' && !straightish) {
     // 면 방향으로 나갔다가 들어오는 S자 곡선 (PowerPoint curvedConnector3 와 같은 모양)
@@ -75,10 +80,10 @@ export function edgePath(geo, shape) {
     return { d: `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`, mid: { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 } };
   }
   if (horizontal) {
-    const mx = (p1.x + p2.x) / 2;
+    const mx = p1.x + (p2.x - p1.x) * k;
     return { d: `M ${p1.x} ${p1.y} L ${mx} ${p1.y} L ${mx} ${p2.y} L ${p2.x} ${p2.y}`, mid: { x: mx, y: (p1.y + p2.y) / 2 } };
   }
-  const my = (p1.y + p2.y) / 2;
+  const my = p1.y + (p2.y - p1.y) * k;
   return { d: `M ${p1.x} ${p1.y} L ${p1.x} ${my} L ${p2.x} ${my} L ${p2.x} ${p2.y}`, mid: { x: (p1.x + p2.x) / 2, y: my } };
 }
 

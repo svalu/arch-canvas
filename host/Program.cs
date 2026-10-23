@@ -30,8 +30,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: System.Reflection.AssemblyCompany("heerang")]
 [assembly: System.Reflection.AssemblyProduct("Arch Canvas")]
 [assembly: System.Reflection.AssemblyCopyright("2026 heerang")]
-[assembly: System.Reflection.AssemblyVersion("0.7.0.0")]
-[assembly: System.Reflection.AssemblyFileVersion("0.7.0.0")]
+[assembly: System.Reflection.AssemblyVersion("0.8.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("0.8.0.0")]
 
 static class Program
 {
@@ -88,7 +88,7 @@ static class Program
 /// <summary>EXE에 내장된 리소스(app/..., bin/...)를 data 폴더에 풀고, bin의 DLL을 로드한다.</summary>
 static class Bootstrap
 {
-    public const string AppVersion = "0.7.0";
+    public const string AppVersion = "0.8.0";
     public static readonly string ExePath = Assembly.GetExecutingAssembly().Location;
     public static readonly string BaseDir = Path.GetDirectoryName(ExePath);
     public static string DataDir;    // EXE 옆 data\ (쓰기 불가하면 %LocalAppData%\ArchCanvas\data)
@@ -1141,7 +1141,7 @@ static class PptClipboard
         if (en != null && spId.TryGetValue(S(en, "id") ?? "", out eid)) x.Append("<a:endCxn id=\"" + eid + "\" idx=\"" + L(en, "idx") + "\"/>");
         x.Append("</a:cNvCxnSpPr></a:nvCxnSpPr>");
         x.Append("<a:spPr>" + Xfrm(s, L(s, "rot"), B(s, "flipH"), B(s, "flipV")));
-        x.Append("<a:prstGeom prst=\"" + (S(s, "prst") ?? "straightConnector1") + "\"><a:avLst/></a:prstGeom>");
+        x.Append("<a:prstGeom prst=\"" + (S(s, "prst") ?? "straightConnector1") + "\">" + (s.ContainsKey("adj") ? "<a:avLst><a:gd name=\"adj1\" fmla=\"val " + L(s, "adj") + "\"/></a:avLst>" : "<a:avLst/>") + "</a:prstGeom>");
         var line = s.ContainsKey("line") ? s["line"] as Dictionary<string, object> : new Dictionary<string, object>();
         x.Append(Ln(line, S(s, "head") ?? "none", S(s, "tail") ?? "triangle"));
         x.Append("</a:spPr></a:cxnSp>");
