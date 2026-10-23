@@ -1,7 +1,7 @@
 // 그래프 -> SVG 문자열 -> PNG. 캔버스 DOM 을 캡처하지 않고 그래프에서 직접 그리므로 선택 영역/투명 배경/2배 해상도가 정확하다.
 // 아이콘은 SVG 원본(data URI)을 <image> 로 넣어서 래스터화해도 선명하다. 좌표 계산은 캔버스/PPT 와 같은 geometry.js.
 import { ICON_SIZE, GROUP_ICON_SIZE, LABEL_WIDTH, ICON_LABEL_GAP, LABEL_DROP, sortGroups } from '../model/schema.js';
-import { absoluteRects, edgeGeometry, edgePath } from '../model/geometry.js';
+import { absoluteRects, edgeGeometry, edgePath, endRect } from '../model/geometry.js';
 import { LABEL_PX, INK, GROUP_LABEL_PAD, groupPaint, drawnIds } from './scene.js';
 import { isOverlay } from '../model/contain.js';
 
@@ -66,7 +66,8 @@ export function graphToSvg(graph, catalog, include = null, { background = 'trans
   const cards = graph.nodes.filter((n) => has(n.id) && n.type === 'card');
   const nodes = graph.nodes.filter((n) => has(n.id) && n.type !== 'card' && catalog.icons.has(n.icon));
   const drawn = drawnIds(graph, catalog);   // 아이콘을 모르는 노드로 가는 선은 빼서 끊긴 선이 남지 않게
-  const edges = graph.edges.filter((e) => has(e.id) && has(e.source) && has(e.target) && drawn.has(e.source) && drawn.has(e.target) && rects.has(e.source) && rects.has(e.target));
+  const okEnd = (id, pt) => (id ? has(id) && drawn.has(id) && rects.has(id) : !!pt);   // 빈 끝(좌표)도 그린다
+  const edges = graph.edges.filter((e) => has(e.id) && okEnd(e.source, e.sp) && okEnd(e.target, e.tp));
 
   // 범위
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -74,10 +75,11 @@ export function graphToSvg(graph, catalog, include = null, { background = 'trans
   for (const g of groups) { const r = rects.get(g.id); grow(r.x, r.y, r.w, r.h); }
   for (const n of nodes) { const r = rects.get(n.id); grow(r.x - (LABEL_WIDTH - ICON_SIZE) / 2, r.y, LABEL_WIDTH, ICON_SIZE + (n.label ? LABEL_DROP : 0)); }
   for (const c of cards) { const r = rects.get(c.id); grow(r.x, r.y, r.w, r.h); }
+  for (const e of edges) for (const p of [e.sp, e.tp]) if (p) grow(p.x - 6, p.y - 6, 12, 12);   // 빈 끝도 범위에
   const texts = graph.nodes.filter((n) => has(n.id) && (n.type === 'text' || n.type === 'badge'));
   for (const c of texts) { const r = rects.get(c.id); grow(r.x, r.y, r.w, r.h); }
   const edgeGeos = edges.map((e) => {
-    const geo = edgeGeometry(rects.get(e.source), rects.get(e.target), labeled.has(e.source) ? LABEL_DROP : 0, labeled.has(e.target) ? LABEL_DROP : 0);
+    const geo = edgeGeometry(endRect(rects, e.source, e.sp), endRect(rects, e.target, e.tp), labeled.has(e.source) ? LABEL_DROP : 0, labeled.has(e.target) ? LABEL_DROP : 0);
     const path = edgePath(geo, e.shape, e.bend);
     grow(Math.min(geo.p1.x, geo.p2.x), Math.min(geo.p1.y, geo.p2.y), Math.abs(geo.p1.x - geo.p2.x), Math.abs(geo.p1.y - geo.p2.y));
     return { e, geo, path };

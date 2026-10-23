@@ -96,7 +96,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.8.0';
+export const APP_VERSION = '0.8.1';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -1250,12 +1250,12 @@ function Editor() {
       { label: '화살표', options: [['end', '끝'], ['both', '양쪽'], ['none', '없음']], value: same('arrow'), onPick: (v) => updateMany(ids, { arrow: v }) },
       'sep',
       ...(many ? [] : [{ label: '라벨 바꾸기…', action: () => { const v = window.prompt('연결선 라벨', d.label || ''); if (v != null) updateItem(edge.id, { label: v }); } }]),
-      { label: many ? `방향 뒤집기 (${ids.length}개)` : '방향 뒤집기', action: () => { const g = currentGraph(); for (const ed of g.edges) if (ids.includes(ed.id)) [ed.source, ed.target] = [ed.target, ed.source]; tryCommit(g); } },
+      { label: many ? `방향 뒤집기 (${ids.length}개)` : '방향 뒤집기', action: () => { const g = currentGraph(); for (const ed of g.edges) if (ids.includes(ed.id)) { [ed.source, ed.target] = [ed.target, ed.source]; [ed.sp, ed.tp] = [ed.tp, ed.sp]; if (!ed.sp) delete ed.sp; if (!ed.tp) delete ed.tp; } tryCommit(g); } },
       { label: 'AI에게 물어보기', ask: true, action: () => (many ? askSelRef.current?.('') : askAboutEdge(edge)) },
       'sep',
       { label: many ? `${ids.length}개 삭제` : '삭제', hint: 'Delete', danger: true, action: () => removeItems(ids) },
     ];
-    setCtx({ x: e.clientX, y: e.clientY, title: many ? `연결선 ${ids.length}개 · 한꺼번에 바꾸기` : `연결선 ${labelOf(edge.source)} → ${labelOf(edge.target)}`, items });
+    setCtx({ x: e.clientX, y: e.clientY, title: many ? `연결선 ${ids.length}개 · 한꺼번에 바꾸기` : `연결선 ${edge.data?.sp ? '빈 곳' : labelOf(edge.source)} → ${edge.data?.tp ? '빈 곳' : labelOf(edge.target)}`, items });
   }, [rf, updateItem, updateMany, currentGraph, tryCommit, askAboutEdge, removeItems, labelOf]);
   const askSelRef = useRef(null);
 
@@ -1518,20 +1518,30 @@ function Editor() {
   // 선 끝을 다른 노드로 옮기기
   useEffect(() => {
     const on = (ev) => {
-      const { id, end, node } = ev.detail;
+      const { id, end, node, point } = ev.detail;
       const g = currentGraph();
       const e = g.edges.find((x) => x.id === id);
-      if (!e || e[end] === node) return;
+      if (!e) return;
+      const ptKey = end === 'source' ? 'sp' : 'tp';
       const other = end === 'source' ? e.target : e.source;
+      // 빈 곳에 놓으면 그 자리에 끝이 남는다 (다른 끝은 요소에 붙어 있어야 한다)
+      if (!node) {
+        if (!point) return;
+        if (!other) { toastMsg('양쪽 끝을 모두 빈 곳에 둘 수는 없습니다. 한쪽은 요소에 연결하십시오.'); return; }
+        e[end] = null; e[ptKey] = point;
+        commit(g);
+        return;
+      }
+      if (e[end] === node) return;
       if (node === other) { toastMsg('같은 요소끼리는 연결할 수 없습니다.'); return; }
       const s2 = end === 'source' ? node : e.source, t2 = end === 'target' ? node : e.target;
       if (g.edges.some((x) => x.id !== id && x.source === s2 && x.target === t2)) { toastMsg('이미 같은 연결선이 있습니다.'); return; }
-      e[end] = node;
+      e[end] = node; delete e[ptKey];
       if (tryCommit(g)) toastMsg(`연결 대상을 "${labelOf(node)}"(으)로 바꿨습니다. Ctrl+Z 로 되돌릴 수 있습니다.`, 3000);
     };
     window.addEventListener('arch-reconnect', on);
     return () => window.removeEventListener('arch-reconnect', on);
-  }, [currentGraph, tryCommit, toastMsg, labelOf]);
+  }, [currentGraph, tryCommit, commit, toastMsg, labelOf]);
 
   // 직각선 꺾이는 위치
   useEffect(() => {
@@ -2115,7 +2125,7 @@ function RulesPanel({ violations, nodes, edges, onPick, onAsk }) {
     const n = nodes.find((x) => x.id === id);
     if (n) return nodeName(n);
     const e = edges.find((x) => x.id === id);
-    return e ? `연결선 ${nodeName(nodes.find((x) => x.id === e.source))} → ${nodeName(nodes.find((x) => x.id === e.target))}` : '';
+    return e ? `연결선 ${e.data?.sp ? '빈 곳' : nodeName(nodes.find((x) => x.id === e.source))} → ${e.data?.tp ? '빈 곳' : nodeName(nodes.find((x) => x.id === e.target))}` : '';
   };
   return (
     <div className="insp">
@@ -2170,7 +2180,7 @@ function Help({ isDesktop, onPatch, onTour, onCheckUpdate, updBusy, updInfo, onT
       <p><b>그룹</b> 그룹 안에 놓으면 들어가고, 밖으로 끌면 나옵니다. 그룹을 선택하면 모서리로 크기 조절. 여러 개 고르고 Ctrl+G 로 묶기.</p>
       <p><b>복사·붙여넣기</b> 요소를 선택하고 Ctrl+C, 마우스를 둔 자리에 Ctrl+V. 다른 탭에도 붙일 수 있습니다. Ctrl+X 잘라내기, Ctrl+D 복제(그룹은 안의 것까지). 선택이 없을 때 Ctrl+C 는 그림(PNG) 복사입니다.</p>
       <p><b>지우기</b> Delete. <b>이름</b> 더블클릭 또는 F2. <b>옮기기</b> 화살표 키(Shift: 10px). <b>되돌리기</b> Ctrl+Z / Ctrl+Y. <b>선택 해제</b> Esc.</p>
-      <p><b>상자와 레이어</b> 소속은 화면 위치 그대로입니다: 상자 안에 놓은 것은 그 상자를 따라 움직이고, 끄는 동안 들어갈 상자가 빛납니다. 상자만 옮기려면 Alt 를 누른 채 끄십시오. ASG·보안 그룹 같은 겹치는 상자는 아무것도 품지 않고 테두리만 움직입니다. 앞뒤 순서는 오른쪽 클릭 [맨 앞으로 가져오기 · 뒤로 보내기] 또는 Ctrl+[ / Ctrl+] 로 바꾸고, Ctrl+G 로 여러 개를 묶으면 하나를 클릭해도 함께 선택되고 함께 움직입니다(풀기 Ctrl+Shift+G). 잠근 것(Ctrl+L)은 어떤 방법으로도 움직이지 않고 자물쇠가 보입니다. 직각선을 선택하면 가운데 구간에 손잡이가 생겨 꺾이는 위치를 옮길 수 있고(두 번 클릭하면 가운데로), PowerPoint 로 보낼 때도 같은 위치로 갑니다. 상자는 안에 든 것보다 작게 줄어들지 않습니다. 전체 순서를 한눈에 보려면 오른쪽 클릭 [레이어 목록 보기]를 누르십시오(보기 설정 › 고급에서 툴바 버튼으로 둘 수 있습니다).</p>
+      <p><b>상자와 레이어</b> 소속은 화면 위치 그대로입니다: 상자 안에 놓은 것은 그 상자를 따라 움직이고, 끄는 동안 들어갈 상자가 빛납니다. 상자만 옮기려면 Alt 를 누른 채 끄십시오. ASG·보안 그룹 같은 겹치는 상자는 아무것도 품지 않고 테두리만 움직입니다. 앞뒤 순서는 오른쪽 클릭 [맨 앞으로 가져오기 · 뒤로 보내기] 또는 Ctrl+[ / Ctrl+] 로 바꾸고, Ctrl+G 로 여러 개를 묶으면 하나를 클릭해도 함께 선택되고 함께 움직입니다(풀기 Ctrl+Shift+G). 잠근 것(Ctrl+L)은 어떤 방법으로도 움직이지 않고 자물쇠가 보입니다. 선을 선택하면 양 끝 손잡이로 연결 대상을 바꾸거나 빈 곳에 끝을 둘 수 있고, 직각선은 가운데 구간에 손잡이가 생겨 꺾이는 위치를 옮길 수 있고(두 번 클릭하면 가운데로), PowerPoint 로 보낼 때도 같은 위치로 갑니다. 상자는 안에 든 것보다 작게 줄어들지 않습니다. 전체 순서를 한눈에 보려면 오른쪽 클릭 [레이어 목록 보기]를 누르십시오(보기 설정 › 고급에서 툴바 버튼으로 둘 수 있습니다).</p>
       <p><b>조각 템플릿</b> 자주 쓰는 묶음(예: 2-AZ 웹 계층)을 선택해 오른쪽 클릭 [조각 템플릿으로 저장]. 템플릿 메뉴 [내 조각]에서 고르면 지금 그림에 끼워 넣습니다.</p>
       <p><b>정렬</b> 여러 개를 선택하면 오른쪽 패널과 오른쪽 클릭 메뉴에 정렬·간격·크기 맞추기가 나옵니다. 끌 때는 분홍 안내선에 맞춰 붙습니다.</p>
       <p><b>글상자·번호</b> 팔레트 위쪽 [글상자] [번호]. 번호는 다음 수가 자동으로 붙습니다.</p>

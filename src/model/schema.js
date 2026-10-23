@@ -137,11 +137,15 @@ export function normalizeGraph(input) {
   const ids = new Set([...out.groups.map((x) => x.id), ...out.nodes.map((x) => x.id)]);
   out.edges = [];
   for (const e of raw.edges) {
-    const source = ref(e.source), target = ref(e.target);
+    let source = ref(e.source), target = ref(e.target);
     const id = idOf(e, 'e');   // 버려지는 엣지도 id 는 예약해 둔다(뒤 핀과 안 겹치게)
-    if (!ids.has(source) || !ids.has(target) || source === target) continue;
+    // 한쪽 끝은 빈 곳(좌표)일 수 있다. 다른 한쪽은 반드시 요소에 붙어 있어야 한다
+    const sp = ids.has(source) ? null : ptOf(e.sp), tp = ids.has(target) ? null : ptOf(e.tp);
+    if (!ids.has(source)) source = null;
+    if (!ids.has(target)) target = null;
+    if ((!source && !sp) || (!target && !tp) || (!source && !target) || (source && source === target)) continue;
     out.edges.push({
-      id, source, target,
+      id, source, target, ...(sp ? { sp } : {}), ...(tp ? { tp } : {}),
       label: toText(e.label),
       line: LINES.includes(e.line) ? e.line : EDGE_DEFAULTS.line,
       shape: SHAPES.includes(e.shape) ? e.shape : EDGE_DEFAULTS.shape,
@@ -164,6 +168,9 @@ export function normalizeGraph(input) {
   }
   return out;
 }
+
+// 선의 빈 끝(좌표)
+const ptOf = (p) => (p && Number.isFinite(+p.x) && Number.isFinite(+p.y) ? { x: Math.round(+p.x), y: Math.round(+p.y) } : null);
 
 // 묶음 id: 짧은 문자열만
 const setOf = (x) => (typeof x.set === 'string' && /^[\w-]{1,40}$/.test(x.set) ? x.set : null);

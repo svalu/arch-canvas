@@ -62,6 +62,9 @@ export function edgeGeometry(a, b, dropA = 0, dropB = 0) {
   return { s, t, p1, p2, horizontal: s === 'l' || s === 'r' };
 }
 
+/** 선 한쪽 끝의 사각형: 요소면 그 사각형, 빈 곳이면 크기 0 인 점 */
+export const endRect = (rects, id, pt) => (id ? rects.get(id) : pt ? { x: pt.x, y: pt.y, w: 0, h: 0 } : null);
+
 /** 직각선 꺾이는 위치: 시작점→끝점 사이 비율(0.5 = 가운데). PowerPoint bentConnector3 의 adj1 과 같은 뜻. */
 export const bendOf = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0.5);
 export const isBent = (geo, shape) => shape === 'elbow' && Math.abs(geo.p1.x - geo.p2.x) >= 1 && Math.abs(geo.p1.y - geo.p2.y) >= 1;

@@ -28,7 +28,7 @@ export function summarizeGraph(graph, catalog) {
   walk('', 0);
   lines.push('', '## 연결선');
   if (!graph.edges.length) lines.push('(없음)');
-  for (const e of graph.edges) lines.push(`- ${e.id}: ${e.source} -> ${e.target}${e.label ? ` "${e.label}"` : ''}${e.arrow === 'both' ? ' (양방향)' : ''}${e.line === 'dashed' ? ' (점선)' : ''}`);
+  for (const e of graph.edges) lines.push(`- ${e.id}: ${e.source ?? '(빈 곳)'} -> ${e.target ?? '(빈 곳)'}${e.label ? ` "${e.label}"` : ''}${e.arrow === 'both' ? ' (양방향)' : ''}${e.line === 'dashed' ? ' (점선)' : ''}`);
   return lines.join('\n');
 }
 

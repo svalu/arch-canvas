@@ -866,3 +866,7 @@ details > summary { list-style: none; } details > summary::-webkit-details-marke
 .edge-bend.v { width: 18px; height: 10px; cursor: ns-resize; }
 .edge-bend:hover { background: #2E73B8; }
 .app.theme-dark .edge-end, .app.theme-dark .edge-bend { background: #12262a; border-color: #2DD4BF; }
+
+/* 선의 빈 끝(어디에도 연결 안 됨): 속이 빈 네모 */
+.edge-end.free { border-radius: 2px; background: #fff; border-style: dashed; }
+.edge-end.dragging { opacity: .9; cursor: grabbing; }

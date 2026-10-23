@@ -49,13 +49,13 @@ const ARROW = (theme) => ({ type: 'arrowclosed', color: theme === 'dark' ? '#7FE
 export function edgeToFlow(e, pins = [], theme = 'light') {
   return {
     id: e.id,
-    source: e.source,
-    target: e.target,
+    source: e.source ?? e.target,
+    target: e.target ?? e.source,
     type: 'arch',
     zIndex: Z_EDGE,
     ...(e.arrow !== 'none' ? { markerEnd: ARROW(theme) } : {}),
     ...(e.arrow === 'both' ? { markerStart: ARROW(theme) } : {}),
-    data: { label: e.label, line: e.line, shape: e.shape, arrow: e.arrow, pins, ...(typeof e.bend === 'number' ? { bend: e.bend } : {}) },
+    data: { label: e.label, line: e.line, shape: e.shape, arrow: e.arrow, pins, ...(typeof e.bend === 'number' ? { bend: e.bend } : {}), ...(e.sp ? { sp: e.sp } : {}), ...(e.tp ? { tp: e.tp } : {}) },
   };
 }
 
@@ -96,7 +96,8 @@ export function flowToGraph(nodes, edges, { title = '새 다이어그램', annot
     groups: sortGroups(groups),
     nodes: items,
     edges: edges.map((e) => ({
-      id: e.id, source: e.source, target: e.target,
+      id: e.id, source: e.data?.sp ? null : e.source, target: e.data?.tp ? null : e.target,
+      ...(e.data?.sp ? { sp: e.data.sp } : {}), ...(e.data?.tp ? { tp: e.data.tp } : {}),
       label: e.data?.label ?? '', line: e.data?.line ?? 'solid', shape: e.data?.shape ?? 'straight', arrow: e.data?.arrow ?? 'end',
       ...(typeof e.data?.bend === 'number' ? { bend: e.data.bend } : {}),
     })),

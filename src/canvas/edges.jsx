@@ -19,24 +19,35 @@ export const rectOfInternal = (n) => ({
 // 라벨 위에서 오른쪽 클릭해도 그 연결선 메뉴가 뜨게 App 으로 알린다
 const edgeCtx = (e, id) => { e.preventDefault(); e.stopPropagation(); window.dispatchEvent(new CustomEvent('arch-edge-ctx', { detail: { id, x: e.clientX, y: e.clientY } })); };
 
-// 선 끝 옮기기: 선택한 선의 양 끝 손잡이를 끌어 다른 노드에 놓으면 연결 대상이 바뀐다 (App 이 arch-reconnect 를 받아 반영)
+// 선 끝 옮기기: 선택한 선의 양 끝 손잡이를 끈다. 끄는 동안 선 자체가 커서를 따라오고,
+// 요소 위에 놓으면 그 요소에 연결, 빈 곳에 놓으면 그 자리에 끝이 남는다 (App 이 arch-reconnect 를 받아 반영)
 function useEndDrag(id) {
   const rf = useReactFlow();
-  const [drag, setDrag] = useState(null);   // { end, x, y } 흐름 좌표
-  const start = (end, from) => (e) => {
+  const [drag, setDrag] = useState(null);   // { end, x, y, node } 흐름 좌표, node = 지금 올라가 있는 요소
+  const start = (end) => (e) => {
     e.preventDefault(); e.stopPropagation();
-    let lit = null;
-    const light = (el) => { if (lit === el) return; lit?.classList.remove('reconnect-target'); lit = el; lit?.classList.add('reconnect-target'); };
-    const nodeAt = (ev) => document.elementsFromPoint(ev.clientX, ev.clientY).map((el) => el.closest?.('.react-flow__node')).find(Boolean) || null;
-    const move = (ev) => { const p = rf.screenToFlowPosition({ x: ev.clientX, y: ev.clientY }); setDrag({ end, x: p.x, y: p.y }); light(nodeAt(ev)); };
-    const up = (ev) => {
-      window.removeEventListener('pointermove', move);
-      const hit = nodeAt(ev); light(null); setDrag(null);
-      if (hit?.dataset.id) window.dispatchEvent(new CustomEvent('arch-reconnect', { detail: { id, end, node: hit.dataset.id } }));
+    const el = e.currentTarget;
+    try { el.setPointerCapture(e.pointerId); } catch { /* 없어도 동작 */ }
+    let lit = null, raf = 0, last = e;
+    const light = (n) => { if (lit === n) return; lit?.classList.remove('reconnect-target'); lit = n; lit?.classList.add('reconnect-target'); };
+    const nodeAt = (ev) => document.elementsFromPoint(ev.clientX, ev.clientY).map((x) => x.closest?.('.react-flow__node')).find(Boolean) || null;
+    const frame = () => {
+      raf = 0;
+      const p = rf.screenToFlowPosition({ x: last.clientX, y: last.clientY });
+      const n = nodeAt(last); light(n);
+      setDrag({ end, x: p.x, y: p.y, node: n?.dataset.id || null });
     };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up, { once: true });
-    setDrag({ end, x: from.x, y: from.y });
+    const move = (ev) => { last = ev; if (!raf) raf = requestAnimationFrame(frame); };
+    const done = (ev) => {
+      el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', done); el.removeEventListener('pointercancel', done);
+      if (raf) cancelAnimationFrame(raf);
+      const hit = ev.type === 'pointerup' ? nodeAt(ev) : null; light(null); setDrag(null);
+      if (ev.type !== 'pointerup') return;
+      const p = rf.screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
+      window.dispatchEvent(new CustomEvent('arch-reconnect', { detail: { id, end, node: hit?.dataset.id || null, point: { x: Math.round(p.x), y: Math.round(p.y) } } }));
+    };
+    el.addEventListener('pointermove', move); el.addEventListener('pointerup', done); el.addEventListener('pointercancel', done);
+    frame();
   };
   return { drag, start };
 }
@@ -69,21 +80,29 @@ function useBendDrag(id) {
 }
 
 export const ArchEdge = memo(function ArchEdge({ id, source, target, data = {}, selected, markerStart, markerEnd }) {
+  const rf = useReactFlow();
   const a = useInternalNode(source);
   const b = useInternalNode(target);
   const { drag, start } = useEndDrag(id);
   const bd = useBendDrag(id);
   if (!a || !b) return null;
-  const geo = edgeGeometry(rectOfInternal(a), rectOfInternal(b), dropOf(a), dropOf(b));
+  // 끝 사각형: 요소, 빈 끝(좌표), 또는 끄는 중인 커서 위치
+  const rectOf = (end, n, pt) => {
+    if (drag?.end === end) {
+      const over = drag.node && drag.node !== (end === 'source' ? target : source) ? rf.getInternalNode(drag.node) : null;
+      return over ? [rectOfInternal(over), dropOf(over)] : [{ x: drag.x, y: drag.y, w: 0, h: 0 }, 0];
+    }
+    return pt ? [{ x: pt.x, y: pt.y, w: 0, h: 0 }, 0] : [rectOfInternal(n), dropOf(n)];
+  };
+  const [ra, da] = rectOf('source', a, data.sp), [rb, db] = rectOf('target', b, data.tp);
+  const geo = edgeGeometry(ra, rb, da, db);
   const bend = bd.bend ?? bendOf(data.bend);
   const { d, mid } = edgePath(geo, data.shape, bend);
   const bent = isBent(geo, data.shape);
   // 손잡이: 가운데 구간 위. 이름표가 있으면 겹치지 않게 구간의 1/4 지점
   const hp = !data.label ? mid : geo.horizontal ? { x: mid.x, y: geo.p1.y + (geo.p2.y - geo.p1.y) * 0.25 } : { x: geo.p1.x + (geo.p2.x - geo.p1.x) * 0.25, y: mid.y };
-  const fixed = drag ? (drag.end === 'source' ? geo.p2 : geo.p1) : null;
   return (
     <>
-      {drag && <path className="edge-reconnect-preview" d={`M${fixed.x},${fixed.y} L${drag.x},${drag.y}`} />}
       <BaseEdge
         id={id}
         path={d}
@@ -92,14 +111,14 @@ export const ArchEdge = memo(function ArchEdge({ id, source, target, data = {}, 
         interactionWidth={18}
         style={{ stroke: selected ? '#2E73B8' : EDGE_COLOR(), strokeWidth: selected ? LINE_PX + 1 : LINE_PX + 0.4, strokeDasharray: data.line === 'dashed' ? '6 4' : undefined }}
       />
-      {selected && !drag && (
+      {(selected || drag) && (
         <EdgeLabelRenderer>
-          {[['source', geo.p1], ['target', geo.p2]].map(([end, p]) => (
-            <div key={end} className="edge-end nodrag nopan" title="끌어서 다른 요소에 놓으면 연결 대상이 바뀝니다"
+          {[['source', geo.p1, data.sp], ['target', geo.p2, data.tp]].map(([end, p, free]) => (
+            <div key={end} className={'edge-end nodrag nopan' + (free ? ' free' : '') + (drag?.end === end ? ' dragging' : '')} title="끌어서 다른 요소에 놓으면 연결 대상이 바뀌고, 빈 곳에 놓으면 그 자리에 끝이 남습니다"
               style={{ transform: `translate(-50%,-50%) translate(${p.x}px,${p.y}px)` }}
-              onPointerDown={start(end, p)} />
+              onPointerDown={start(end)} />
           ))}
-          {bent && (
+          {bent && !drag && (
             <div className={'edge-bend nodrag nopan ' + (geo.horizontal ? 'h' : 'v')} title="끌어서 꺾이는 위치를 옮깁니다 · 두 번 클릭하면 가운데로"
               style={{ transform: `translate(-50%,-50%) translate(${hp.x}px,${hp.y}px)` }}
               onPointerDown={bd.start(geo)}

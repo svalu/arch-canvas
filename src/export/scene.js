@@ -12,7 +12,7 @@
 
 import { ICON_SIZE, GROUP_ICON_SIZE, LABEL_WIDTH, ICON_LABEL_GAP, ICON_LABEL_H, LABEL_DROP, sortGroups } from '../model/schema.js';
 import { isOverlay } from '../model/contain.js';
-import { absoluteRects, descendants, edgeGeometry, edgePath, bendOf, SIDE_IDX } from '../model/geometry.js';
+import { absoluteRects, descendants, edgeGeometry, edgePath, bendOf, endRect, SIDE_IDX } from '../model/geometry.js';
 export { ICON_LABEL_GAP, ICON_LABEL_H };
 
 export const EMU_PER_PX = 11250;
@@ -64,7 +64,7 @@ export function selectionIds(graph, selected) {
     if (e) { keep.add(e.source); keep.add(e.target); }
   }
   for (const e of graph.edges) {
-    if (keep.has(e.source) && keep.has(e.target)) keep.add(e.id);
+    if ((!e.source || keep.has(e.source)) && (!e.target || keep.has(e.target))) keep.add(e.id);
   }
   return keep;
 }
@@ -134,16 +134,17 @@ export function graphToScene(graph, catalog, include = null, { textScale = 1 } =
   const edgeLabels = [];
   const drawn = drawnIds(graph, catalog);
   for (const e of graph.edges) {
-    if (!has(e.id) || !has(e.source) || !has(e.target) || !drawn.has(e.source) || !drawn.has(e.target)) continue;
-    const a = rects.get(e.source), b = rects.get(e.target);
+    const okEnd = (id, pt) => (id ? has(id) && drawn.has(id) : !!pt);
+    if (!has(e.id) || !okEnd(e.source, e.sp) || !okEnd(e.target, e.tp)) continue;
+    const a = endRect(rects, e.source, e.sp), b = endRect(rects, e.target, e.tp);
     if (!a || !b) continue;
     const geo = edgeGeometry(a, b, labeled.has(e.source) ? LABEL_DROP : 0, labeled.has(e.target) ? LABEL_DROP : 0);
     const anchor = (id, side) => ({ id: side === 'b' && labeled.has(id) ? id + '#label' : id, idx: SIDE_IDX[side] });
     shapes.push({
       t: 'cxn', id: e.id, name: e.label ? `연결: ${e.label}` : '연결선',
       ...connectorXfrm(geo, e.shape, e.bend),
-      st: anchor(e.source, geo.s),
-      end: anchor(e.target, geo.t),
+      ...(e.source ? { st: anchor(e.source, geo.s) } : {}),   // 빈 끝은 도형에 붙이지 않는다
+      ...(e.target ? { end: anchor(e.target, geo.t) } : {}),
       line: { color: edgeColor, w: LINE_EMU, dash: e.line === 'dashed' ? 'dash' : null },
       head: e.arrow === 'both' ? 'triangle' : 'none',
       tail: e.arrow === 'none' ? 'none' : 'triangle',
