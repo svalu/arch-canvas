@@ -96,7 +96,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.8.2';
+export const APP_VERSION = '0.8.3';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -2350,8 +2350,9 @@ function UpdateDialog({ open, info, busy, onClose, onApply }) {
   );
 }
 
-// 의견 보내기: 깃허브 이슈 작성 화면을 미리 채워서 연다(깃허브 계정 필요). 계정이 없으면 [내용 복사] 후 메신저로.
+// 의견 보내기: [보내기]를 누르면 계정 없이 바로 만든 사람 메일로 간다(Web3Forms). 키가 없거나 실패하면 깃허브 이슈 / 내용 복사.
 const FEEDBACK_REPO = 'svalu/arch-canvas';
+const FEEDBACK_KEY = '8006959b-6cdc-4fbe-aaf8-365afd626302';   // Web3Forms access key (공개용 키: 받는 메일 주소는 Web3Forms 쪽에만 있고 코드에는 없다)
 function Feedback({ isDesktop, onToast, stats }) {
   const [kind, setKind] = useState('개선');
   const [text, setText] = useState('');
@@ -2362,6 +2363,25 @@ function Feedback({ isDesktop, onToast, stats }) {
     return `${text.trim()}\n\n${name.trim() ? `보낸 사람: ${name.trim()}\n` : ''}${withInfo ? `\n---\n${env}\n` : ''}`;
   };
   const title = () => `[${kind}] ${text.trim().split('\n')[0].slice(0, 60)}`;
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const sendMail = async () => {
+    if (!text.trim()) { onToast('내용을 적어 주십시오.'); return; }
+    try { localStorage.setItem('arch-canvas:fb-name', name.trim()); } catch { /* */ }
+    setSending(true);
+    try {
+      const r = await fetch('https://api.web3forms.com/submit', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ access_key: FEEDBACK_KEY, subject: `[Arch Canvas 피드백] ${title()}`, from_name: name.trim() || 'Arch Canvas 사용자', kind, version: APP_VERSION, message: body(), botcheck: false }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j.success === false) throw new Error(j.message || 'HTTP ' + r.status);
+      setText(''); setSent(true);
+      onToast('전달했습니다. 고맙습니다.', 3500);
+    } catch (err) {
+      onToast(`보내지 못했습니다 (${String(err.message || err).slice(0, 60)}). 인터넷 연결을 확인하거나 [내용 복사] 후 메신저로 보내 주십시오.`, 7000);
+    } finally { setSending(false); }
+  };
   const send = () => {
     if (!text.trim()) { onToast('내용을 적어 주십시오.'); return; }
     try { localStorage.setItem('arch-canvas:fb-name', name.trim()); } catch { /* */ }
@@ -2380,8 +2400,17 @@ function Feedback({ isDesktop, onToast, stats }) {
       <textarea className="short" value={text} onChange={(e) => setText(e.target.value)} placeholder={kind === '버그' ? '무엇을 했을 때 어떻게 됐는지 적어 주십시오. 예) 상자를 끌었더니 안의 아이콘이 같이 움직였다' : kind === '질문' ? '궁금한 점을 적어 주십시오' : '이렇게 되면 좋겠다는 점을 적어 주십시오'} />
       <input value={name} onChange={(e) => setName(e.target.value)} placeholder="이름 (선택)" />
       <label className="row-check"><input type="checkbox" checked={withInfo} onChange={(e) => setWithInfo(e.target.checked)} /> 버전·환경 정보 함께 보내기 (다이어그램 내용은 보내지 않습니다)</label>
-      <div className="row"><button className="primary" onClick={send}>깃허브로 보내기</button><button onClick={copy}>내용 복사</button></div>
-      <p className="hint">깃허브 계정이 있으면 [깃허브로 보내기], 없으면 [내용 복사] 후 메신저로 보내 주십시오.</p>
+      {FEEDBACK_KEY ? (
+        <>
+          <div className="row"><button className="primary" onClick={sendMail} disabled={sending || !text.trim()}>{sending ? '보내는 중…' : '보내기'}</button><button onClick={copy}>내용 복사</button></div>
+          <p className="hint">{sent ? '전달됐습니다. 더 있으면 이어서 적어 주십시오.' : '계정 없이 바로 만든 사람에게 전달됩니다.'} 깃허브 계정이 있으면 <a href="#" onClick={(e) => { e.preventDefault(); send(); }}>깃허브 이슈로 남길 수도</a> 있습니다.</p>
+        </>
+      ) : (
+        <>
+          <div className="row"><button className="primary" onClick={send}>깃허브로 보내기</button><button onClick={copy}>내용 복사</button></div>
+          <p className="hint">깃허브 계정이 있으면 [깃허브로 보내기], 없으면 [내용 복사] 후 메신저로 보내 주십시오.</p>
+        </>
+      )}
     </div>
   );
 }
