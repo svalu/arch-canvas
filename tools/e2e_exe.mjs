@@ -39,7 +39,7 @@ try {
   if (!(await evaluate('!!window.__arch'))) throw new Error('앱이 준비되지 않았어 (__arch 없음)');
   console.log('app ready, desktop bridge:', await evaluate('window.desktop.version'));
   // 의견 보내기 경로(Web3Forms)가 EXE 안에서 막히지 않는지: 틀린 키로 보내 메일은 안 가고 응답만 받는다
-  console.log('feedback endpoint:', await evaluate(`fetch('https://api.web3forms.com/submit', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ access_key: '00000000-0000-0000-0000-000000000000', message: 'e2e' }) }).then(async (r) => 'HTTP ' + r.status + ' ' + JSON.stringify(await r.json()).slice(0, 80)).catch((e) => 'BLOCKED ' + e.message)`));
+  console.log('feedback endpoint:', await evaluate(`fetch('https://script.google.com/macros/s/AKfycbzpoNnGmKrvHmDmiZ4cK-EERURVAcLLQUlFUzTMBv-iybScq9xje8_22vRza8AmkoIfQQ/exec').then(async (r) => 'HTTP ' + r.status + ' ' + JSON.stringify(await r.json()).slice(0, 80)).catch((e) => 'BLOCKED ' + e.message)`));
 
   await evaluate(`window.__arch.loadTemplate('three-tier-web')`);
   await sleep(400);

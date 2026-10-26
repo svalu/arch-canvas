@@ -96,7 +96,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.8.3';
+export const APP_VERSION = '0.8.4';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -2350,16 +2350,18 @@ function UpdateDialog({ open, info, busy, onClose, onApply }) {
   );
 }
 
-// 의견 보내기: [보내기]를 누르면 계정 없이 바로 만든 사람 메일로 간다(Web3Forms). 키가 없거나 실패하면 깃허브 이슈 / 내용 복사.
+// 의견 보내기: [보내기]를 누르면 계정 없이 만든 사람의 구글 시트에 한 줄로 쌓이고 메일 알림이 간다
+// (구글 Apps Script 웹 앱, 코드는 tools/feedback/Code.gs). 주소가 없거나 실패하면 깃허브 이슈 / 내용 복사.
 const FEEDBACK_REPO = 'svalu/arch-canvas';
-const FEEDBACK_KEY = '8006959b-6cdc-4fbe-aaf8-365afd626302';   // Web3Forms access key (공개용 키: 받는 메일 주소는 Web3Forms 쪽에만 있고 코드에는 없다)
+const FEEDBACK_URL = 'https://script.google.com/macros/s/AKfycbzpoNnGmKrvHmDmiZ4cK-EERURVAcLLQUlFUzTMBv-iybScq9xje8_22vRza8AmkoIfQQ/exec';   // https://script.google.com/macros/s/…/exec
 function Feedback({ isDesktop, onToast, stats }) {
   const [kind, setKind] = useState('개선');
   const [text, setText] = useState('');
   const [name, setName] = useState(() => { try { return localStorage.getItem('arch-canvas:fb-name') || ''; } catch { return ''; } });
   const [withInfo, setWithInfo] = useState(true);
+  const envText = () => `- 버전: ${APP_VERSION} (${isDesktop ? 'EXE' : '브라우저'})\n- 환경: ${navigator.userAgent.replace(/\s*\(KHTML.*$/, '')}\n- 화면: 그룹 ${stats.groups} · 요소 ${stats.nodes} · 연결선 ${stats.edges} · ${stats.mode === 'card' ? '카드' : '인프라'} 모드 · ${stats.theme === 'dark' ? '다크' : '라이트'}`;
   const body = () => {
-    const env = `- 버전: ${APP_VERSION} (${isDesktop ? 'EXE' : '브라우저'})\n- 환경: ${navigator.userAgent.replace(/\s*\(KHTML.*$/, '')}\n- 화면: 그룹 ${stats.groups} · 요소 ${stats.nodes} · 연결선 ${stats.edges} · ${stats.mode === 'card' ? '카드' : '인프라'} 모드 · ${stats.theme === 'dark' ? '다크' : '라이트'}`;
+    const env = envText();
     return `${text.trim()}\n\n${name.trim() ? `보낸 사람: ${name.trim()}\n` : ''}${withInfo ? `\n---\n${env}\n` : ''}`;
   };
   const title = () => `[${kind}] ${text.trim().split('\n')[0].slice(0, 60)}`;
@@ -2370,12 +2372,13 @@ function Feedback({ isDesktop, onToast, stats }) {
     try { localStorage.setItem('arch-canvas:fb-name', name.trim()); } catch { /* */ }
     setSending(true);
     try {
-      const r = await fetch('https://api.web3forms.com/submit', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ access_key: FEEDBACK_KEY, subject: `[Arch Canvas 피드백] ${title()}`, from_name: name.trim() || 'Arch Canvas 사용자', kind, version: APP_VERSION, message: body(), botcheck: false }),
+      // text/plain 으로 보내야 브라우저가 사전 확인(preflight) 없이 바로 보낸다 (Apps Script 는 그걸 못 받음)
+      const r = await fetch(FEEDBACK_URL, {
+        method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ kind, text: text.trim(), name: name.trim(), version: APP_VERSION, app: isDesktop ? 'EXE' : '브라우저', env: withInfo ? envText().split('\n').slice(1).join('\n').replace(/^- /gm, '') : '', hp: '' }),   // 버전은 따로 칸이 있다
       });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok || j.success === false) throw new Error(j.message || 'HTTP ' + r.status);
+      if (!r.ok || j.ok !== true) throw new Error(j.error || 'HTTP ' + r.status);
       setText(''); setSent(true);
       onToast('전달했습니다. 고맙습니다.', 3500);
     } catch (err) {
@@ -2400,7 +2403,7 @@ function Feedback({ isDesktop, onToast, stats }) {
       <textarea className="short" value={text} onChange={(e) => setText(e.target.value)} placeholder={kind === '버그' ? '무엇을 했을 때 어떻게 됐는지 적어 주십시오. 예) 상자를 끌었더니 안의 아이콘이 같이 움직였다' : kind === '질문' ? '궁금한 점을 적어 주십시오' : '이렇게 되면 좋겠다는 점을 적어 주십시오'} />
       <input value={name} onChange={(e) => setName(e.target.value)} placeholder="이름 (선택)" />
       <label className="row-check"><input type="checkbox" checked={withInfo} onChange={(e) => setWithInfo(e.target.checked)} /> 버전·환경 정보 함께 보내기 (다이어그램 내용은 보내지 않습니다)</label>
-      {FEEDBACK_KEY ? (
+      {FEEDBACK_URL ? (
         <>
           <div className="row"><button className="primary" onClick={sendMail} disabled={sending || !text.trim()}>{sending ? '보내는 중…' : '보내기'}</button><button onClick={copy}>내용 복사</button></div>
           <p className="hint">{sent ? '전달됐습니다. 더 있으면 이어서 적어 주십시오.' : '계정 없이 바로 만든 사람에게 전달됩니다.'} 깃허브 계정이 있으면 <a href="#" onClick={(e) => { e.preventDefault(); send(); }}>깃허브 이슈로 남길 수도</a> 있습니다.</p>
