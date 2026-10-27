@@ -1,0 +1,125 @@
+{
+  "schema": "arch-canvas/graph@1",
+  "title": "뼈대: Region > VPC > AZ 3개",
+  "meta": {
+    "id": "skeleton-3az",
+    "section": "뼈대",
+    "name": "Region · VPC · AZ 3개",
+    "description": "AZ마다 Public / Private subnet (3개 AZ)"
+  },
+  "groups": [
+    {
+      "id": "region",
+      "kind": "region",
+      "label": "AWS Region",
+      "parent": null,
+      "x": 40,
+      "y": 20,
+      "w": 1450,
+      "h": 680
+    },
+    {
+      "id": "vpc",
+      "kind": "vpc",
+      "label": "VPC",
+      "parent": "region",
+      "x": 30,
+      "y": 50,
+      "w": 1390,
+      "h": 600
+    },
+    {
+      "id": "az-a",
+      "kind": "az",
+      "label": "Availability Zone A",
+      "parent": "vpc",
+      "x": 30,
+      "y": 90,
+      "w": 430,
+      "h": 480
+    },
+    {
+      "id": "pub-a",
+      "kind": "public-subnet",
+      "label": "Public subnet",
+      "parent": "az-a",
+      "x": 20,
+      "y": 40,
+      "w": 390,
+      "h": 190
+    },
+    {
+      "id": "priv-a",
+      "kind": "private-subnet",
+      "label": "Private subnet",
+      "parent": "az-a",
+      "x": 20,
+      "y": 250,
+      "w": 390,
+      "h": 200
+    },
+    {
+      "id": "az-b",
+      "kind": "az",
+      "label": "Availability Zone B",
+      "parent": "vpc",
+      "x": 480,
+      "y": 90,
+      "w": 430,
+      "h": 480
+    },
+    {
+      "id": "pub-b",
+      "kind": "public-subnet",
+      "label": "Public subnet",
+      "parent": "az-b",
+      "x": 20,
+      "y": 40,
+      "w": 390,
+      "h": 190
+    },
+    {
+      "id": "priv-b",
+      "kind": "private-subnet",
+      "label": "Private subnet",
+      "parent": "az-b",
+      "x": 20,
+      "y": 250,
+      "w": 390,
+      "h": 200
+    },
+    {
+      "id": "az-c",
+      "kind": "az",
+      "label": "Availability Zone C",
+      "parent": "vpc",
+      "x": 930,
+      "y": 90,
+      "w": 430,
+      "h": 480
+    },
+    {
+      "id": "pub-c",
+      "kind": "public-subnet",
+      "label": "Public subnet",
+      "parent": "az-c",
+      "x": 20,
+      "y": 40,
+      "w": 390,
+      "h": 190
+    },
+    {
+      "id": "priv-c",
+      "kind": "private-subnet",
+      "label": "Private subnet",
+      "parent": "az-c",
+      "x": 20,
+      "y": 250,
+      "w": 390,
+      "h": 200
+    }
+  ],
+  "nodes": [],
+  "edges": [],
+  "annotations": []
+}

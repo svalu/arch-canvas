@@ -96,7 +96,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.8.4';
+export const APP_VERSION = '0.8.5';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -676,6 +676,29 @@ function Editor() {
     }
   }, [currentGraph, rf]);
 
+  // 막힌 이동 되돌리기: 놓은 자리에서 원래 자리로 0.3초 동안 미끄러지듯 돌아간다 (선도 같이 따라온다)
+  const animateBack = useCallback((before) => {
+    const target = new Map(graphToFlow(normalizeGraph(before)).nodes.map((n) => [n.id, n]));
+    const from = new Map();
+    for (const n of rf.getNodes()) {
+      const t = target.get(n.id);
+      if (!t || (n.parentId ?? null) !== (t.parentId ?? null)) continue;
+      if (Math.abs(t.position.x - n.position.x) > 0.5 || Math.abs(t.position.y - n.position.y) > 0.5) from.set(n.id, { ...n.position });
+    }
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (!from.size || reduce) { commit(before, null); return; }
+    const t0 = performance.now(), D = 300, ease = (k) => 1 - Math.pow(1 - k, 3);
+    const step = (now) => {
+      const k = Math.min(1, (now - t0) / D), e = ease(k);
+      setNodes((ns) => ns.map((n) => {
+        const f = from.get(n.id); if (!f) return n;
+        const t = target.get(n.id).position;
+        return { ...n, position: { x: f.x + (t.x - f.x) * e, y: f.y + (t.y - f.y) * e } };
+      }));
+      if (k < 1) requestAnimationFrame(step); else commit(before, null);
+    };
+    requestAnimationFrame(step);
+  }, [rf, setNodes, commit]);
   const onNodeDragStop = useCallback((_e, _node, dragged) => {
     setDragHint(null);
     document.querySelectorAll('.react-flow__node.drop-target').forEach((el) => el.classList.remove('drop-target'));
@@ -706,8 +729,8 @@ function Editor() {
     g.groups = sortGroups(g.groups);
     const before = dragSnapshot.current;
     dragSnapshot.current = null;
-    if (!tryCommit(g, before) && before) commit(before, null);   // 규칙에 막히면 끌기 전 자리로 되돌림
-  }, [commit, tryCommit, currentGraph, rf]);
+    if (!tryCommit(g, before) && before) animateBack(before);   // 규칙에 막히면 끌기 전 자리로 부드럽게 되돌림
+  }, [commit, tryCommit, currentGraph, rf, animateBack]);
 
   // ----- 팔레트에서 떨어뜨리기 / 클릭으로 추가 -----
   const addAt = useCallback((payload, flowPos) => {
