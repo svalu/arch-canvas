@@ -163,6 +163,8 @@ export function HelpPanel({ isDesktop, ctx, slots = {}, on = {} }) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(null);         // 열린 항목 id 또는 'keys'
   const [dir, setDir] = useState('in');           // 밀려 들어오는 방향
+  const [unfold, setUnfold] = useState(() => new Set());   // 펼친 묶음 (기본은 모두 접힘)
+  const toggle = (id) => setUnfold((u) => { const n = new Set(u); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const listRef = useRef(null);
   const topics = useMemo(() => TOPICS.filter((t) => !t.desktop || isDesktop), [isDesktop]);
   const byId = useMemo(() => new Map(topics.map((t) => [t.id, t])), [topics]);
@@ -255,13 +257,15 @@ export function HelpPanel({ isDesktop, ctx, slots = {}, on = {} }) {
             )}
             <div className="hp-groups">
               {GROUPS.map((g) => (
-                <div key={g.id} className="hp-group">
-                  <div className="hp-group-h"><span className="hp-ic"><Icon name={g.icon} size={16} /></span><span><b>{g.title}</b><small>{g.sub}</small></span></div>
-                  <div className="hp-items">
+                <div key={g.id} className={'hp-group' + (unfold.has(g.id) ? ' open' : '')}>
+                  <button className="hp-group-h" onClick={() => toggle(g.id)} aria-expanded={unfold.has(g.id)}>
+                    <span className="hp-ic"><Icon name={g.icon} size={16} /></span><span><b>{g.title}</b><small>{g.sub}</small></span><Icon name="caret" size={15} className="hp-caret" />
+                  </button>
+                  <div className="hp-fold"><div className="hp-items">
                     {topics.filter((x) => x.group === g.id).map((x) => (
-                      <button key={x.id} className="hp-item" onClick={() => go(x.id)}>{x.title}<Icon name="chevron" size={13} /></button>
+                      <button key={x.id} className="hp-item" tabIndex={unfold.has(g.id) ? 0 : -1} onClick={() => go(x.id)}>{x.title}<Icon name="chevron" size={13} /></button>
                     ))}
-                  </div>
+                  </div></div>
                 </div>
               ))}
             </div>
