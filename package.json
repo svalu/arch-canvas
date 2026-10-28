@@ -1,6 +1,6 @@
 {
   "name": "arch-canvas",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "private": true,
   "type": "module",
   "description": "AWS 아키텍처 노드 캔버스 (React Flow) + PowerPoint 편집 가능 도형 내보내기",

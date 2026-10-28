@@ -62,6 +62,7 @@ import { useExit } from './useExit.js';
 import { loadSettings, saveSettings, isVerified, run as aiRun } from './ai/connection.js';
 import { buildReviewMessages, buildDrawMessages, buildAskMessages, buildClarifyMessages, parseJsonReply, findingsToAnnotations, confirmedLines } from './ai/prompts.js';
 import { AiWizard, AskBackModal } from './ai/Wizard.jsx';
+import { MakerMark } from './MakerMark.jsx';
 import { providerById } from './ai/providers.js';
 import { GuidePanel, loadGuide, saveGuide, emptyGuide, visibleSteps, opsFor } from './guide/GuidePanel.jsx';
 import suggestData from '../data/suggest.json' with { type: 'json' };
@@ -97,7 +98,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.3';
+export const APP_VERSION = '0.9.4';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -2319,6 +2320,7 @@ function Help({ isDesktop, onPatch, onTour, onCheckUpdate, updBusy, updInfo, onT
       <p><b>파일</b> 다이어그램은 JSON 그래프(groups / nodes / edges / annotations)로 저장됩니다. 템플릿도 같은 형식이라 '템플릿으로 저장'하면 메뉴에 들어옵니다.</p>
       <p className="hint">아이콘: AWS Architecture Icons (Icon Shelf 데이터 재사용). AWS가 후원하거나 승인한 도구가 아닙니다.</p>
       <button className="small" onClick={onPatch}>고급: 패치 명령 직접 넣기</button>
+      <div className="maker"><MakerMark size={22} /><span>Arch Canvas {APP_VERSION}</span></div>
     </div>
   );
 }
