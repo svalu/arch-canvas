@@ -122,6 +122,14 @@ async function askMock({ user }) {
   await new Promise((r) => setTimeout(r, 400));
   if (/연결 확인용/.test(user)) return '연결 확인';
   if (/# 질문/.test(user)) return ['(mock) 이 경고는 보안 경계와 관련됩니다. 현재 다이어그램에서는 RDS Primary를 Private subnet (DB)으로 옮기고, 앱 서버 보안 그룹에서만 3306 포트를 허용하면 해결됩니다.', '제안서 근거: "DB 계층은 인터넷에서 직접 접근할 수 없는 프라이빗 서브넷에 배치합니다."'].join('\n');
+  if (/# 정리 요청/.test(user)) {
+    return JSON.stringify({ understood: '(mock) 내 PC 에서 도는 AI 를 밖에서도 쓰고 싶으신 거군요.', title: '(mock) 개인 AI 를 AWS 에', requirements: ['밖에서도 접속', '기억 공유'], constraints: ['비용 최소'],
+      questions: [
+        { id: 'q1', question: '하루 종일 켜 둬야 하나요, 쓸 때만 켜도 되나요?', why: '가장 큰 비용 차이가 여기서 납니다.', options: ['하루 종일', '쓸 때만', '잘 모르겠어요 (알아서 정해 주세요)'], multi: false },
+        { id: 'q2', question: '어디서 들어오나요?', why: '입구(웹·앱)에 따라 앞단이 달라집니다.', options: ['휴대폰', '회사 PC', '집 PC', '잘 모르겠어요 (알아서 정해 주세요)'], multi: true },
+      ],
+      drawRequest: '(mock) CloudFront 와 S3 를 추가하고 사용자와 연결' });
+  }
   if (/요청을 ops 로/.test(user)) {
     return JSON.stringify({ summary: '(mock) 사용자와 ALB 사이에 CloudFront 와 WAF 를 넣고 S3 를 연결했습니다.', ops: [
       { op: 'add_node', id: 'cf', icon: 'Arch_Amazon-CloudFront', label: 'Amazon CloudFront', parent: null, x: 40, y: 300 },

@@ -57,10 +57,11 @@ import { lint, diffViolations, mergeRuleAnnotations, RULES } from './model/rules
 import { graphToSvg, svgToPng, svgToBlob, copyPngToClipboard, saveBlob } from './export/image.js';
 import { decorateSvg, EXPORT_DEFAULT, usedLineStyles } from './export/decorate.js';
 import { useExit as useExit2 } from './useExit.js';
-import { ConnectModal, AiPanel, AiChip, Busy } from './ai/ui.jsx';
+import { ConnectModal, AiPanel, AiChip, Busy, describeOps } from './ai/ui.jsx';
 import { useExit } from './useExit.js';
 import { loadSettings, saveSettings, isVerified, run as aiRun } from './ai/connection.js';
-import { buildReviewMessages, buildDrawMessages, buildAskMessages, parseJsonReply, findingsToAnnotations } from './ai/prompts.js';
+import { buildReviewMessages, buildDrawMessages, buildAskMessages, buildClarifyMessages, parseJsonReply, findingsToAnnotations } from './ai/prompts.js';
+import { AiWizard } from './ai/Wizard.jsx';
 import { providerById } from './ai/providers.js';
 import { GuidePanel, loadGuide, saveGuide, emptyGuide, visibleSteps, opsFor } from './guide/GuidePanel.jsx';
 import suggestData from '../data/suggest.json' with { type: 'json' };
@@ -96,7 +97,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.8.5';
+export const APP_VERSION = '0.9.0';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -927,6 +928,42 @@ function Editor() {
   const runAiRef = useRef(runAi);
   runAiRef.current = runAi;
 
+  // ----- 말로 그리기: 막 적은 글 → 상황 정리 + 쉬운 질문 (그리기는 runAi('draw') 로 이어진다) -----
+  const [wizard, setWizard] = useState({ open: false, text: '' });
+  const runClarify = useCallback(async (text) => {
+    const g = currentGraph();
+    const msgs = buildClarifyMessages(g, catalog, text);
+    const ac = new AbortController();
+    aiAbort.current?.abort();
+    aiAbort.current = ac;
+    try {
+      const raw = await aiRun(aiSettings, { ...msgs, signal: ac.signal, maxTokens: 4000 });
+      if (ac.signal.aborted) return null;
+      const j = parseJsonReply(raw);
+      const DUNNO = '잘 모르겠어요 (알아서 정해 주세요)';
+      j.questions = (Array.isArray(j.questions) ? j.questions : []).slice(0, 3).map((q, i) => {
+        const opts = (Array.isArray(q.options) ? q.options : []).map(String).filter(Boolean).slice(0, 5);
+        if (!opts.some((o) => /잘 모르겠/.test(o))) opts.push(DUNNO);
+        return { id: String(q.id || 'q' + (i + 1)), question: String(q.question || ''), why: q.why ? String(q.why) : '', options: opts, multi: !!q.multi };
+      }).filter((q) => q.question);
+      if (!String(j.drawRequest || '').trim()) j.drawRequest = text;
+      return j;
+    } catch (e) {
+      if (ac.signal.aborted || e?.kind === 'cancel') return null;
+      throw e;
+    }
+  }, [aiSettings, catalog, currentGraph]);
+  // 정리된 상황은 비어 있는 칸에만 채운다 (사용자가 적은 건 덮지 않는다)
+  const saveClarifiedContext = useCallback((p) => {
+    const cur = contextRef.current || {};
+    const list = (v) => (Array.isArray(v) ? v.filter(Boolean).map((x) => '- ' + String(x)).join('\n') : String(v || ''));
+    const patch = {};
+    if (!cur.title?.trim() && p.title) patch.title = String(p.title);
+    if (!cur.requirements?.trim() && p.requirements?.length) patch.requirements = list(p.requirements);
+    if (!cur.constraints?.trim() && p.constraints?.length) patch.constraints = list(p.constraints);
+    if (Object.keys(patch).length) updateContext(patch);
+  }, [updateContext]);
+
   // ----- 가이드 -----
   const loadTemplateById = useCallback((id) => {
     const t = BUILTIN_TEMPLATES.find((x) => x.meta?.id === id);
@@ -954,7 +991,9 @@ function Editor() {
     const r = applyPatch(currentGraph(), ops, catalog.check);
     const ok = tryCommit(r.graph);
     setAi((s) => ({ ...s, result: s.result ? { ...s.result, applied: { ...r, blocked: !ok } } : s.result }));
-  }, [catalog, currentGraph, tryCommit, ai.result, switchDoc, toastMsg]);
+    if (ok) setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 30);
+    return { ...r, blocked: !ok };
+  }, [catalog, currentGraph, tryCommit, ai.result, switchDoc, toastMsg, rf]);
 
   const selectById = useCallback((id) => {
     rf.setNodes((ns) => ns.map((n) => ({ ...n, selected: n.id === id })));
@@ -1580,6 +1619,8 @@ function Editor() {
     return () => window.removeEventListener('arch-bend', on);
   }, [currentGraph, commit]);
 
+  useEffect(() => { const on = () => setWizard({ open: true, text: '' }); window.addEventListener('arch-wizard', on); return () => window.removeEventListener('arch-wizard', on); }, []);
+
   // 핀 툴팁의 [AI에게 물어보기] → 여기로 온다
   useEffect(() => {
     const on = (e) => runAiRef.current('ask', e.detail);
@@ -1832,6 +1873,7 @@ function Editor() {
             onOpenConnect={(pending) => setConnect({ open: true, pending })}
             state={ai} onReview={() => runAi('review')} onDraw={(req) => runAi('draw', req)} onAsk={(q) => runAi('ask', q)}
             onApplyOps={applyAiOps} onCancel={() => aiAbort.current?.abort()} onPick={selectById} nameOf={labelOf} activeDocId={docs.active}
+            onWizard={(text) => setWizard({ open: true, text })}
           />
         ) : panel === 'layers' ? (
           <LayersPanel graph={currentGraph()} selected={[...selectedNodes.map((n) => n.id)]}
@@ -1853,8 +1895,13 @@ function Editor() {
       <ConnectModal
         open={connect.open} pending={connect.pending} settings={aiSettings} onSettings={setAiSettings}
         onClose={() => setConnect({ open: false, pending: null })}
-        onReady={(pending) => { setConnect({ open: false, pending: null }); setTimeout(() => runAiRef.current(pending, pendingDraw.current), 0); }}
+        onReady={(pending) => { setConnect({ open: false, pending: null }); if (pending) setTimeout(() => runAiRef.current(pending, pendingDraw.current), 0); }}
       />
+      <AiWizard open={wizard.open} initialText={wizard.text} verified={isVerified(aiSettings)}
+        onOpenConnect={() => setConnect({ open: true, pending: null })}
+        onClarify={runClarify} onDraw={(req) => runAi('draw', req)} ai={ai} onApply={applyAiOps} onSaveContext={saveClarifiedContext}
+        onCancel={() => aiAbort.current?.abort()} onClose={() => setWizard({ open: false, text: '' })}
+        describe={(ops) => describeOps(ops, labelOf)} />
     </div>
   );
 }
@@ -2025,6 +2072,7 @@ function Inspector({ nodes, edges, onChange, onChangeMany, onWrap, onGroup, onUn
             {stats.groups + stats.icons === 0 && (
               <div className="start-buttons">
                 <button className="primary" onClick={onStartGuide}>가이드로 시작 — 순서대로 버튼만 누르면 됩니다</button>
+                <button onClick={() => window.dispatchEvent(new CustomEvent('arch-wizard'))}>✦ 말로 그리기 — 만들고 싶은 걸 막 적으면 AI 가 그려 줍니다</button>
                 <p className="hint">빈 캔버스로 하려면 왼쪽 팔레트에서 바로 끌어다 놓거나 상단 [템플릿]을 고르세요.</p>
               </div>
             )}

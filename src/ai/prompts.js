@@ -104,6 +104,44 @@ export function buildDrawMessages(graph, catalog, request, violations) {
   return { system: DRAW_SYSTEM + (card ? CARD_DRAW_NOTE : ''), user };
 }
 
+// 말로 시작하기: 막 적은 글에서 상황을 정리하고, 그림이 크게 달라지는 것만 쉬운 말로 되묻는다(최대 3개).
+export const CLARIFY_SYSTEM = `너는 AWS 를 잘 모르는 사람을 돕는 AWS 솔루션 아키텍트다. 사용자는 만들고 싶은 서비스를 대충 적었다. 이걸로 아키텍처 다이어그램을 그리기 전에,
+1) 사용자의 말을 제안서 컨텍스트(제목·요건·제약)로 정리하고,
+2) 그림이 크게 달라지는데 글에 없는 것만 골라 쉬운 말로 되묻는다.
+
+질문 규칙:
+- 최대 3개. 이미 글에 있거나 적당히 정해도 되는 건 묻지 않는다. 충분하면 questions 는 빈 배열.
+- 그림을 바꾸는 것만: 사용 규모(몇 명, 언제), 멈추면 안 되는 정도(AZ 1개/2개), 사용자가 들어오는 길(웹·앱·사내망), 데이터를 어디에 두는지, 기존 시스템·집/회사 PC 와의 연결, 비용 우선인지 안정성 우선인지.
+- AWS 용어를 쓰지 않는다. 꼭 필요하면 괄호로 풀어 쓴다. 예: "하루 종일 켜 둬야 하나요, 쓸 때만 켜도 되나요?"
+- 선택지는 2~4개, 짧게. 마지막 선택지는 항상 "잘 모르겠어요 (알아서 정해 주세요)". 여러 개 고를 수 있으면 multi: true.
+- 각 질문에 why(이걸 왜 묻는지 한 줄)를 쓴다.
+
+drawRequest: 질문 답이 없어도 지금 정보만으로 그릴 수 있는 구체적인 그리기 요청(한국어, 어떤 서비스를 어디에 두고 어떻게 잇는지). 질문의 답은 앱이 뒤에 덧붙인다.
+답은 반드시 JSON 객체 하나만, 코드 펜스 없이:
+{
+  "understood": "내가 이해한 것 1~2문장 (해요체)",
+  "title": "짧은 제목",
+  "requirements": ["요건 한 줄", ...],
+  "constraints": ["제약 한 줄", ...],
+  "questions": [ { "id": "q1", "question": "쉬운 질문 (해요체)", "why": "왜 묻는지 한 줄", "options": ["...", "...", "잘 모르겠어요 (알아서 정해 주세요)"], "multi": false } ],
+  "drawRequest": "그리기 요청"
+}`;
+
+export function buildClarifyMessages(graph, catalog, text) {
+  const user = `# 지금 적혀 있는 제안서 컨텍스트\n${contextText(graph.context)}\n\n# 지금 캔버스\n${graph.nodes.length + graph.groups.length ? summarizeGraph(graph, catalog) : '(비어 있음)'}\n\n# 정리 요청\n${text}`;
+  return { system: CLARIFY_SYSTEM, user };
+}
+
+/** 정리 결과 + 사용자의 답 → 최종 그리기 요청 */
+export function composeDrawRequest(plan, answers) {
+  const qa = (plan.questions || []).map((q) => {
+    const a = answers[q.id];
+    const v = Array.isArray(a) ? a.join(', ') : a;
+    return v ? `- ${q.question} → ${v}` : null;
+  }).filter(Boolean);
+  return [String(plan.drawRequest || '').trim(), qa.length ? `\n추가로 확인한 것:\n${qa.join('\n')}\n("잘 모르겠어요" 는 일반적인 기본값으로 정해 주세요.)` : ''].join('\n').trim();
+}
+
 // 자유 질문: 경고/핀/궁금한 점을 다이어그램 맥락과 함께 묻는다. 답은 JSON 이 아니라 글.
 export const ASK_SYSTEM = `너는 AWS 솔루션 아키텍트다. 사용자는 고객 제안서용 아키텍처 다이어그램을 그리는 중이고, 지금 뜬 경고나 궁금한 점을 묻는다.
 한국어 문어체(존댓말 "~합니다")로, 결론부터 3~8문장. 왜 그런지 → 이 다이어그램에서 구체적으로 어떻게 고치면 되는지(노드 이름으로) → 제안서에 적을 한 줄 근거 순서로. 코드 펜스·JSON 없이 그냥 글. 필요하면 짧은 목록은 괜찮다.`;
