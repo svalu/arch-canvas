@@ -140,7 +140,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.5';
+export const APP_VERSION = '0.9.6';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -2387,7 +2387,9 @@ function Help({ isDesktop, onPatch, onTour, onCheckUpdate, updBusy, updInfo, onT
       <h3>쓰는 법</h3>
       <button className="primary" onClick={onTour}>둘러보기 다시 보기 (30초)</button>
       {isDesktop && <div className="row"><button onClick={onCheckUpdate} disabled={updBusy}>{updBusy ? '확인하는 중…' : '업데이트 확인'}</button><span className="hint">현재 {APP_VERSION}{updInfo?.newer ? ` · 새 버전 ${updInfo.version}` : ''}</span></div>}
-      <p><b>처음이면</b> 빈 캔버스의 [가이드로 시작]. 순서대로 버튼만 누르면 됩니다.</p>
+      <p><b>처음이면</b> 빈 캔버스에 뜨는 "무엇을 그려 볼까요?" 칸에 만들고 싶은 걸 적고 Enter. AI 가 쉬운 질문 몇 개만 묻고 그려 줍니다. 버튼만 눌러 가며 만들고 싶으면 아래 [따라 하기], 이미 정리된 시스템 문서가 있으면 [시스템 문서로], 혼자 그리려면 [직접 그리기].</p>
+      <p><b>패널 떼어 내기</b> 팔레트·오른쪽 패널의 맨 위 막대를 끌면 떨어져 나와 떠 있습니다. 오른쪽 아래 모서리로 크기를 바꿉니다. 화면 가장자리에 놓거나, 막대를 두 번 클릭하거나, [붙이기]를 누르면 제자리로 돌아갑니다.</p>
+      <p><b>경고 표시</b> 잘못 놓인 요소 위에는 주황·빨강 <b>!</b> 가 늘 뜹니다. 눌러 보면 이유와 [AI에게 물어보기]가 나옵니다. 보기 설정에서 숨길 수 있는 건 참고(i)뿐이고, 내보내기(PNG·PPT)에는 어느 표시도 들어가지 않습니다.</p>
       <p><b>팔레트 추천</b> 그룹을 고르면 그 안에 넣을 만한 것, 아이콘을 고르면 옆에 붙여 연결할 것이 팔레트 위에 뜹니다. 클릭하면 바로 들어갑니다.</p>
       <p><b>추가</b> 왼쪽 팔레트에서 끌어다 놓기(또는 클릭하면 화면 가운데에).</p>
       <p><b>연결</b> 노드 가장자리의 작은 점을 끌어 다른 노드 위에 놓기.</p>
