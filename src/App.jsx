@@ -28,6 +28,47 @@ function loadView() {
 const LS_LAYOUT = 'arch-canvas:layout';
 const LAYOUT_DEFAULT = { pal: 270, side: 272 };
 function loadLayout() { try { return { ...LAYOUT_DEFAULT, ...JSON.parse(localStorage.getItem(LS_LAYOUT) || '{}') }; } catch { return LAYOUT_DEFAULT; } }
+// 패널 떼어내기·붙이기: 맨 위 막대를 잡고 끌면 떨어져 나와 떠다니고, 화면 가장자리로 끌어다 놓거나 [붙이기]를 누르면 다시 붙는다
+function DockBar({ which, label, floating, onFloat, onMove, onDock }) {
+  const onDown = (e) => {
+    if (e.button !== 0 || e.target.closest('button')) return;
+    e.preventDefault();
+    const sx = e.clientX, sy = e.clientY;
+    const box = e.currentTarget.parentElement.getBoundingClientRect();
+    let undocked = floating, last = null;
+    let base = { x: box.left, y: box.top, sx, sy };   // 끌기 기준점 (떼어 낸 순간 커서 아래로 다시 잡는다)
+    const move = (ev) => {
+      if (!undocked) {
+        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 28) return;   // 붙어 있을 땐 조금 끌어야 떨어진다
+        undocked = true;
+        base = { x: ev.clientX - 80, y: ev.clientY - 14, sx: ev.clientX, sy: ev.clientY };
+        onFloat({ x: base.x, y: base.y, w: box.width, h: Math.min(box.height, window.innerHeight - 120) });
+        return;
+      }
+      last = { x: base.x + ev.clientX - base.sx, y: base.y + ev.clientY - base.sy };
+      onMove(last);
+    };
+    const up = (ev) => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
+      if (!undocked) return;
+      // 화면 가장자리에 놓으면 다시 붙는다 (팔레트는 왼쪽, 오른쪽 패널은 오른쪽)
+      if ((which === 'pal' && ev.clientX < 36) || (which === 'side' && ev.clientX > window.innerWidth - 36)) onDock();
+      else onMove(last, true);
+    };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+  };
+  return (
+    <div className={'dockbar' + (floating ? ' floating' : '')} onPointerDown={onDown} onDoubleClick={() => (floating ? onDock() : null)}
+      title={floating ? '끌어서 옮기기 · 화면 가장자리에 놓거나 두 번 클릭하면 다시 붙습니다' : '끌어서 떼어 낼 수 있습니다'}>
+      <span className="grip" aria-hidden="true"><Icon name="grip" size={14} /></span>
+      <span className="dock-label">{label}</span>
+      {floating
+        ? <button className="dock-btn" onClick={onDock} title="원래 자리에 붙이기"><Icon name="dock" size={14} /> 붙이기</button>
+        : <button className="dock-btn" onClick={() => onFloat(null)} title="떼어 내서 띄우기"><Icon name="detach" size={14} /> 떼어 내기</button>}
+    </div>
+  );
+}
+
 function Resizer({ which, onResize }) {
   const [active, setActive] = useState(false);
   const onDown = (e) => {
@@ -63,6 +104,7 @@ import { loadSettings, saveSettings, isVerified, run as aiRun } from './ai/conne
 import { buildReviewMessages, buildDrawMessages, buildAskMessages, buildClarifyMessages, parseJsonReply, findingsToAnnotations, confirmedLines } from './ai/prompts.js';
 import { AiWizard, AskBackModal } from './ai/Wizard.jsx';
 import { MakerMark } from './MakerMark.jsx';
+import { CanvasStart } from './CanvasStart.jsx';
 import { providerById } from './ai/providers.js';
 import { GuidePanel, loadGuide, saveGuide, emptyGuide, visibleSteps, opsFor } from './guide/GuidePanel.jsx';
 import suggestData from '../data/suggest.json' with { type: 'json' };
@@ -98,7 +140,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.4';
+export const APP_VERSION = '0.9.5';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -158,6 +200,48 @@ function Editor() {
       return n;
     });
   }, []);
+  // 패널 떼어내기: layout.float.{pal,side} = { x, y, w, h } 이면 떠 있음
+  const saveLayout = (n) => { try { localStorage.setItem(LS_LAYOUT, JSON.stringify(n)); } catch { /* */ } };
+  const floatPanel = useCallback((which, rect) => {
+    setLayout((l) => {
+      const w = which === 'side' ? l.side : l.pal;
+      const r = rect || { x: which === 'side' ? window.innerWidth - w - 48 : 48, y: 96, w, h: Math.min(window.innerHeight - 140, 680) };
+      const n = { ...l, float: { ...(l.float || {}), [which]: r } };
+      saveLayout(n); return n;
+    });
+  }, []);
+  const moveFloat = useCallback((which, pos, done) => {
+    if (!pos) return;
+    setLayout((l) => {
+      const cur = l.float?.[which]; if (!cur) return l;
+      const x = Math.max(8 - cur.w + 120, Math.min(window.innerWidth - 120, pos.x)), y = Math.max(8, Math.min(window.innerHeight - 40, pos.y));
+      const n = { ...l, float: { ...l.float, [which]: { ...cur, x, y } } };
+      if (done) saveLayout(n); return n;
+    });
+  }, []);
+  const sizeFloat = useCallback((which, el) => {
+    if (!el) return;
+    const b = el.getBoundingClientRect();
+    setLayout((l) => {
+      const cur = l.float?.[which]; if (!cur || (Math.abs(cur.w - b.width) < 1 && Math.abs(cur.h - b.height) < 1)) return l;
+      const n = { ...l, float: { ...l.float, [which]: { ...cur, w: Math.round(b.width), h: Math.round(b.height) } } };
+      saveLayout(n); return n;
+    });
+  }, []);
+  const dockPanel = useCallback((which) => {
+    setLayout((l) => { const f = { ...(l.float || {}) }; delete f[which]; const n = { ...l, float: f }; saveLayout(n); return n; });
+  }, []);
+  const floatOf = (which) => layout.float?.[which] || null;
+  const frameOf = (which, label) => {
+    const f = floatOf(which);
+    return {
+      cls: f ? ' floating' : '',
+      style: f ? { left: f.x, top: f.y, width: f.w, height: f.h } : undefined,
+      onUp: f ? (e) => sizeFloat(which, e.currentTarget) : undefined,
+      bar: <DockBar which={which} label={label} floating={!!f} onFloat={(r) => floatPanel(which, r)} onMove={(pos, done) => moveFloat(which, pos, done)} onDock={() => dockPanel(which)} />,
+    };
+  };
+
   // 보기(격자)
   const [view, setViewState] = useState(loadView);
   const viewRef = useRef(null);
@@ -961,7 +1045,8 @@ function Editor() {
   runAiRef.current = runAi;
 
   // ----- 말로 그리기: 막 적은 글 → 상황 정리 + 쉬운 질문 (그리기는 runAi('draw') 로 이어진다) -----
-  const [wizard, setWizard] = useState({ open: false, text: '' });
+  const [wizard, setWizard] = useState({ open: false, text: '', auto: false });
+  const [startHidden, setStartHidden] = useState(false);   // 첫 화면에서 [직접 그리기]를 누르면 이 빈 캔버스에선 숨긴다
   const runClarify = useCallback(async (text) => {
     const g = currentGraph();
     const msgs = buildClarifyMessages(g, catalog, text);
@@ -1269,7 +1354,7 @@ function Editor() {
       items.push({ label: '가로 정렬', options: [['left', '왼쪽'], ['hcenter', '가운데'], ['right', '오른쪽']], value: null, onPick: (v) => alignSel(v, ids) });
       items.push({ label: '세로 정렬', options: [['top', '위'], ['vcenter', '가운데'], ['bottom', '아래']], value: null, onPick: (v) => alignSel(v, ids) });
       if (ids.length >= 3) items.push({ label: '간격 맞추기', options: [['h', '가로'], ['v', '세로']], value: null, onPick: (v) => distributeSel(v, ids) });
-      items.push({ label: `✦ ${ids.length}개 자동 정렬`, hint: '빈 공간·크기·줄 맞춤', action: () => autoArrangeSel(ids) });
+      items.push({ label: `${ids.length}개 자동 정렬`, hint: '빈 공간·크기·줄 맞춤', action: () => autoArrangeSel(ids) });
       if (canResizeCount(currentGraph(), ids) >= 2) items.push({ label: '크기 맞추기', options: [['w', '너비'], ['h', '높이'], ['both', '둘 다']], value: null, onPick: (v) => sameSizeSel(v, ids) });
     }
     if (node.type !== 'awsGroup' || true) items.push({ label: 'AI에게 물어보기', ask: true, action: () => askAboutNode(node) });
@@ -1375,7 +1460,7 @@ function Editor() {
     const flowPos = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY });
     const items = [
       { label: '여기에 글상자 추가', hint: '제목·설명·메모', action: () => addAt({ type: 'text' }, flowPos) },
-      { label: '✦ 전체 자동 정렬', hint: '빈 공간·크기·줄 맞춤', action: () => autoArrangeSel([]) },
+      { label: '전체 자동 정렬', hint: '빈 공간·크기·줄 맞춤', action: () => autoArrangeSel([]) },
       ...(docMode === 'card'
         ? [{ label: '여기에 카드 추가', action: () => addAt({ type: 'card' }, flowPos) }, { label: '여기에 섹션 추가', action: () => addAt({ type: 'group', kind: 'section' }, flowPos) }]
         : [{ label: '여기에 그룹 추가', action: () => addAt({ type: 'group', kind: 'generic' }, flowPos) }]),
@@ -1384,7 +1469,7 @@ function Editor() {
       'sep',
       { label: '전체 선택', hint: 'Ctrl+A', action: () => rf.setNodes((ns) => ns.map((n) => ({ ...n, selected: true }))) },
       { label: '화면에 맞추기', action: () => rf.fitView({ padding: 0.08, duration: 300 }) },
-      { label: view.pins === false ? '경고·참고 표시 보이기' : '경고·참고 표시 숨기기', hint: '제안서 화면용', action: () => setView({ pins: view.pins === false }) },
+      { label: view.pins === false ? '참고(i) 표시 보이기' : '참고(i) 표시 숨기기', hint: '경고(!)는 늘 보입니다', action: () => setView({ pins: view.pins === false }) },
       'sep',
       { label: 'PNG 복사', hint: 'Ctrl+C', action: () => exportImageRef.current('clipboard', false) },
       { label: 'AI 검수', ask: true, action: () => runAi('review') },
@@ -1701,7 +1786,7 @@ function Editor() {
   void histVer;
 
   return (
-    <div className={'app' + (view.depth ? ' depth' : '') + (theme === 'dark' ? ' theme-dark' : '') + (theming ? ' theming' : '') + (docMode === 'card' ? ' mode-card' : '') + (view.pins === false ? ' no-pins' : '') + (view.aiOff ? ' ai-off' : '')} style={{ '--pal-w': layout.pal + 'px', '--side-w': layout.side + 'px', '--label-scale': view.textScale }}>
+    <div className={'app' + (view.depth ? ' depth' : '') + (theme === 'dark' ? ' theme-dark' : '') + (theming ? ' theming' : '') + (docMode === 'card' ? ' mode-card' : '') + (view.pins === false ? ' no-pins' : '') + (view.aiOff ? ' ai-off' : '')} style={{ '--pal-w': (floatOf('pal') ? 0 : layout.pal) + 'px', '--side-w': (floatOf('side') ? 0 : layout.side) + 'px', '--label-scale': view.textScale }}>
       <header className="top">
         <div className="brand">Arch Canvas <span className="ver">{APP_VERSION}</span></div>
         <div className="tools">
@@ -1765,7 +1850,7 @@ function Editor() {
             <Icon name="guide" /><span className="lbl" data-p="2">가이드</span>{guide && guide.phase === 'steps' && <span className="prog">{Math.min(guide.idx + 1, visibleSteps(guide).length)}/{visibleSteps(guide).length}</span>}
           </button>
           <button onClick={() => setPanel(panel === 'help' ? null : 'help')} className={'tb ic-only' + (panel === 'help' || panel === 'patch' ? ' on' : '')} title="도움말" aria-label="도움말"><Icon name="help" /></button>
-          {upd.info?.newer && <button className="tb upd-chip has-lbl" onClick={() => setUpd((u) => ({ ...u, open: true }))} title={`새 버전 ${upd.info.version} 이(가) 있습니다. 누르면 바뀐 내용을 보고 바로 업데이트할 수 있습니다.`}><svg className="upd-ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg><span className="lbl">업데이트 {upd.info.version}</span></button>}
+          {upd.info?.newer && <button className="tb upd-chip has-lbl" onClick={() => setUpd((u) => ({ ...u, open: true }))} title={`새 버전 ${upd.info.version} 이(가) 있습니다. 누르면 바뀐 내용을 보고 바로 업데이트할 수 있습니다.`}><Icon name="download" size={14} strokeWidth={2.2} className="upd-ic" /><span className="lbl">업데이트 {upd.info.version}</span></button>}
           <details className="menu settings">
             <summary className="tb ic-only" title="보기 설정: 테마 · 격자 · 텍스트 · 연결선" aria-label="보기 설정"><Icon name="settings" /></summary>
             <div className="menu-list settings-menu right">
@@ -1796,7 +1881,7 @@ function Editor() {
                 {[8, 12, 16, 24, 32, 48].map((g) => <button key={g} className={view.gap === g ? 'on' : ''} onClick={() => setView({ gap: g })} disabled={!view.lines && !view.dots}>{g}</button>)}
               </div>
               <div className="menu-sec">경고·참고 표시 <small>(화면 전용. 내보내기에는 들어가지 않습니다)</small></div>
-              <label className="menu-opt"><input type="checkbox" checked={view.pins !== false} onChange={(e) => setView({ pins: e.target.checked })} /> 요소 위에 표시</label>
+              <label className="menu-opt"><input type="checkbox" checked={view.pins !== false} onChange={(e) => setView({ pins: e.target.checked })} /> 참고(i)도 요소 위에 표시</label>
               <label className="menu-opt"><input type="checkbox" checked={view.guides !== false} onChange={(e) => setView({ guides: e.target.checked })} /> 끌 때 정렬 안내선</label>
               <div className="menu-sec">AI <small>(끄면 AI 버튼과 [AI에게 물어보기]가 모두 숨겨집니다)</small></div>
               <label className="menu-opt"><input type="checkbox" checked={!view.aiOff} onChange={(e) => setView({ aiOff: !e.target.checked })} /> AI 기능 사용</label>
@@ -1812,9 +1897,16 @@ function Editor() {
 
       <DocTabs docs={docs} onSwitch={switchDoc} onAdd={() => addDoc()} onClose={closeDoc} onRename={renameDoc} onDuplicate={duplicateDoc} onMove={moveDoc} onContext={onTabContext} />
 
-      <Palette onAdd={addAtCenter} onSuggest={addSuggested} suggest={suggestFor(selectedNodes, catalog, docMode)} cardMode={docMode === 'card'} resizer={<Resizer which="pal" onResize={onResize} />} />
+      <Palette onAdd={addAtCenter} onSuggest={addSuggested} suggest={suggestFor(selectedNodes, catalog, docMode)} cardMode={docMode === 'card'} resizer={floatOf('pal') ? null : <Resizer which="pal" onResize={onResize} />} frame={frameOf('pal', '팔레트')} />
 
       <div className="canvas" ref={wrapRef} onPointerDownCapture={onCanvasPointerDownCapture} onMouseDownCapture={(e) => { if (shiftHandled.current) { e.stopPropagation(); e.preventDefault(); } }} onClickCapture={onCanvasClickCapture}>
+        {nodes.length === 0 && !startHidden && !wizard.open && (
+          <CanvasStart
+            onWizard={(t) => setWizard({ open: true, text: t, auto: !!t })}
+            onTemplates={() => document.querySelector('summary[aria-label="템플릿"]')?.click()}
+            onGuide={startGuide}
+            onHide={() => setStartHidden(true)} />
+        )}
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -1888,8 +1980,9 @@ function Editor() {
           ))}
       </div>
 
-      <aside className="side">
-        <Resizer which="side" onResize={onResize} />
+      <aside className={'side' + frameOf('side', '속성 · AI').cls} style={frameOf('side').style} onPointerUp={frameOf('side').onUp}>
+        {frameOf('side', '속성 · AI').bar}
+        {!floatOf('side') && <Resizer which="side" onResize={onResize} />}
         {panel === 'patch' ? (
           <PatchPanel onApply={(ops) => { const r = applyPatch(currentGraph(), ops, catalog.check); const ok = tryCommit(r.graph); return { ...r, blocked: !ok }; }} />
         ) : panel === 'rules' ? (
@@ -1950,10 +2043,10 @@ function Editor() {
         }}
         onSkip={() => { const b = askBack; setAskBack(null); setTimeout(() => runAiRef.current(b.mode, b.request, { confirmed: true }), 0); }}
         onClose={() => setAskBack(null)} />
-      <AiWizard open={wizard.open} initialText={wizard.text} verified={isVerified(aiSettings)}
+      <AiWizard open={wizard.open} initialText={wizard.text} auto={wizard.auto} verified={isVerified(aiSettings)}
         onOpenConnect={() => setConnect({ open: true, pending: null })}
         onClarify={runClarify} onDraw={(req) => runAi('draw', req)} ai={ai} onApply={applyAiOps} onSaveContext={saveClarifiedContext}
-        onCancel={() => aiAbort.current?.abort()} onClose={() => setWizard({ open: false, text: '' })}
+        onCancel={() => aiAbort.current?.abort()} onClose={() => setWizard({ open: false, text: '', auto: false })}
         describe={(ops) => describeOps(ops, labelOf)}
         doc={context?.doc || null} onAttachDoc={(d) => updateContext({ doc: d || undefined })} onError={(m) => toastMsg(m)} />
     </div>
@@ -1961,7 +2054,7 @@ function Editor() {
 }
 
 // ---------------------------------------------------------------------------------------------
-function Palette({ onAdd, onSuggest, suggest, cardMode, resizer }) {
+function Palette({ onAdd, onSuggest, suggest, cardMode, resizer, frame }) {
   const catalog = useCatalog();
   const [q, setQ] = useState('');
   const [limit, setLimit] = useState(120);
@@ -1973,7 +2066,8 @@ function Palette({ onAdd, onSuggest, suggest, cardMode, resizer }) {
   };
   const searching = q.trim().length > 0;
   return (
-    <aside className="palette">
+    <aside className={'palette' + (frame?.cls || '')} style={frame?.style} onPointerUp={frame?.onUp}>
+      {frame?.bar}
       {resizer}
       <input className="search" placeholder="아이콘 검색: EC2, 로드밸런서, S3…" value={q} onChange={(e) => { setQ(e.target.value); setLimit(120); }} aria-label="아이콘 검색" />
       {!searching && (
@@ -2006,7 +2100,7 @@ function Palette({ onAdd, onSuggest, suggest, cardMode, resizer }) {
               );
             })}
           </div>
-          <button className="pal-toggle" onClick={() => setShowAll(!showAll)}>{showAll ? '전체 목록 접기 ▴' : '전체 목록 보기 ▾'}</button>
+          <button className="pal-toggle" onClick={() => setShowAll(!showAll)}>{showAll ? '전체 목록 접기' : '전체 목록 보기'}<Icon name="caret" size={14} className={showAll ? 'flip' : ''} /></button>
         </>
       )}
       {(searching || showAll) && <>
@@ -2061,7 +2155,7 @@ function TemplateMenu({ builtin, user, onPick, onSave, onSavePiece, onDelete, ha
                 <button onClick={() => onPick(t)} title={t.meta?.piece ? '지금 다이어그램 가운데에 끼워 넣습니다' : '지금 다이어그램을 이 템플릿으로 바꿉니다'}>
                   {t.meta?.piece ? '⊕ ' : ''}{t.meta?.name || t.title}<small>{t.meta?.description}</small>
                 </button>
-                {t.meta?.builtin === false && <button className="tpl-x" title="메뉴에서 지우기" aria-label="지우기" onClick={(e) => { e.stopPropagation(); onDelete(t); }}>×</button>}
+                {t.meta?.builtin === false && <button className="tpl-x" title="메뉴에서 지우기" aria-label="지우기" onClick={(e) => { e.stopPropagation(); onDelete(t); }}><Icon name="close" size={14} /></button>}
               </div>
             ))}
           </div>
@@ -2109,7 +2203,7 @@ function Inspector({ nodes, edges, onChange, onChangeMany, onWrap, onGroup, onUn
                   <button className="al" title="가로 간격 같게 (3개 이상)" aria-label="가로 간격 같게" disabled={nodes.length < 3} onClick={() => onDistribute('h')}><AlignIcon kind="dist-h" /></button>
                   <button className="al" title="세로 간격 같게 (3개 이상)" aria-label="세로 간격 같게" disabled={nodes.length < 3} onClick={() => onDistribute('v')}><AlignIcon kind="dist-v" /></button>
                   <button className="al wide" title="그룹·카드 크기를 가장 큰 것에 맞춤" onClick={() => onSameSize('both')}>크기 맞추기</button>
-                  <button className="al wide primary" title="빈 공간을 줄이고, 나란한 상자 크기·간격과 아이콘 줄을 맞춥니다 (Ctrl+Z 로 되돌리기)" onClick={() => onAutoArrange()}>✦ 자동 정렬</button>
+                  <button className="al wide primary" title="빈 공간을 줄이고, 나란한 상자 크기·간격과 아이콘 줄을 맞춥니다 (Ctrl+Z 로 되돌리기)" onClick={() => onAutoArrange()}><Icon name="sparkle" size={14} /> 자동 정렬</button>
                 </div>
               </div>
             )}
@@ -2124,13 +2218,7 @@ function Inspector({ nodes, edges, onChange, onChangeMany, onWrap, onGroup, onUn
           <>
             <h3>다이어그램</h3>
             <p>그룹 {stats.groups} · 아이콘 {stats.icons} · 연결선 {stats.edges}</p>
-            {stats.groups + stats.icons === 0 && (
-              <div className="start-buttons">
-                <button className="primary" onClick={onStartGuide}>가이드로 시작 — 순서대로 버튼만 누르면 됩니다</button>
-                <button onClick={() => window.dispatchEvent(new CustomEvent('arch-wizard'))}>✦ 말로 그리기 — 만들고 싶은 걸 막 적으면 AI 가 그려 줍니다</button>
-                <p className="hint">빈 캔버스로 하려면 왼쪽 팔레트에서 바로 끌어다 놓거나 상단 [템플릿]을 고르세요.</p>
-              </div>
-            )}
+            {stats.groups + stats.icons === 0 && <p className="hint">가운데 칸에 만들고 싶은 걸 적거나, 왼쪽에서 아이콘을 끌어다 놓아 시작하세요.</p>}
             {violations.length > 0
               ? <button className="warnbtn" onClick={onShowRules}>규칙 위반 {violations.length}건 보기</button>
               : stats.groups + stats.icons > 0 && <p className="ok">규칙 위반 없음</p>}
@@ -2335,19 +2423,9 @@ function downloadText(text, file) {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
-// 정렬 버튼 아이콘 (16x16)
+// 정렬 버튼 아이콘
 function AlignIcon({ kind }) {
-  const P = {
-    left: <><path d="M2.5 2v12" /><rect x="4.5" y="4" width="8" height="3" rx=".5" /><rect x="4.5" y="9" width="5" height="3" rx=".5" /></>,
-    hcenter: <><path d="M8 2v12" /><rect x="3.5" y="4" width="9" height="3" rx=".5" /><rect x="5" y="9" width="6" height="3" rx=".5" /></>,
-    right: <><path d="M13.5 2v12" /><rect x="3.5" y="4" width="8" height="3" rx=".5" /><rect x="6.5" y="9" width="5" height="3" rx=".5" /></>,
-    top: <><path d="M2 2.5h12" /><rect x="4" y="4.5" width="3" height="8" rx=".5" /><rect x="9" y="4.5" width="3" height="5" rx=".5" /></>,
-    vcenter: <><path d="M2 8h12" /><rect x="4" y="3.5" width="3" height="9" rx=".5" /><rect x="9" y="5" width="3" height="6" rx=".5" /></>,
-    bottom: <><path d="M2 13.5h12" /><rect x="4" y="3.5" width="3" height="8" rx=".5" /><rect x="9" y="6.5" width="3" height="5" rx=".5" /></>,
-    'dist-h': <><path d="M2 2v12M14 2v12" /><rect x="6.5" y="4" width="3" height="8" rx=".5" /></>,
-    'dist-v': <><path d="M2 2h12M2 14h12" /><rect x="4" y="6.5" width="8" height="3" rx=".5" /></>,
-  };
-  return <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{P[kind]}</svg>;
+  return <Icon name={'al-' + kind} size={16} />;
 }
 
 // 캔버스 안 찾기 (Ctrl+F): 라벨·아이콘 이름·그룹 종류로 찾아서 하나씩 가운데로 보여준다
@@ -2384,7 +2462,7 @@ function FindBar({ initial = '', onClose }) {
       <span className="find-count">{q.trim() ? (hits.length ? `${i + 1} / ${hits.length}` : '없음') : ''}</span>
       <button className="small" onClick={() => show(i - 1)} disabled={hits.length < 2} aria-label="이전">▲</button>
       <button className="small" onClick={() => show(i + 1)} disabled={hits.length < 2} aria-label="다음">▼</button>
-      <button className="small" onClick={() => onClose(q)} aria-label="닫기">×</button>
+      <button className="small" onClick={() => onClose(q)} aria-label="닫기"><Icon name="close" size={14} /></button>
     </div>
   );
 }
@@ -2413,7 +2491,7 @@ function ExportDialog({ open, value, onChange, graph, renderSvg, hasSel, onClose
   return (
     <div className={'modal-back' + (!open ? ' closing' : '')} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal export-dlg" role="dialog" aria-modal="true" aria-labelledby="ex-title">
-        <div className="modal-head"><h3 id="ex-title">내보내기 설정</h3><button className="x" onClick={onClose} aria-label="닫기">×</button></div>
+        <div className="modal-head"><h3 id="ex-title">내보내기 설정</h3><button className="x" onClick={onClose} aria-label="닫기"><Icon name="close" size={14} /></button></div>
         <div className="ex-body">
           <div className="ex-form">
             <div className="menu-sec">배율 (PNG)</div>
@@ -2465,11 +2543,11 @@ function UpdateDialog({ open, info, busy, onClose, onApply }) {
   return (
     <div className={'modal-back' + (!open ? ' closing' : '')} onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
       <div className="modal update-dlg" role="dialog" aria-modal="true" aria-labelledby="up-title">
-        <div className="modal-head"><h3 id="up-title">새 버전 {info?.version}</h3><button className="x" onClick={onClose} aria-label="닫기" disabled={busy}>×</button></div>
+        <div className="modal-head"><h3 id="up-title">새 버전 {info?.version}</h3><button className="x" onClick={onClose} aria-label="닫기" disabled={busy}><Icon name="close" size={14} /></button></div>
         <p className="modal-note">현재 {info?.current || APP_VERSION} → {info?.version}{mb ? ` · 내려받기 ${mb}` : ''}. 업데이트하면 프로그램이 잠시 닫혔다가 새 버전으로 다시 시작됩니다. 작업 내용은 자동 저장돼 있습니다.</p>
         <div className="upd-notes">{notes ? notes.split('\n').map((ln, i) => <p key={i}>{ln.replace(/^[-*]\s*/, '• ')}</p>) : <p className="hint">변경 내용 설명이 없습니다.</p>}</div>
         <div className="modal-actions">
-          {info?.html && <a className="link-btn" href={info.html} target="_blank" rel="noreferrer">릴리스 페이지 ↗</a>}
+          {info?.html && <a className="link-btn" href={info.html} target="_blank" rel="noreferrer">릴리스 페이지 <Icon name="external" size={13} /></a>}
           <span className="grow" />
           <button onClick={onClose} disabled={busy}>나중에</button>
           <button className={'primary' + (busy ? ' waiting' : '')} onClick={onApply} disabled={busy} autoFocus>{busy ? <Busy label="내려받는 중" /> : '지금 업데이트'}</button>

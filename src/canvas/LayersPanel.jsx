@@ -1,6 +1,7 @@
 // 레이어 목록(고급): 실제로 그려지는 순서 그대로 한 줄씩. 위에 있는 줄이 앞에 그려진다.
 // 소속은 화면 위치로 정해지므로 여기서는 바꾸지 않고, 회색 꼬리표로만 보여 준다. 줄을 끌어 다른 줄 위에 놓으면 그 앞으로.
 import React, { useMemo, useState } from 'react';
+import { Icon } from '../Icons.jsx';
 import { useCatalog } from '../catalog.js';
 import { layerList } from '../model/layers.js';
 import { isOverlay } from '../model/contain.js';
@@ -70,7 +71,7 @@ export function LayersPanel({ graph, selected, onSelect, onMove, onOrder, onLock
                   {tag && <span className="lyr-sub">{tag}</span>}
                 </span>
                 {x.set && <span className="lyr-tag" title="Ctrl+G 묶음: 함께 선택되고 함께 움직입니다">묶음 {setNo.get(x.set)}</span>}
-                <button className={'lyr-lock' + (x.locked ? ' on' : '')} title={x.locked ? '잠금 해제' : '잠그기 (움직이지 않음)'} aria-label={x.locked ? '잠금 해제' : '잠그기'} onClick={(e) => { e.stopPropagation(); onLock(row.id, !x.locked); }}>{x.locked ? '🔒' : '🔓'}</button>
+                <button className={'lyr-lock' + (x.locked ? ' on' : '')} title={x.locked ? '잠금 해제' : '잠그기 (움직이지 않음)'} aria-label={x.locked ? '잠금 해제' : '잠그기'} onClick={(e) => { e.stopPropagation(); onLock(row.id, !x.locked); }}><Icon name={x.locked ? 'lock' : 'unlock'} size={14} /></button>
               </div>
             </React.Fragment>
           );

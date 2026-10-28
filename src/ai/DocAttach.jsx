@@ -1,6 +1,7 @@
 // 시스템 구조 문서(MD) 첨부: 다른 AI 로 뽑은 README·HANDOFF 같은 문서를 넣으면 그림의 1차 근거로 쓴다.
 // "어떻게 만들어요?" 를 누르면 사용자의 AI 에게 그대로 복사해 물어볼 안내 문구를 보여 준다.
 import React, { useRef, useState } from 'react';
+import { Icon } from '../Icons.jsx';
 
 export const DOC_PROMPT = `이 프로젝트를 AWS 아키텍처 그림으로 그리려고 해. 아래 항목을 마크다운(.md) 한 파일로 정리해 줘.
 모르는 건 지어내지 말고 "모름"이라고 써 줘. 코드나 설정 파일에서 확인한 건 어디서 봤는지도 적어 줘.
@@ -34,10 +35,10 @@ export function DocAttach({ doc, onAttach, onError, onCopied }) {
     <div className="doc-attach">
       <div className="doc-row">
         {doc ? (
-          <span className="doc-chip" title={doc.text.slice(0, 300)}>📄 {doc.name} <small>{doc.text.length < 1000 ? `${doc.text.length}자` : `${Math.round(doc.text.length / 1000)}천 자`}</small>
-            <button className="x" onClick={() => onAttach(null)} aria-label="첨부 빼기">×</button></span>
+          <span className="doc-chip" title={doc.text.slice(0, 300)}><Icon name="file" size={14} /> {doc.name} <small>{doc.text.length < 1000 ? `${doc.text.length}자` : `${Math.round(doc.text.length / 1000)}천 자`}</small>
+            <button className="x" onClick={() => onAttach(null)} aria-label="첨부 빼기"><Icon name="close" size={14} /></button></span>
         ) : (
-          <button className="doc-btn" onClick={() => ref.current?.click()}>📄 시스템 구조 문서(MD) 넣기</button>
+          <button className="doc-btn" onClick={() => ref.current?.click()}><Icon name="attach" size={15} /> 시스템 구조 문서(MD) 넣기</button>
         )}
         <button className="link" onClick={() => setHow(!how)}>{how ? '안내 닫기' : 'MD 는 어떻게 만들어요?'}</button>
       </div>

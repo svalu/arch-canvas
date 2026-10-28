@@ -1,5 +1,6 @@
 // AI 연결 모달 + AI 패널. 연결 UX 는 "누른 자리에서 시작 → 방식 고르기 → 실제 응답 확인 → 하던 일로 복귀" (곁말 연결 가이드).
 import React, { useEffect, useRef, useState } from 'react';
+import { Icon } from '../Icons.jsx';
 import { useExit } from '../useExit.js';
 import { PROVIDERS, providerById as providerByIdBase, detectCli, MOCK_PROVIDER, mockEnabled } from './providers.js';
 import { DocAttach } from './DocAttach.jsx';
@@ -137,12 +138,12 @@ export function ConnectModal({ open, pending, settings, onSettings, onClose, onR
       <div className="modal connect" role="dialog" aria-modal="true" aria-labelledby="cm-title">
         <div className="modal-head">
           <h3 id="cm-title">AI 연결</h3>
-          <button className="x" onClick={cancel} aria-label="닫기">×</button>
+          <button className="x" onClick={cancel} aria-label="닫기"><Icon name="close" size={14} /></button>
         </div>
         <ol className="stepper" aria-label="연결 단계">
           {STEPS.map((s, i) => (
             <li key={s.id} className={i === step ? 'on' : i < step ? 'done' : ''} aria-current={i === step ? 'step' : undefined}>
-              <button type="button" className="step-dot" disabled={i >= step || step === 3 || phase === 'testing'} onClick={() => { if (i < step) { abortRef.current?.abort(); gen.current++; setPhase('idle'); setError(null); setStep(i); } }}>{i < step ? '✓' : i + 1}</button>
+              <button type="button" className="step-dot" disabled={i >= step || step === 3 || phase === 'testing'} onClick={() => { if (i < step) { abortRef.current?.abort(); gen.current++; setPhase('idle'); setError(null); setStep(i); } }}>{i < step ? <Icon name="check" size={13} strokeWidth={2.2} /> : i + 1}</button>
               <span className="step-name">{s.title}</span>
             </li>
           ))}
@@ -169,7 +170,7 @@ export function ConnectModal({ open, pending, settings, onSettings, onClose, onR
 
         {step === 1 && p && (
           <div className="prov-opts">
-            <div className="setup-head"><b>{p.name}</b>{cli?.found && p.id === 'claude-cli' && <small className="ok">● claude 명령 확인됨{cli.version ? ' · ' + cli.version : ''}</small>}</div>
+            <div className="setup-head"><b>{p.name}</b>{cli?.found && p.id === 'claude-cli' && <small className="ok"><i className="dot" /> claude 명령 확인됨{cli.version ? ' · ' + cli.version : ''}</small>}</div>
             <label>모델<select value={model} onChange={(e) => setModel(e.target.value)}>{p.models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
             {p.needsKey && (
               <label>API 키 {hasKey && !keyInput && <em>저장돼 있음 · 바꾸려면 새로 입력</em>}
@@ -178,7 +179,7 @@ export function ConnectModal({ open, pending, settings, onSettings, onClose, onR
                     onKeyDown={(e) => { if (e.key === 'Enter' && setupOk) start(); }} />
                   <button type="button" className="small" onClick={() => setShowKey(!showKey)}>{showKey ? '숨기기' : '보기'}</button>
                 </span>
-                <small>{isDesktop ? '이 PC 의 Windows 계정으로 암호화해서 저장합니다.' : '이 브라우저에만 저장합니다.'} <a href={p.keyUrl} target="_blank" rel="noreferrer">키 발급 페이지 ↗</a></small>
+                <small>{isDesktop ? '이 PC 의 Windows 계정으로 암호화해서 저장합니다.' : '이 브라우저에만 저장합니다.'} <a href={p.keyUrl} target="_blank" rel="noreferrer">키 발급 페이지 <Icon name="external" size={13} /></a></small>
               </label>
             )}
             <ul className="tips">{(TIPS[p.id] || []).map((t) => <li key={t}>{t}</li>)}</ul>
@@ -206,14 +207,14 @@ export function ConnectModal({ open, pending, settings, onSettings, onClose, onR
 
         {step === 3 && (
           <div className="test-ok">
-            <p className="modal-ok">✓ 연결됐습니다. <small>{p?.name}{model ? ' · ' + model : ''} · {ok?.ms}ms</small></p>
+            <p className="modal-ok"><Icon name="check" size={15} strokeWidth={2.2} /> 연결됐습니다. <small>{p?.name}{model ? ' · ' + model : ''} · {ok?.ms}ms</small></p>
             <p className="modal-note">답: "{ok?.reply}"</p>
             <p className="modal-note">{pending ? `이어서 ${ACTION_LABEL[pending]}를 합니다.` : '이제 툴바의 AI 검수와 AI 패널을 쓸 수 있습니다. 상단 칩에서 언제든 바꿀 수 있습니다.'}</p>
           </div>
         )}
 
         <div className="modal-actions nav">
-          {step > 0 && step < 3 && <button onClick={goBack} disabled={phase === 'testing' && false}>← 이전</button>}
+          {step > 0 && step < 3 && <button onClick={goBack} disabled={phase === 'testing' && false}><Icon name="back" size={14} /> 이전</button>}
           <span className="grow" />
           {step < 2 && <button onClick={cancel}>닫기</button>}
           {step < 2 && <button className="primary" disabled={!canNext} onClick={goNext} autoFocus>{step === 1 ? '연결 확인 →' : '다음 →'}</button>}
@@ -266,13 +267,13 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
     <div className="insp ai">
       <h3>AI</h3>
       <div className="conn-row">
-        {verified ? <span className="ok">● {p?.name}{settings.model ? ' · ' + settings.model : ''}</span> : <span className="hint">연결 안 됨</span>}
+        {verified ? <span className="ok"><i className="dot" /> {p?.name}{settings.model ? ' · ' + settings.model : ''}</span> : <span className="hint">연결 안 됨</span>}
         <button className="small" onClick={() => onOpenConnect(null)}>{verified ? '연결 변경' : '연결하기'}</button>
       </div>
 
       {/* 추천: 말로 그리기 — 막 적으면 팝업에서 필요한 것만 묻고 그려 준다 */}
       <div className="ai-step now">
-        <div className="step-head">✦ 말로 그리기 <small className="hint">추천</small></div>
+        <div className="step-head"><Icon name="sparkle" size={15} /> 말로 그리기 <small className="hint">추천</small></div>
         <p className="hint">만들고 싶은 걸 막 적으세요. 부족한 건 AI 가 쉬운 질문으로 한두 개 묻고, 그림을 먼저 보여 준 뒤 그립니다. 그린 그림을 고칠 때도 여기에 적으면 됩니다.</p>
         <DocAttach doc={context.doc} onAttach={onAttachDoc} onError={onToast} onCopied={onToast} />
         <textarea className="short" value={talk} onChange={(e) => setTalk(e.target.value)} placeholder="예: 내 PC 에서 도는 AI 를 밖에서도 휴대폰으로 쓰고 싶어" onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { flush(); onWizard(talk.trim()); setTalk(''); } }} />
@@ -347,7 +348,7 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
       {told.length > 0 && (
         <div className="told">
           <div className="more-head">AI 에게 알려준 것 <small className="hint">다음 답과 검수에 반영됩니다</small></div>
-          {told.map((l) => <div key={l} className="told-row"><span>{l.replace(/^- \[확인\]\s*/, '')}</span><button className="x" title="잊게 하기" onClick={() => forget(l)}>×</button></div>)}
+          {told.map((l) => <div key={l} className="told-row"><span>{l.replace(/^- \[확인\]\s*/, '')}</span><button className="x" title="잊게 하기" onClick={() => forget(l)}><Icon name="close" size={14} /></button></div>)}
         </div>
       )}
 

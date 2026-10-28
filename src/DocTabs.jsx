@@ -1,5 +1,6 @@
 // 문서 탭 줄: 여러 다이어그램을 오가며 그린다. 클릭=전환, 더블클릭=이름 바꾸기, 가운데 클릭/×=닫기, 끌어서 순서 바꾸기, 오른쪽 클릭=메뉴.
 import React, { useState } from 'react';
+import { Icon } from './Icons.jsx';
 
 export function DocTabs({ docs, onSwitch, onAdd, onClose, onRename, onDuplicate, onMove, onContext }) {
   const [editing, setEditing] = useState(null);
@@ -32,7 +33,7 @@ export function DocTabs({ docs, onSwitch, onAdd, onClose, onRename, onDuplicate,
                 onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditing(null); }}
               />
             ) : <span className="doctab-title">{d.title}</span>}
-            <button className="doctab-x" title="닫기 (가운데 클릭)" aria-label={`${d.title} 닫기`} onClick={(e) => { e.stopPropagation(); onClose(d.id); }}>×</button>
+            <button className="doctab-x" title="닫기 (가운데 클릭)" aria-label={`${d.title} 닫기`} onClick={(e) => { e.stopPropagation(); onClose(d.id); }}><Icon name="close" size={12} /></button>
           </div>
         );
       })}

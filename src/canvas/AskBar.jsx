@@ -1,5 +1,6 @@
 // 선택한 것 위에 떠 있는 "AI에게 물어보기" 바. 클릭하면 질문 입력칸이 펼쳐지고, 빈칸으로 보내면 기본 질문을 한다.
 import React, { useEffect, useState } from 'react';
+import { Icon } from '../Icons.jsx';
 import { NodeToolbar, Position, useStore } from '@xyflow/react';
 
 const selectedIds = (s) => s.nodes.filter((n) => n.selected).map((n) => n.id).join(',');
@@ -19,11 +20,11 @@ export function AskBar({ onAsk, busy }) {
       onPointerDown={stop} onMouseDown={stop} onClick={stop} onDoubleClick={stop} onContextMenu={stop}>
       {!open ? (
         <button className="askbar" onClick={() => setOpen(true)} disabled={!!busy} title="선택한 것에 대해 AI에게 묻습니다">
-          <span className={'spark' + (busy === 'ask' ? ' pulse' : '')}>✦</span>{busy === 'ask' ? <span className="busy"><span>답변 준비 중</span><span className="busy-dots" aria-hidden="true"><i /><i /><i /></span></span> : list.length > 1 ? `선택한 ${list.length}개 AI에게 물어보기` : 'AI에게 물어보기'}
+          <span className={'spark' + (busy === 'ask' ? ' pulse' : '')}><Icon name="sparkle" size={15} /></span>{busy === 'ask' ? <span className="busy"><span>답변 준비 중</span><span className="busy-dots" aria-hidden="true"><i /><i /><i /></span></span> : list.length > 1 ? `선택한 ${list.length}개 AI에게 물어보기` : 'AI에게 물어보기'}
         </button>
       ) : (
         <div className="askbar open nodrag nopan">
-          <span className="spark">✦</span>
+          <span className="spark"><Icon name="sparkle" size={15} /></span>
           <input
             autoFocus value={q} onChange={(e) => setQ(e.target.value)}
             placeholder="무엇이든 물어보세요 (비우면 역할·보강점을 묻습니다)"

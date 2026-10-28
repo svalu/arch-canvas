@@ -1,6 +1,6 @@
 {
   "name": "arch-canvas",
-  "version": "0.9.4",
+  "version": "0.9.5",
   "private": true,
   "type": "module",
   "description": "AWS 아키텍처 노드 캔버스 (React Flow) + PowerPoint 편집 가능 도형 내보내기",
@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.137.0",
+    "@hugeicons/core-free-icons": "^4.3.5",
+    "@hugeicons/react": "^1.1.10",
     "@xyflow/react": "12.8.6",
     "react": "18.3.1",
     "react-dom": "18.3.1"

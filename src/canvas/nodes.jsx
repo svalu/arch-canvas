@@ -1,5 +1,6 @@
 // 캔버스 노드: 그룹(awsGroup), 아이콘(awsIcon). 연결 핸들은 네 면에 하나씩(ConnectionMode.Loose 라 아무 핸들끼리 연결).
 import React, { memo } from 'react';
+import { Icon } from '../Icons.jsx';
 import { isOverlay } from '../model/contain.js';
 import { useExit } from '../useExit.js';
 import { Handle, Position, NodeResizer } from '@xyflow/react';
@@ -13,7 +14,7 @@ function Handles() {
   return SIDES.map(([k, pos]) => <Handle key={k} id={k} type="source" position={pos} className="hdl" />);
 }
 
-const LockMark = ({ on }) => (on ? <span className="lock-mark" title="잠김 · 오른쪽 클릭 [잠금 해제] 또는 Ctrl+L">🔒</span> : null);
+const LockMark = ({ on }) => (on ? <span className="lock-mark" title="잠김 · 오른쪽 클릭 [잠금 해제] 또는 Ctrl+L"><Icon name="lock" size={12} strokeWidth={2} /></span> : null);
 
 const PIN_COLOR = { error: '#DD344C', warn: '#ED7100', info: '#2E73B8' };
 
@@ -34,7 +35,7 @@ export function Pins({ pins }) {
   const top = pins.find((p) => p.level === 'error') || pins.find((p) => p.level === 'warn') || pins[0];
   return (
     <div
-      className="pin" style={{ background: PIN_COLOR[top.level] }}
+      className={"pin lv-" + top.level} style={{ background: PIN_COLOR[top.level] }}
       onMouseEnter={(e) => showPinTip(pins, e.currentTarget)} onMouseLeave={() => showPinTip(null)}
       onClick={(e) => { e.stopPropagation(); showPinTip(pins, e.currentTarget, true); }}
       title=""
@@ -78,7 +79,7 @@ export function PinTip() {
           <button className="small ask" onClick={() => { hidePinTip(); window.dispatchEvent(new CustomEvent('arch-ask', { detail: askText(p) })); }}>AI에게 물어보기</button>
         </div>
       ))}
-      <div className="pin-tip-foot">{tip.pinned ? '다른 곳을 클릭하거나 Esc 로 닫힙니다' : '핀을 클릭하면 고정됩니다'}</div>
+      <div className="pin-tip-foot">{t.pinned ? '다른 곳을 클릭하거나 Esc 로 닫힙니다' : '핀을 클릭하면 고정됩니다'}</div>
     </div>
   );
 }

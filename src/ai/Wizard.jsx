@@ -1,6 +1,7 @@
 // 말로 그리기: 막 적으면 → AI 가 상황을 정리하고 부족한 것만 한 개씩 묻고 → 그림을 만들어 보여 주고 → [캔버스에 그리기].
 // AWS 를 몰라도 버튼만 따라가면 끝나게. 질문은 최대 3개, 모르면 "잘 모르겠어요" 로 넘어간다.
 import React, { useEffect, useRef, useState } from 'react';
+import { Icon } from '../Icons.jsx';
 import { useExit } from '../useExit.js';
 import { Busy } from './ui.jsx';
 import { composeDrawRequest } from './prompts.js';
@@ -12,7 +13,7 @@ const EXAMPLES = [
   '회사 고객센터에 AI 상담을 붙이고 싶어. 기존 시스템이랑 연결해서',
 ];
 
-export function AiWizard({ open, initialText = '', verified, onOpenConnect, onClarify, onDraw, ai, onApply, onSaveContext, onCancel, onClose, describe, doc, onAttachDoc, onError }) {
+export function AiWizard({ open, initialText = '', auto = false, verified, onOpenConnect, onClarify, onDraw, ai, onApply, onSaveContext, onCancel, onClose, describe, doc, onAttachDoc, onError }) {
   const ex = useExit(open || null, 180);
   const [step, setStep] = useState('write');   // write | thinking | ask | drawing | preview | done
   const [text, setText] = useState('');
@@ -22,10 +23,12 @@ export function AiWizard({ open, initialText = '', verified, onOpenConnect, onCl
   const [other, setOther] = useState('');
   const [err, setErr] = useState(null);
   const drawAsked = useRef(false);
+  const startRef = useRef(null);
 
   useEffect(() => {
     if (!open) return;
     setStep('write'); setText(initialText || ''); setPlan(null); setQi(0); setAnswers({}); setOther(''); setErr(null); drawAsked.current = false;
+    if (auto && initialText?.trim()) setTimeout(() => startRef.current?.(initialText), 0);   // 첫 화면에서 적고 Enter 면 바로 시작
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 그림 결과가 오면 미리보기로
@@ -42,17 +45,18 @@ export function AiWizard({ open, initialText = '', verified, onOpenConnect, onCl
   const total = 1 + qs.length + 1;   // 적기 + 질문들 + 확인
   const at = step === 'write' || step === 'thinking' ? 1 : step === 'ask' ? 2 + qi : total;
 
-  const start = async () => {
+  const start = async (t = text) => {
     if (!verified) { onOpenConnect(); return; }
     setErr(null); setStep('thinking');
     try {
-      const p = await onClarify(text.trim() || '첨부한 문서의 시스템을 AWS 아키텍처로 그려 주세요.');
+      const p = await onClarify(String(t).trim() || '첨부한 문서의 시스템을 AWS 아키텍처로 그려 주세요.');
       if (!p) { setStep('write'); return; }   // 취소
       setPlan(p);
       onSaveContext(p);
       if (p.questions?.length) { setQi(0); setStep('ask'); } else draw(p, {});
     } catch (e) { setErr(e.message || String(e)); setStep('write'); }
   };
+  startRef.current = start;
   const draw = (p, a) => {
     drawAsked.current = true;
     setStep('drawing');
@@ -84,7 +88,7 @@ export function AiWizard({ open, initialText = '', verified, onOpenConnect, onCl
       <div className="modal wizard" role="dialog" aria-modal="true" aria-labelledby="wz-title">
         <div className="modal-head">
           <h3 id="wz-title">말로 그리기</h3>
-          <button className="x" onClick={() => { if (step === 'thinking' || step === 'drawing') onCancel(); onClose(); }} aria-label="닫기">×</button>
+          <button className="x" onClick={() => { if (step === 'thinking' || step === 'drawing') onCancel(); onClose(); }} aria-label="닫기"><Icon name="close" size={14} /></button>
         </div>
         <div className="wz-progress" aria-hidden="true">{Array.from({ length: total }, (_, i) => <span key={i} className={i + 1 < at ? 'done' : i + 1 === at ? 'now' : ''} />)}</div>
 
@@ -108,7 +112,7 @@ export function AiWizard({ open, initialText = '', verified, onOpenConnect, onCl
             <div className="modal-actions">
               {step === 'thinking'
                 ? <><div className="modal-wait"><Busy label="읽고 정리하는 중" /></div><button onClick={onCancel}>취소</button></>
-                : <button className="primary" disabled={!text.trim() && !doc} onClick={start}>{verified ? '다음' : 'AI 연결하고 시작'}</button>}
+                : <button className="primary" disabled={!text.trim() && !doc} onClick={() => start()}>{verified ? '다음' : 'AI 연결하고 시작'}</button>}
             </div>
           </>
         )}
@@ -208,7 +212,7 @@ export function AskBackModal({ data, onSubmit, onSkip, onClose }) {
       <div className="modal wizard" role="dialog" aria-modal="true" aria-labelledby="ab-title">
         <div className="modal-head">
           <h3 id="ab-title">{d.mode === 'review' ? '검수 전에 몇 가지만 여쭤볼게요' : '답하기 전에 몇 가지만 여쭤볼게요'}</h3>
-          <button className="x" onClick={onClose} aria-label="닫기">×</button>
+          <button className="x" onClick={onClose} aria-label="닫기"><Icon name="close" size={14} /></button>
         </div>
         <div className="wz-progress" aria-hidden="true">{qs.map((_, i) => <span key={i} className={i < qi ? 'done' : i === qi ? 'now' : ''} />)}</div>
         {qi === 0 && d.understood && <p className="wz-understood">{d.understood}</p>}

@@ -127,7 +127,9 @@
     nav a { white-space: nowrap; }
     @media (max-width: 520px) { .wrap { padding: 0 16px; } nav { gap: 14px; font-size: 13px; } .logo small { display: none; } .btn { width: 100%; justify-content: center; } }
     @media (max-width: 380px) { nav a[href="#faq"] { display: none; } }
-  </style>
+    svg.hi { display: inline-block; vertical-align: -0.2em; flex: none; }
+  .chev svg.hi { display: block; }
+</style>
 </head>
 <body>
   <header>
@@ -139,7 +141,7 @@
       <nav>
         <a href="#install">설치·업데이트</a>
         <a href="#faq">자주 묻는 질문</a>
-        <a class="opt" href="https://github.com/svalu/arch-canvas/releases" target="_blank" rel="noopener">배포 기록 ↗</a>
+        <a class="opt" href="https://github.com/svalu/arch-canvas/releases" target="_blank" rel="noopener">배포 기록 <svg class="hi" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6.65032C9 6.65032 15.9383 6.10759 16.9154 7.08463C17.8924 8.06167 17.3496 15 17.3496 15M16.5 7.5L6.5 17.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></svg></a>
       </nav>
     </div>
   </header>
@@ -155,7 +157,7 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
             Windows 버전 다운로드
           </a>
-          <a class="btn ghost" href="../">웹에서 바로 쓰기 ↗</a>
+          <a class="btn ghost" href="../">웹에서 바로 쓰기 <svg class="hi" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6.65032C9 6.65032 15.9383 6.10759 16.9154 7.08463C17.8924 8.06167 17.3496 15 17.3496 15M16.5 7.5L6.5 17.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></svg></a>
         </div>
         <div class="meta">
           <div class="facts" id="facts"><span>최신 버전</span><span>zip · 설치 없음</span><span>Windows 10/11</span></div>
@@ -173,7 +175,7 @@
             <path d="M60 86 l10 14 l14 -14z" fill="var(--paper)" stroke="var(--line)"/>
             <rect x="57" y="84" width="30" height="4" fill="var(--paper)"/>
           </g>
-          <text x="40" y="45" font-size="13" font-weight="700" fill="var(--teal)">✦ 말로 그리기</text>
+          <text x="40" y="45" font-size="13" font-weight="700" fill="var(--teal)">말로 그리기</text>
           <text x="40" y="68" font-size="14" fill="var(--ink)">내 AI 를 밖에서도 휴대폰으로 쓰고 싶어</text>
           <!-- 그림 -->
           <rect x="120" y="120" width="380" height="280" rx="6" fill="none" stroke="var(--teal)" stroke-dasharray="6 5" stroke-width="1.6"/>
@@ -196,7 +198,7 @@
           <g fill="var(--ink)"><path d="M228 246 l8 4 l-8 4z"/><path d="M246 304 l4 8 l4 -8z"/><path d="M368 320 l8 4 l-8 4z"/></g>
           <!-- PPT 배지 -->
           <g filter="url(#sh)"><rect x="372" y="208" width="128" height="40" rx="10" fill="var(--orange)"/></g>
-          <text x="436" y="233" font-size="12.5" font-weight="800" text-anchor="middle" fill="#fff">PowerPoint 도형 ✓</text>
+          <text x="436" y="233" font-size="12.5" font-weight="800" text-anchor="middle" fill="#fff">PowerPoint 도형</text>
         </svg>
       </div>
     </section>
@@ -213,16 +215,16 @@
       <p class="sub">지금 필요한 안내만 펼쳐 보세요.</p>
       <div class="guides">
         <details class="guide" open>
-          <summary><span class="ic new">↓</span><span><small>처음 써 보는 분</small><b>처음 설치하기</b></span><span class="chev">›</span></summary>
+          <summary><span class="ic new"><svg class="hi" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M16.9504 12.1817C17.1981 12.814 16.5076 13.5726 15.1267 15.0899C13.6702 16.6902 12.9201 17.4904 12 17.5C11.0799 17.4904 10.3298 16.6902 8.87331 15.0899C7.49239 13.5726 6.80193 12.814 7.04964 12.1817C7.05868 12.1586 7.06851 12.1359 7.0791 12.1135C7.34928 11.542 8.24477 11.5029 10 11.5002V4.99998C10 4.53501 10 4.30253 10.0511 4.11179C10.1898 3.59414 10.5941 3.1898 11.1118 3.05111C11.3025 3 11.535 3 12 3C12.4649 3 12.6974 3 12.8882 3.05111C13.4058 3.1898 13.8102 3.59414 13.9489 4.11179C14 4.30253 14 4.53501 14 4.99998V11.5002C15.7552 11.5029 16.6507 11.542 16.9209 12.1135C16.9315 12.1359 16.9413 12.1586 16.9504 12.1817Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/><path d="M5.00006 21H19.0001" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></svg></span><span><small>처음 써 보는 분</small><b>처음 설치하기</b></span><span class="chev"><svg class="hi" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9.00005 6C9.00005 6 15 10.4189 15 12C15 13.5812 9 18 9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></svg></span></summary>
           <ol>
             <li><span>위의 <b>Windows 버전 다운로드</b>를 눌러 zip 파일을 받아요.</span></li>
             <li><span>받은 zip 을 원하는 폴더에 <b>압축 풀기</b> 해요. 설치는 없어요.</span></li>
             <li><span><b>Arch Canvas.exe</b> 를 더블클릭해요. "Windows의 PC 보호" 창이 뜨면 <b>추가 정보 → 실행</b>을 눌러요.</span></li>
-            <li><span>처음 켜면 화면 안내가 나와요. 빈 캔버스의 <b>✦ 말로 그리기</b>로 바로 시작해 보세요.</span></li>
+            <li><span>처음 켜면 화면 안내가 나와요. 빈 캔버스의 <b>말로 그리기</b>로 바로 시작해 보세요.</span></li>
           </ol>
         </details>
         <details class="guide">
-          <summary><span class="ic up">↻</span><span><small>이미 쓰고 있는 분</small><b>새 버전으로 업데이트</b></span><span class="chev">›</span></summary>
+          <summary><span class="ic up"><svg class="hi" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.4879 15C19.2524 18.4956 15.9187 21 12 21C7.02943 21 3 16.9706 3 12C3 7.02943 7.02943 3 12 3C15.7292 3 18.9286 5.26806 20.2941 8.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/><path d="M15 9H18C19.4142 9 20.1213 9 20.5607 8.56066C21 8.12132 21 7.41421 21 6V3" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></svg></span><span><small>이미 쓰고 있는 분</small><b>새 버전으로 업데이트</b></span><span class="chev"><svg class="hi" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9.00005 6C9.00005 6 15 10.4189 15 12C15 13.5812 9 18 9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></svg></span></summary>
           <ol>
             <li><span>앱을 켜면 위쪽에 주황색 <b>[업데이트]</b> 버튼이 떠요. 누르면 바뀐 내용을 보고 바로 업데이트돼요.</span></li>
             <li><span>안 보이면 <b>? (도움말) → 업데이트 확인</b>을 눌러요. 확인은 하루 한 번 자동으로 해요.</span></li>
@@ -238,7 +240,7 @@
       <h2>이번 버전의 변화</h2>
       <p class="sub">GitHub 에 올라간 최신 버전의 변경 내용이에요.</p>
       <div class="release">
-        <div class="release-head"><b id="rel-ver">최신 버전</b><span id="rel-date"></span><a href="https://github.com/svalu/arch-canvas/releases" target="_blank" rel="noopener">전체 배포 기록 ↗</a></div>
+        <div class="release-head"><b id="rel-ver">최신 버전</b><span id="rel-date"></span><a href="https://github.com/svalu/arch-canvas/releases" target="_blank" rel="noopener">전체 배포 기록 <svg class="hi" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6.65032C9 6.65032 15.9383 6.10759 16.9154 7.08463C17.8924 8.06167 17.3496 15 17.3496 15M16.5 7.5L6.5 17.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></svg></a></div>
         <ul id="rel-notes"><li>불러오는 중…</li></ul>
       </div>
     </section>
@@ -251,7 +253,7 @@
         <details><summary>설치 없이 바로 써 볼 수 있나요?</summary><div class="a"><p>네. <a href="../">웹 버전</a>을 열면 브라우저에서 바로 쓸 수 있어요. 맥에서도 돼요.</p><p>다만 웹 버전은 PowerPoint 편집 도형 복사와 Claude CLI 연결이 안 되고(PNG 복사는 돼요), 작업이 그 브라우저에만 저장돼요.</p></div></details>
         <details><summary>"Windows의 PC 보호" 창이 떠요.</summary><div class="a"><p>처음 받은 프로그램이라 Windows 가 한 번 확인하는 화면이에요. <b>추가 정보</b>를 누르면 나오는 <b>실행</b> 버튼을 누르세요.</p><p>회사 PC 에서 아예 막힌다면 보안 정책 때문일 수 있어요. 그럴 땐 웹 버전을 쓰세요.</p></div></details>
         <details><summary>업데이트하면 내 그림이 사라지나요?</summary><div class="a"><p>아니요. 그림은 EXE 옆 <b>data</b> 폴더에 남아 있어요. 중요한 그림은 <kbd>Ctrl</kbd>+<kbd>S</kbd> 로 파일로도 저장해 두세요.</p></div></details>
-        <details><summary>AWS 를 전혀 몰라도 쓸 수 있나요?</summary><div class="a"><p>네. <b>✦ 말로 그리기</b>에 만들고 싶은 걸 막 적으면, AI 가 몇 명이 쓰는지·계속 켜 둘지 같은 걸 쉬운 질문으로 묻고 그려 줘요. 이미 만든 프로그램이 있으면 쓰시는 AI 로 뽑은 시스템 설명 문서(MD)를 넣어도 돼요.</p></div></details>
+        <details><summary>AWS 를 전혀 몰라도 쓸 수 있나요?</summary><div class="a"><p>네. <b>말로 그리기</b>에 만들고 싶은 걸 막 적으면, AI 가 몇 명이 쓰는지·계속 켜 둘지 같은 걸 쉬운 질문으로 묻고 그려 줘요. 이미 만든 프로그램이 있으면 쓰시는 AI 로 뽑은 시스템 설명 문서(MD)를 넣어도 돼요.</p></div></details>
         <details><summary>AI 는 무엇으로 연결하나요? 돈이 드나요?</summary><div class="a"><p>내 PC 에 설치된 Claude CLI 를 쓰면 내 Claude 구독으로 동작해서 추가 비용이 없어요. Claude·OpenAI API 키를 넣어 쓸 수도 있어요(이 경우 사용량만큼 요금).</p><p>AI 를 안 쓰면 보기 설정에서 끌 수 있고, 그리기·내보내기는 그대로 돼요.</p></div></details>
         <details><summary>내 그림이 어디로 보내지나요?</summary><div class="a"><p>그림은 내 PC(또는 내 브라우저)에만 저장돼요. AI 기능을 쓸 때만 그 요청에 필요한 그림 설명이 연결한 AI 로 가요. 의견 보내기는 내가 적은 내용과 버전 정보만 보내요.</p></div></details>
         <details><summary>PowerPoint 에는 어떻게 붙이나요?</summary><div class="a"><p>Windows 버전에서 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> 를 누르고 PowerPoint 에서 <kbd>Ctrl</kbd>+<kbd>V</kbd> 하면 아이콘·상자·연결선이 편집 가능한 도형으로 붙어요. 그림으로 붙이려면 <kbd>Ctrl</kbd>+<kbd>C</kbd> (PNG).</p></div></details>
@@ -261,7 +263,7 @@
     <section class="final">
       <h2>오늘의 그림, 말로 시작해 보세요.</h2>
       <div class="ctas" style="justify-content:center">
-        <a class="btn primary" id="dl2" href="https://github.com/svalu/arch-canvas/releases/latest/download/Arch_Canvas_Windows.zip">Arch Canvas 다운로드 ↓</a>
+        <a class="btn primary" id="dl2" href="https://github.com/svalu/arch-canvas/releases/latest/download/Arch_Canvas_Windows.zip">Arch Canvas 다운로드 <svg class="hi" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M16.9504 12.1817C17.1981 12.814 16.5076 13.5726 15.1267 15.0899C13.6702 16.6902 12.9201 17.4904 12 17.5C11.0799 17.4904 10.3298 16.6902 8.87331 15.0899C7.49239 13.5726 6.80193 12.814 7.04964 12.1817C7.05868 12.1586 7.06851 12.1359 7.0791 12.1135C7.34928 11.542 8.24477 11.5029 10 11.5002V4.99998C10 4.53501 10 4.30253 10.0511 4.11179C10.1898 3.59414 10.5941 3.1898 11.1118 3.05111C11.3025 3 11.535 3 12 3C12.4649 3 12.6974 3 12.8882 3.05111C13.4058 3.1898 13.8102 3.59414 13.9489 4.11179C14 4.30253 14 4.53501 14 4.99998V11.5002C15.7552 11.5029 16.6507 11.542 16.9209 12.1135C16.9315 12.1359 16.9413 12.1586 16.9504 12.1817Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/><path d="M5.00006 21H19.0001" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></svg></a>
         <a class="btn ghost" href="../" style="background:transparent;color:inherit;border-color:rgba(255,255,255,.35)">웹에서 바로 쓰기</a>
       </div>
     </section>

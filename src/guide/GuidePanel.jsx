@@ -1,6 +1,7 @@
 // 가이드: 단계 카드를 하나씩 보여주며 다이어그램을 쌓아 간다. 단계 데이터는 data/guide.json.
 // 흐름: 뭘 만들지 고르기 → 요건 체크 → (조건에 맞는) 넣기 카드들 → 규칙 검사 → AI 검수 → 내보내기
 import React, { useMemo, useState } from 'react';
+import { Icon } from '../Icons.jsx';
 import guide from '../../data/guide.json' with { type: 'json' };
 
 export const GUIDE = guide;
@@ -94,7 +95,7 @@ export function GuidePanel({ state, setState, isEmpty, graphIds = new Set(), onL
       <div className="card-swap" key={step.id}>
       <h3>{step.title}</h3>
       <p className="why">{step.why}</p>
-      {step.tip && st.flags[step.tip.flag] && <p className="tip">💡 {step.tip.text}</p>}
+      {step.tip && st.flags[step.tip.flag] && <p className="tip"><Icon name="tip" size={14} /> {step.tip.text}</p>}
 
       {!step.kind && (
         <>
