@@ -18,7 +18,7 @@
 // id/source/target/parent 는 문자열로, 좌표·크기는 숫자로 바꿔서 쓴다(숫자로 못 바꾸면 그 명령만 오류).
 
 import { normalizeGraph, sortGroups, uid, allIds, toText, EDGE_DEFAULTS, LINES, SHAPES, ARROWS, LEVELS } from './schema.js';
-import { absoluteRects, descendants, fitGroups, freeSlot, packAutoGroups } from './geometry.js';
+import { absoluteRects, descendants, fitGroups, freeSlot, packAutoGroups, tightenGroups, alignNodes } from './geometry.js';
 import { placeAutoNodes } from './place.js';
 import { isOverlay } from './contain.js';
 
@@ -34,7 +34,7 @@ const MIN = { group: { w: 80, h: 60 }, card: { w: 120, h: 48 } };
  */
 export function applyPatch(graph, ops, catalog) {
   const g = structuredClone(normalizeGraph(graph));
-  AUTO.set(g, { pos: new Set(), size: new Set(), nodes: new Set(), parented: new Set(), overlays: new Map() });
+  AUTO.set(g, { pos: new Set(), size: new Set(), nodes: new Set(), parented: new Set(), overlays: new Map(), created: new Set() });
   const errors = [];
   let applied = 0;
   const list = Array.isArray(ops) ? ops : ops?.ops || [];
@@ -58,6 +58,16 @@ export function applyPatch(graph, ops, catalog) {
   placeAutoNodes(g, auto.nodes, auto.parented);
   fitGroups(g);
   hugOverlays(g, auto.overlays);
+  // 새로 만든 상자는 안의 것에 딱 맞게 줄인다 (AI 가 준 대략 크기 때문에 생기는 빈 공간·삐져나옴 정리)
+  if (auto.created.size) {
+    tightenGroups(g, auto.created, isOverlay);
+    // 상자 밖(최상위)에 자동으로 놓인 것은 줄어든 상자를 기준으로 다시 자리를 잡는다
+    const outside = new Set([...auto.nodes].filter((id) => !g.nodes.find((n) => n.id === id)?.parent));
+    if (outside.size) placeAutoNodes(g, outside, auto.parented);
+    alignNodes(g, auto.nodes);   // 거의 같은 줄·세로줄에 있는 아이콘은 줄을 맞춘다
+    fitGroups(g);
+    hugOverlays(g, auto.overlays);
+  }
   return { graph: g, applied, errors };
 }
 
@@ -97,6 +107,7 @@ const OPS = {
     if (overlay) AUTO.get(g)?.overlays.set(id, { members: Array.isArray(op.members) ? op.members.map(String) : [], auto });
     else if (auto) AUTO.get(g)?.pos.add(id);
     if (w != null || h != null) AUTO.get(g)?.size.add(id);   // 크기를 줬으면 자동 배치 때 줄이지 않는다
+    if (!overlay) AUTO.get(g)?.created.add(id);
     g.groups.push({ id, kind: op.kind || 'generic', label: toText(op.label), parent, x: pos.x, y: pos.y, w: Math.max(MIN.group.w, w ?? 320), h: Math.max(MIN.group.h, h ?? 200), ...(op.overlay === true ? { overlay: true } : {}), ...(op.color ? { color: op.color } : {}), ...('fill' in op ? { fill: op.fill } : {}), ...(op.line ? { line: op.line } : {}) });
   },
   add_node(g, op, cat) {

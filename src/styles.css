@@ -913,3 +913,16 @@ details.ai-step:not([open]) { gap: 0; }
 .app.theme-dark .chip.on { background: #2DD4BF; border-color: #2DD4BF; color: #06201d; }
 .app.theme-dark .wz-understood { background: #142225; color: #cdebe6; }
 .app.theme-dark .wz-progress span { background: #1f3a3a; }
+
+/* 말로 그리기 팝업의 입력칸: 둥글고 넉넉하게, 눌렀을 때 파란 테두리 */
+.modal.wizard textarea, .modal.wizard input { width: 100%; box-sizing: border-box; border: 1.5px solid #d5dbe3; border-radius: 12px; background: #fbfcfd; color: inherit;
+  font: inherit; font-size: 14px; line-height: 1.55; padding: 11px 14px; outline: none; transition: border-color .15s, box-shadow .15s, background .15s; }
+.modal.wizard textarea { resize: vertical; }
+.modal.wizard textarea:hover, .modal.wizard input:hover { border-color: #b8c3d1; }
+.modal.wizard textarea:focus, .modal.wizard input:focus { border-color: #2E73B8; background: #fff; box-shadow: 0 0 0 4px rgba(46,115,184,.14); }
+.modal.wizard textarea::placeholder, .modal.wizard input::placeholder { color: #9aa4b2; }
+.wz-field { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.wz-field > span { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.wz-field > span small { font-weight: 400; }
+.app.theme-dark .modal.wizard textarea, .app.theme-dark .modal.wizard input { background: #0f1f22; border-color: #2c4a4a; }
+.app.theme-dark .modal.wizard textarea:focus, .app.theme-dark .modal.wizard input:focus { border-color: #2DD4BF; background: #12262a; box-shadow: 0 0 0 4px rgba(45,212,191,.16); }

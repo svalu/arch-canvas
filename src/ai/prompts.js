@@ -78,6 +78,7 @@ export const DRAW_SYSTEM = `${COMMON_SYSTEM}
 - {"op":"move_into", "id", "parent"}, {"op":"update", "id", "set": {"label"?, "kind"?, "icon"?}}, {"op":"remove", "id"}, {"op":"disconnect", "source", "target"}
 새 id 는 짧은 영문 소문자+하이픈(예: "alb", "web-a", "pub-a"). 기존 id 와 겹치지 않게.
 AWS 관례: 서브넷은 AZ 안, AZ 는 VPC 안, VPC 는 Region 안. DB 는 Private subnet. 사용자/인터넷은 Region 밖. IGW 는 VPC 에 하나.
+회사·집의 서버/PC, 기존 데이터센터 같은 온프레미스는 Region·VPC 밖에 두고, 필요하면 kind corporate-dc 상자(라벨: 회사, 집 등)에 넣는다. Customer Gateway 도 그 상자 안(온프레미스 쪽)이고, VPN Gateway 만 VPC 에 둔다.
 겹치는 상자: 오토 스케일링 그룹(auto-scaling), 보안 그룹(security-group), ECS 클러스터·EKS 노드 그룹 같은 묶음은 아무것도 품지 않는다. 이런 상자는 add_group 에 "members": [그 안에 보일 노드 id] 를 주고 parent·좌표는 쓰지 않는다(앱이 멤버를 감싸게 그린다). 멤버 EC2·태스크의 parent 는 각자의 서브넷이다. 클러스터처럼 kind 가 generic 이면 "overlay": true 를 준다.
 배치: 좌표(x/y)는 쓰지 않는다. 앱이 연결 관계를 보고 자리를 정한다. 대신 VPC·서브넷 안에 들어갈 노드는 add_node 에 parent(들어갈 그룹 id)를 반드시 쓴다(예: EC2·RDS·ElastiCache → 해당 서브넷, ALB·NAT → 퍼블릭 서브넷).
 CloudFront·WAF·Route 53·S3·DynamoDB·API Gateway 같은 리전/글로벌 서비스는 parent 를 쓰지 않는다(VPC 밖). 새 노드는 반드시 connect 로 기존 노드와 이어서 흐름 위치가 드러나게 한다.

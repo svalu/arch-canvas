@@ -118,7 +118,10 @@ export function AiWizard({ open, initialText = '', verified, onOpenConnect, onCl
               <div className="wz-options">
                 {(q.options || []).map((o) => <button key={o} className={'chip big' + (chosen(o) ? ' on' : '')} onClick={() => pick(o)}>{o}</button>)}
               </div>
-              <input className="wz-other" value={other} onChange={(e) => setOther(e.target.value)} placeholder="직접 적기 (선택)" onKeyDown={(e) => { if (e.key === 'Enter') goNext(); }} />
+              <label className="wz-field">
+                <span>또는 직접 적기 <small>(선택)</small></span>
+                <input value={other} onChange={(e) => setOther(e.target.value)} placeholder="예: 하루 10명 정도, 저녁에만" onKeyDown={(e) => { if (e.key === 'Enter') goNext(); }} />
+              </label>
             </div>
             <div className="modal-actions">
               <button onClick={() => (qi ? setQi(qi - 1) : setStep('write'))}>이전</button>

@@ -1,5 +1,5 @@
 // 그래프 좌표 계산. 캔버스 엣지 그리기와 PowerPoint 내보내기가 같은 함수를 써서 모양이 어긋나지 않게 한다.
-import { ICON_SIZE } from './schema.js';
+import { ICON_SIZE, LABEL_WIDTH } from './schema.js';
 
 /** id -> {x, y, w, h} 절대 좌표(캔버스 px). 그룹과 아이콘 노드 모두. */
 export function absoluteRects(g) {
@@ -266,4 +266,93 @@ function pushSiblings(g, grp, old, GAP) {
     }
   }
   return moved;
+}
+
+/**
+ * 이번에 새로 만든 담는 상자를 안의 것에 딱 맞게 줄인다(AI 가 준 대략 크기 때문에 생기는 빈 공간 제거).
+ * 안쪽 상자부터. 안의 것을 왼쪽 위 여백에 맞춰 당기고(서로의 배치는 그대로), 크기를 내용 + 여백으로.
+ * 비어 있는 상자와 겹치는 상자(ASG 등)는 건드리지 않는다.
+ */
+export function tightenGroups(g, ids, isOverlay = () => false) {
+  if (!ids?.size) return g;
+  const L = 24, T = 48, R = 24, B = 20;                // 왼쪽·위(이름표 자리)·오른쪽·아래 여백
+  const half = Math.max(0, (LABEL_WIDTH - ICON_SIZE) / 2);   // 아이콘 이름표가 양옆으로 넘치는 폭
+  const depth = depthMap(g);
+  const order = g.groups.filter((x) => ids.has(x.id) && !isOverlay(x)).sort((a, b) => depth.get(b.id) - depth.get(a.id));
+  for (const grp of order) {
+    tidySiblings(g.groups.filter((c) => c.parent === grp.id && !isOverlay(c)));
+    const kids = [...g.groups.filter((c) => c.parent === grp.id && !isOverlay(c)), ...g.nodes.filter((n) => n.parent === grp.id)];
+    if (!kids.length) continue;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const k of kids) {
+      const box = 'kind' in k ? { x: k.x, y: k.y, w: k.w, h: k.h }
+        : isBox(k) ? { x: k.x, y: k.y, w: k.w, h: k.h } : { x: k.x - half, y: k.y, w: ICON_SIZE + half * 2, h: ICON_SIZE + LABEL_SPACE };
+      x0 = Math.min(x0, box.x); y0 = Math.min(y0, box.y); x1 = Math.max(x1, box.x + box.w); y1 = Math.max(y1, box.y + box.h);
+    }
+    const dx = Math.round(L - x0), dy = Math.round(T - y0);
+    // 겹치는 상자는 안의 멤버를 따라 같이 옮긴다 (부모가 같으면)
+    for (const k of [...kids, ...g.groups.filter((c) => c.parent === grp.id && isOverlay(c))]) { k.x += dx; k.y += dy; }
+    grp.w = Math.max(160, Math.round(x1 - x0 + L + R));
+    grp.h = Math.max(110, Math.round(y1 - y0 + T + B));
+  }
+  return g;
+}
+
+/**
+ * 형제 상자 정돈: 세로로 쌓인 것(서브넷들)은 폭과 왼쪽을 맞추고, 가로로 나란한 것(AZ 들)은 높이와 위를 맞춘 뒤
+ * 겹치면 오른쪽/아래로 민다. 상자를 키우기만 하므로 안의 것은 그대로 들어 있다.
+ */
+function tidySiblings(list, GAP = 24) {
+  if (list.length < 2) return;
+  const xOver = (a, b) => Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > Math.min(a.w, b.w) * 0.5;
+  const yOver = (a, b) => Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > Math.min(a.h, b.h) * 0.5;
+  const clusters = (same) => {
+    const out = [];
+    for (const x of list) {
+      const c = out.find((cl) => cl.some((y) => same(x, y)));
+      if (c) c.push(x); else out.push([x]);
+    }
+    return out.filter((c) => c.length > 1);
+  };
+  for (const col of clusters(xOver)) {           // 세로로 쌓인 것
+    const x = Math.min(...col.map((k) => k.x)), w = Math.max(...col.map((k) => k.w));
+    col.sort((a, b) => a.y - b.y);
+    let y = col[0].y;
+    for (const k of col) { k.x = x; k.w = w; if (k.y < y) k.y = y; y = k.y + k.h + GAP; }
+  }
+  for (const row of clusters(yOver)) {           // 가로로 나란한 것
+    const y = Math.min(...row.map((k) => k.y)), h = Math.max(...row.map((k) => k.h));
+    row.sort((a, b) => a.x - b.x);
+    let x = row[0].x;
+    for (const k of row) { k.y = y; k.h = h; if (k.x < x) k.x = x; x = k.x + k.w + GAP; }
+  }
+}
+
+/**
+ * 자동으로 놓인 아이콘을 줄 맞춤: 같은 상자 안에서 거의 같은 높이(±28px)면 한 줄로, 거의 같은 가로 위치면 한 세로줄로.
+ * 맞춘 뒤 다른 것과 겹치게 되는 이동은 하지 않는다.
+ */
+export function alignNodes(g, ids, tol = 28) {
+  if (!ids?.size) return g;
+  const byParent = new Map();
+  for (const n of g.nodes) if (ids.has(n.id) && !isBox(n)) (byParent.get(n.parent ?? null) || byParent.set(n.parent ?? null, []).get(n.parent ?? null)).push(n);
+  const boxOf = (n, x = n.x, y = n.y) => ({ x, y, w: ICON_SIZE, h: ICON_SIZE + LABEL_SPACE });
+  for (const [pid, list] of byParent) {
+    const others = [...g.nodes.filter((n) => (n.parent ?? null) === pid), ...g.groups.filter((x) => (x.parent ?? null) === pid)];
+    const clear = (n, x, y) => others.every((o) => o === n || !hit(boxOf(n, x, y), 'kind' in o || isBox(o) ? { x: o.x, y: o.y, w: o.w, h: o.h } : boxOf(o)));
+    for (const axis of ['y', 'x']) {
+      const sorted = [...list].sort((a, b) => a[axis] - b[axis]);
+      let band = [];
+      const flush = () => {
+        if (band.length > 1) {
+          const v = Math.round(band.reduce((s, n) => s + n[axis], 0) / band.length);
+          for (const n of band) if (axis === 'y' ? clear(n, n.x, v) : clear(n, v, n.y)) n[axis] = v;
+        }
+        band = [];
+      };
+      for (const n of sorted) { if (band.length && n[axis] - band[0][axis] > tol) flush(); band.push(n); }
+      flush();
+    }
+  }
+  return g;
 }
