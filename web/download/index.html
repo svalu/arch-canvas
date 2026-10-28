@@ -3,79 +3,298 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Arch Canvas 받기 — Windows</title>
-  <meta name="description" content="Arch Canvas Windows 버전 내려받기 (최신 버전)" />
-  <meta property="og:title" content="Arch Canvas 받기 (Windows)" />
-  <meta property="og:description" content="AWS 아키텍처 다이어그램을 그리고 PowerPoint 에 편집 가능한 도형으로 붙이는 도구" />
+  <title>Arch Canvas · 다운로드</title>
+  <meta name="description" content="말로 적으면 AWS 아키텍처 그림이 되고, PowerPoint 에 편집 가능한 도형으로 붙는 도구. Windows 버전 내려받기와 웹 버전." />
+  <meta property="og:title" content="Arch Canvas · 다운로드" />
+  <meta property="og:description" content="말로 적으면 AWS 아키텍처 그림이 됩니다. PowerPoint 에 편집 가능한 도형으로 붙습니다." />
   <meta name="theme-color" content="#232F3E" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23232F3E'/%3E%3Crect x='7' y='9' width='18' height='14' rx='2' fill='none' stroke='%232DD4BF' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%23FF9900'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
   <style>
-    :root { --bg: #f6f7f9; --card: #fff; --ink: #1d2733; --muted: #5b6472; --line: #e2e6eb; --accent: #232F3E; --accent-ink: #fff; --teal: #0f8f80; }
-    @media (prefers-color-scheme: dark) { :root { --bg: #0d181b; --card: #12262a; --ink: #e6f6f3; --muted: #9fb8b3; --line: #1f3a3a; --accent: #2DD4BF; --accent-ink: #06201d; --teal: #2DD4BF; } }
+    :root {
+      --bg: #f4f6f7; --paper: #ffffff; --ink: #18212b; --sub: #4c5866; --muted: #7b8794; --line: #e1e6ea;
+      --navy: #232F3E; --teal: #0f8f80; --teal-soft: #e3f4f1; --orange: #ED7100; --orange-soft: #fff1e3; --purple: #8C4FFF;
+      --btn: #232F3E; --btn-ink: #fff; --shadow: 0 18px 50px rgba(24, 33, 43, .10);
+    }
+    @media (prefers-color-scheme: dark) { :root {
+      --bg: #0d1719; --paper: #12222a; --ink: #e8f3f1; --sub: #b4c6c3; --muted: #84a09b; --line: #1f3a3a;
+      --navy: #e8f3f1; --teal: #2DD4BF; --teal-soft: #12302f; --orange: #ff9a3c; --orange-soft: #3a2a14; --purple: #b694ff;
+      --btn: #2DD4BF; --btn-ink: #06201d; --shadow: 0 18px 50px rgba(0, 0, 0, .35);
+    } }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--ink);
-      font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; padding: 24px 16px; }
-    main { width: 100%; max-width: 560px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 32px 28px; }
-    .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; }
-    h1 { font-size: 24px; margin: 20px 0 6px; letter-spacing: -.01em; }
-    .ver { color: var(--muted); font-size: 13px; min-height: 1.6em; }
-    .btn { display: inline-flex; align-items: center; gap: 8px; margin-top: 18px; padding: 12px 20px; border-radius: 10px; background: var(--accent); color: var(--accent-ink);
-      font-weight: 700; text-decoration: none; font-size: 16px; }
-    .btn:hover { filter: brightness(1.1); }
-    .alt { margin-top: 12px; font-size: 14px; }
-    a { color: var(--teal); }
-    ol { padding-left: 20px; margin: 8px 0 0; }
-    li { margin: 4px 0; }
-    h2 { font-size: 15px; margin: 26px 0 4px; }
-    .note { color: var(--muted); font-size: 13px; margin-top: 22px; border-top: 1px solid var(--line); padding-top: 14px; }
-    .maker { display: flex; justify-content: center; margin-top: 18px; color: var(--muted); opacity: .8; }
-    code { font-size: 13px; background: color-mix(in srgb, var(--line) 60%, transparent); padding: 1px 5px; border-radius: 4px; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: 'Pretendard Variable', Pretendard, -apple-system, 'Segoe UI', 'Malgun Gothic', sans-serif; line-height: 1.6; -webkit-font-smoothing: antialiased; word-break: keep-all; }
+    a { color: inherit; }
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+    /* 상단 */
+    header { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+    header .wrap { display: flex; align-items: center; justify-content: space-between; height: 68px; }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .logo b { display: block; font-size: 18px; letter-spacing: -.01em; }
+    .logo small { display: block; font-size: 10.5px; letter-spacing: .14em; color: var(--muted); margin-top: -2px; }
+    nav { display: flex; gap: 22px; font-size: 14px; font-weight: 600; }
+    nav a { text-decoration: none; color: var(--sub); } nav a:hover { color: var(--ink); }
+
+    /* 첫 화면 */
+    .hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: 48px; align-items: center; padding: 64px 0 56px; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--teal); }
+    .eyebrow::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--orange); }
+    h1 { font-size: clamp(34px, 5vw, 54px); line-height: 1.18; letter-spacing: -.035em; margin: 18px 0 18px; font-weight: 800; }
+    h1 em { font-style: normal; color: var(--teal); }
+    .lead { font-size: 17px; color: var(--sub); margin: 0 0 30px; max-width: 30em; }
+    .ctas { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+    .btn { display: inline-flex; align-items: center; gap: 10px; padding: 15px 24px; border-radius: 12px; font-weight: 700; font-size: 16px; text-decoration: none; transition: transform .15s, box-shadow .15s, filter .15s; }
+    .btn.primary { background: var(--btn); color: var(--btn-ink); box-shadow: 0 10px 24px rgba(35, 47, 62, .22); }
+    .btn.primary:hover { transform: translateY(-1px); filter: brightness(1.08); }
+    .btn.ghost { border: 1.5px solid var(--line); color: var(--ink); background: var(--paper); }
+    .btn.ghost:hover { border-color: var(--teal); color: var(--teal); }
+    .meta { margin-top: 22px; font-size: 13px; color: var(--muted); }
+    .meta .facts { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--sub); font-weight: 600; }
+    .meta .facts span + span::before { content: '·'; margin-right: 14px; color: var(--line); }
+    .meta p { margin: 6px 0 0; }
+    .copy-link { border: 0; background: none; padding: 0; font: inherit; color: var(--sub); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+
+    .stage { background: var(--paper); border: 1px solid var(--line); border-radius: 28px; padding: 22px; box-shadow: var(--shadow); }
+    .stage svg { display: block; width: 100%; height: auto; }
+
+    /* 특징 */
+    .features { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .feature { display: flex; gap: 14px; padding: 26px 8px; }
+    .feature + .feature { border-left: 1px solid var(--line); padding-left: 24px; }
+    .feature .no { font-size: 12px; font-weight: 800; color: var(--orange); padding-top: 3px; }
+    .feature b { display: block; font-size: 16px; }
+    .feature span { font-size: 13.5px; color: var(--muted); }
+
+    section.block { padding: 72px 0 0; }
+    .kicker { font-size: 13px; font-weight: 700; color: var(--teal); }
+    h2 { font-size: clamp(26px, 3.4vw, 34px); letter-spacing: -.03em; margin: 8px 0 8px; line-height: 1.25; }
+    .sub { color: var(--sub); margin: 0 0 26px; }
+
+    /* 설치 안내 */
+    .guides { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .guide { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+    .guide summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 14px; padding: 22px 22px; }
+    .guide summary::-webkit-details-marker { display: none; }
+    .guide .ic { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; font-size: 19px; flex: none; }
+    .guide .ic.new { background: var(--teal-soft); color: var(--teal); } .guide .ic.up { background: var(--orange-soft); color: var(--orange); }
+    .guide small { display: block; font-size: 12px; color: var(--muted); font-weight: 600; }
+    .guide b { display: block; font-size: 17px; }
+    .guide .chev { margin-left: auto; color: var(--muted); transition: transform .2s; }
+    .guide[open] .chev { transform: rotate(90deg); }
+    .guide ol { margin: 0; padding: 0 22px 22px 22px; list-style: none; counter-reset: s; display: flex; flex-direction: column; gap: 12px; }
+    .guide li { counter-increment: s; display: grid; grid-template-columns: 28px 1fr; gap: 10px; font-size: 14.5px; color: var(--sub); }
+    .guide li::before { content: counter(s); width: 24px; height: 24px; border-radius: 50%; background: var(--teal-soft); color: var(--teal); font-size: 12px; font-weight: 800; display: grid; place-items: center; margin-top: 1px; }
+    .guide li b { display: inline; font-size: inherit; color: var(--ink); }
+    .note { margin-top: 14px; font-size: 13px; color: var(--muted); }
+    kbd { font-family: inherit; font-size: 12px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px; padding: 0 6px; background: var(--paper); }
+
+    /* 이번 버전 */
+    .release { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 24px 26px; }
+    .release-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+    .release-head b { font-size: 20px; } .release-head span { color: var(--muted); font-size: 13px; }
+    .release-head a { margin-left: auto; font-size: 13.5px; font-weight: 600; color: var(--teal); text-decoration: none; }
+    .release ul { margin: 14px 0 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .release li { position: relative; padding-left: 18px; color: var(--sub); font-size: 14.5px; }
+    .release li::before { content: ''; position: absolute; left: 0; top: .62em; width: 7px; height: 7px; border-radius: 2px; background: var(--teal); }
+    .release li b { color: var(--ink); }
+
+    /* 자주 묻는 질문 */
+    .faq { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+    .faq details { border-bottom: 1px solid var(--line); }
+    .faq summary { list-style: none; cursor: pointer; padding: 18px 4px; font-weight: 700; font-size: 16px; display: flex; justify-content: space-between; gap: 12px; }
+    .faq summary::-webkit-details-marker { display: none; }
+    .faq summary::after { content: '+'; color: var(--muted); font-weight: 400; font-size: 22px; line-height: 1; }
+    .faq details[open] summary::after { content: '−'; }
+    .faq .a { padding: 0 4px 20px; color: var(--sub); font-size: 14.5px; }
+    .faq .a p { margin: 0 0 8px; }
+
+    /* 마지막 */
+    .final { margin: 80px 0 0; padding: 56px 24px; text-align: center; background: var(--navy); color: #fff; border-radius: 28px; }
+    @media (prefers-color-scheme: dark) { .final { background: #12302f; color: var(--ink); } }
+    .final h2 { color: inherit; margin-bottom: 22px; }
+    .final .btn.primary { background: #2DD4BF; color: #06201d; }
+    footer { padding: 40px 0 48px; display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--muted); font-size: 12.5px; }
+    footer .mark { color: var(--sub); opacity: .8; }
+
+    @media (max-width: 860px) {
+      .hero { grid-template-columns: 1fr; padding: 40px 0; gap: 32px; }
+      .features { grid-template-columns: 1fr; }
+      .feature + .feature { border-left: 0; border-top: 1px solid var(--line); padding-left: 8px; }
+      .guides { grid-template-columns: 1fr; }
+      nav a.opt { display: none; }
+    }
+    nav a { white-space: nowrap; }
+    @media (max-width: 520px) { .wrap { padding: 0 16px; } nav { gap: 14px; font-size: 13px; } .logo small { display: none; } .btn { width: 100%; justify-content: center; } }
+    @media (max-width: 380px) { nav a[href="#faq"] { display: none; } }
   </style>
 </head>
 <body>
-  <main>
-    <div class="logo">
-      <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#232F3E"/><rect x="7" y="9" width="18" height="14" rx="2" fill="none" stroke="#2DD4BF" stroke-width="2.5"/><circle cx="16" cy="16" r="3" fill="#FF9900"/></svg>
-      Arch Canvas
+  <header>
+    <div class="wrap">
+      <a class="logo" href="#top" aria-label="Arch Canvas">
+        <svg width="36" height="36" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#232F3E"/><rect x="7" y="9" width="18" height="14" rx="2" fill="none" stroke="#2DD4BF" stroke-width="2.5"/><circle cx="16" cy="16" r="3" fill="#FF9900"/></svg>
+        <span><b>Arch Canvas</b><small>ARCHITECTURE DRAWING</small></span>
+      </a>
+      <nav>
+        <a href="#install">설치·업데이트</a>
+        <a href="#faq">자주 묻는 질문</a>
+        <a class="opt" href="https://github.com/svalu/arch-canvas/releases" target="_blank" rel="noopener">배포 기록 ↗</a>
+      </nav>
     </div>
-    <h1>Windows 버전 받기</h1>
-    <div class="ver" id="ver">최신 버전</div>
-    <a class="btn" id="dl" href="https://github.com/svalu/arch-canvas/releases/latest/download/Arch_Canvas_Windows.zip">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
-      내려받기 (.zip)
-    </a>
-    <div class="alt">설치 없이 브라우저에서 쓰려면 <a href="../">웹 버전 열기</a></div>
+  </header>
 
-    <h2>설치</h2>
-    <ol>
-      <li>zip 을 원하는 폴더에 풉니다.</li>
-      <li><code>Arch Canvas.exe</code> 를 실행합니다. 처음 실행하면 같은 폴더에 <code>data</code> 폴더가 생깁니다.</li>
-      <li>"Windows의 PC 보호" 창이 뜨면 [추가 정보] → [실행]을 누릅니다.</li>
-    </ol>
+  <main class="wrap" id="top">
+    <section class="hero">
+      <div>
+        <span class="eyebrow">제안서용 AWS 아키텍처 그리기</span>
+        <h1>말로 적으면,<br /><em>그림</em>이 됩니다.</h1>
+        <p class="lead">AWS 를 몰라도 괜찮아요. 만들고 싶은 걸 적으면 AI 가 쉬운 질문 몇 개로 확인하고 그려 줍니다. 다 그린 그림은 PowerPoint 에 편집 가능한 도형으로 그대로 붙습니다.</p>
+        <div class="ctas">
+          <a class="btn primary" id="dl" href="https://github.com/svalu/arch-canvas/releases/latest/download/Arch_Canvas_Windows.zip">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+            Windows 버전 다운로드
+          </a>
+          <a class="btn ghost" href="../">웹에서 바로 쓰기 ↗</a>
+        </div>
+        <div class="meta">
+          <div class="facts" id="facts"><span>최신 버전</span><span>zip · 설치 없음</span><span>Windows 10/11</span></div>
+          <p id="checked">GitHub 에서 최신 버전을 확인하고 있어요…</p>
+          <p>맥이나 다른 PC 에서는 <a href="../">웹 버전</a>을 쓰세요. 이 페이지 주소는 <button class="copy-link" id="copy">링크 복사</button>로 전할 수 있어요.</p>
+        </div>
+      </div>
 
-    <h2>Windows 버전에서만 되는 것</h2>
-    <ol>
-      <li>PowerPoint 에 편집 가능한 도형으로 붙여 넣기 (Ctrl+Shift+C)</li>
-      <li>내 PC 의 Claude CLI 로 AI 검수·그리기 (내 Claude 구독 사용)</li>
-      <li>앱 안 [업데이트] 버튼으로 새 버전 받기</li>
-    </ol>
+      <div class="stage" aria-hidden="true">
+        <svg viewBox="0 0 520 420">
+          <defs><filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="6" stdDeviation="8" flood-opacity=".14"/></filter></defs>
+          <!-- 말풍선: 말로 그리기 -->
+          <g filter="url(#sh)">
+            <rect x="20" y="16" width="300" height="70" rx="16" fill="var(--paper)" stroke="var(--line)"/>
+            <path d="M60 86 l10 14 l14 -14z" fill="var(--paper)" stroke="var(--line)"/>
+            <rect x="57" y="84" width="30" height="4" fill="var(--paper)"/>
+          </g>
+          <text x="40" y="45" font-size="13" font-weight="700" fill="var(--teal)">✦ 말로 그리기</text>
+          <text x="40" y="68" font-size="14" fill="var(--ink)">내 AI 를 밖에서도 휴대폰으로 쓰고 싶어</text>
+          <!-- 그림 -->
+          <rect x="120" y="120" width="380" height="280" rx="6" fill="none" stroke="var(--teal)" stroke-dasharray="6 5" stroke-width="1.6"/>
+          <rect x="120" y="120" width="24" height="24" fill="var(--teal)"/><text x="152" y="137" font-size="12" font-weight="700" fill="var(--teal)">Region</text>
+          <rect x="146" y="160" width="334" height="220" rx="4" fill="none" stroke="var(--purple)" stroke-width="1.6"/>
+          <rect x="146" y="160" width="22" height="22" fill="var(--purple)"/><text x="176" y="176" font-size="12" font-weight="700" fill="var(--purple)">VPC</text>
+          <rect x="170" y="200" width="290" height="70" rx="3" fill="#7AA116" fill-opacity=".14"/><text x="182" y="218" font-size="11" font-weight="700" fill="#5d7c10">Public subnet</text>
+          <rect x="170" y="285" width="290" height="80" rx="3" fill="#00A4A6" fill-opacity=".14"/><text x="182" y="303" font-size="11" font-weight="700" fill="#007a7c">Private subnet</text>
+          <!-- 아이콘 -->
+          <g font-size="10.5" text-anchor="middle" fill="var(--sub)">
+            <circle cx="56" cy="250" r="20" fill="none" stroke="var(--ink)" stroke-width="2"/><circle cx="56" cy="243" r="6" fill="none" stroke="var(--ink)" stroke-width="2"/><path d="M45 260 q11 -10 22 0" fill="none" stroke="var(--ink)" stroke-width="2"/><text x="56" y="286">사용자</text>
+            <circle cx="250" cy="240" r="18" fill="none" stroke="var(--purple)" stroke-width="2.2"/><path d="M241 248 v-10 h18 v10 M250 230 v8" fill="none" stroke="var(--purple)" stroke-width="2"/><text x="250" y="272">ALB</text>
+            <rect x="232" y="306" width="36" height="36" rx="3" fill="none" stroke="var(--orange)" stroke-width="2.4"/><rect x="240" y="314" width="20" height="20" fill="none" stroke="var(--orange)" stroke-width="2"/><text x="250" y="358">AI 서버</text>
+            <path d="M370 306 h36 v8 c0 6 -36 6 -36 0z M370 314 v22 c0 6 36 6 36 0 v-22" fill="none" stroke="#C925D1" stroke-width="2.2"/><text x="388" y="358">기억 DB</text>
+          </g>
+          <!-- 선 -->
+          <g fill="none" stroke="var(--ink)" stroke-width="1.6">
+            <path d="M78 250 H228"/><path d="M250 260 V304"/><path d="M270 324 H368"/>
+          </g>
+          <g fill="var(--ink)"><path d="M228 246 l8 4 l-8 4z"/><path d="M246 304 l4 8 l4 -8z"/><path d="M368 320 l8 4 l-8 4z"/></g>
+          <!-- PPT 배지 -->
+          <g filter="url(#sh)"><rect x="372" y="208" width="128" height="40" rx="10" fill="var(--orange)"/></g>
+          <text x="436" y="233" font-size="12.5" font-weight="800" text-anchor="middle" fill="#fff">PowerPoint 도형 ✓</text>
+        </svg>
+      </div>
+    </section>
 
-    <div class="note">Windows 10/11 · WebView2 런타임 필요 (Windows 11 기본 포함). 이전 버전과 변경 내역은 <a href="https://github.com/svalu/arch-canvas/releases">릴리스 목록</a>에 있습니다.</div>
-    <div class="maker"><svg width="20" height="20" viewBox="40 70 470 430" role="img" aria-label="만든 사람의 낙관"><title>만든 사람의 낙관</title><path fill="currentColor" d="M496.29,294.9l-163.29-163.29h146.06v-44H70.94v44h146.06L53.71,294.9l31.11,31.11,34.57-34.57c-1.83,9.61-2.8,19.52-2.8,29.66,0,87.34,71.06,158.4,158.4,158.4s158.4-71.06,158.4-158.4c0-10.13-.97-20.04-2.8-29.65l34.57,34.57,31.11-31.11ZM297,208.82c45.47,8.89,81.38,44.8,90.27,90.27h-90.27v-90.27ZM253,299.09h-90.27c8.89-45.47,44.8-81.38,90.27-90.27v90.27ZM162.73,343.09h90.27v90.27c-45.47-8.89-81.38-44.8-90.27-90.27ZM297,433.37v-90.27h90.27c-8.89,45.47-44.8,81.38-90.27,90.27ZM275,162.69c-10.13,0-20.04.97-29.65,2.8l29.65-29.65,29.65,29.65c-9.61-1.83-19.52-2.8-29.65-2.8Z"/></svg></div>
+    <section class="features" aria-label="특징">
+      <div class="feature"><span class="no">01</span><div><b>말로 그리기</b><span>부족한 건 AI 가 쉬운 질문으로 확인</span></div></div>
+      <div class="feature"><span class="no">02</span><div><b>PowerPoint 에 그대로</b><span>편집 가능한 도형과 연결선으로 붙음</span></div></div>
+      <div class="feature"><span class="no">03</span><div><b>규칙과 AI 검수</b><span>빠진 것·과한 것을 그림 위에 표시</span></div></div>
+    </section>
+
+    <section class="block" id="install">
+      <div class="kicker">시작은 가볍게</div>
+      <h2>처음이어도, 다시 와도.</h2>
+      <p class="sub">지금 필요한 안내만 펼쳐 보세요.</p>
+      <div class="guides">
+        <details class="guide" open>
+          <summary><span class="ic new">↓</span><span><small>처음 써 보는 분</small><b>처음 설치하기</b></span><span class="chev">›</span></summary>
+          <ol>
+            <li><span>위의 <b>Windows 버전 다운로드</b>를 눌러 zip 파일을 받아요.</span></li>
+            <li><span>받은 zip 을 원하는 폴더에 <b>압축 풀기</b> 해요. 설치는 없어요.</span></li>
+            <li><span><b>Arch Canvas.exe</b> 를 더블클릭해요. "Windows의 PC 보호" 창이 뜨면 <b>추가 정보 → 실행</b>을 눌러요.</span></li>
+            <li><span>처음 켜면 화면 안내가 나와요. 빈 캔버스의 <b>✦ 말로 그리기</b>로 바로 시작해 보세요.</span></li>
+          </ol>
+        </details>
+        <details class="guide">
+          <summary><span class="ic up">↻</span><span><small>이미 쓰고 있는 분</small><b>새 버전으로 업데이트</b></span><span class="chev">›</span></summary>
+          <ol>
+            <li><span>앱을 켜면 위쪽에 주황색 <b>[업데이트]</b> 버튼이 떠요. 누르면 바뀐 내용을 보고 바로 업데이트돼요.</span></li>
+            <li><span>안 보이면 <b>? (도움말) → 업데이트 확인</b>을 눌러요. 확인은 하루 한 번 자동으로 해요.</span></li>
+            <li><span>새로 받아서 쓰고 싶으면 zip 을 받아 <b>원래 폴더에 덮어쓰기</b> 해도 돼요. 옆의 <b>data</b> 폴더는 그대로 두세요.</span></li>
+          </ol>
+        </details>
+      </div>
+      <p class="note">AI 기능은 내 PC 의 Claude CLI(내 Claude 구독) 또는 API 키로 연결해요. 연결은 앱 안에서 4단계로 안내해 드려요.</p>
+    </section>
+
+    <section class="block" id="release">
+      <div class="kicker">조금씩 더 편하게</div>
+      <h2>이번 버전의 변화</h2>
+      <p class="sub">GitHub 에 올라간 최신 버전의 변경 내용이에요.</p>
+      <div class="release">
+        <div class="release-head"><b id="rel-ver">최신 버전</b><span id="rel-date"></span><a href="https://github.com/svalu/arch-canvas/releases" target="_blank" rel="noopener">전체 배포 기록 ↗</a></div>
+        <ul id="rel-notes"><li>불러오는 중…</li></ul>
+      </div>
+    </section>
+
+    <section class="block" id="faq">
+      <div class="kicker">잠깐 막혔나요?</div>
+      <h2>자주 묻는 질문</h2>
+      <p class="sub">여기서 먼저 확인해 보세요.</p>
+      <div class="faq">
+        <details><summary>설치 없이 바로 써 볼 수 있나요?</summary><div class="a"><p>네. <a href="../">웹 버전</a>을 열면 브라우저에서 바로 쓸 수 있어요. 맥에서도 돼요.</p><p>다만 웹 버전은 PowerPoint 편집 도형 복사와 Claude CLI 연결이 안 되고(PNG 복사는 돼요), 작업이 그 브라우저에만 저장돼요.</p></div></details>
+        <details><summary>"Windows의 PC 보호" 창이 떠요.</summary><div class="a"><p>처음 받은 프로그램이라 Windows 가 한 번 확인하는 화면이에요. <b>추가 정보</b>를 누르면 나오는 <b>실행</b> 버튼을 누르세요.</p><p>회사 PC 에서 아예 막힌다면 보안 정책 때문일 수 있어요. 그럴 땐 웹 버전을 쓰세요.</p></div></details>
+        <details><summary>업데이트하면 내 그림이 사라지나요?</summary><div class="a"><p>아니요. 그림은 EXE 옆 <b>data</b> 폴더에 남아 있어요. 중요한 그림은 <kbd>Ctrl</kbd>+<kbd>S</kbd> 로 파일로도 저장해 두세요.</p></div></details>
+        <details><summary>AWS 를 전혀 몰라도 쓸 수 있나요?</summary><div class="a"><p>네. <b>✦ 말로 그리기</b>에 만들고 싶은 걸 막 적으면, AI 가 몇 명이 쓰는지·계속 켜 둘지 같은 걸 쉬운 질문으로 묻고 그려 줘요. 이미 만든 프로그램이 있으면 쓰시는 AI 로 뽑은 시스템 설명 문서(MD)를 넣어도 돼요.</p></div></details>
+        <details><summary>AI 는 무엇으로 연결하나요? 돈이 드나요?</summary><div class="a"><p>내 PC 에 설치된 Claude CLI 를 쓰면 내 Claude 구독으로 동작해서 추가 비용이 없어요. Claude·OpenAI API 키를 넣어 쓸 수도 있어요(이 경우 사용량만큼 요금).</p><p>AI 를 안 쓰면 보기 설정에서 끌 수 있고, 그리기·내보내기는 그대로 돼요.</p></div></details>
+        <details><summary>내 그림이 어디로 보내지나요?</summary><div class="a"><p>그림은 내 PC(또는 내 브라우저)에만 저장돼요. AI 기능을 쓸 때만 그 요청에 필요한 그림 설명이 연결한 AI 로 가요. 의견 보내기는 내가 적은 내용과 버전 정보만 보내요.</p></div></details>
+        <details><summary>PowerPoint 에는 어떻게 붙이나요?</summary><div class="a"><p>Windows 버전에서 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> 를 누르고 PowerPoint 에서 <kbd>Ctrl</kbd>+<kbd>V</kbd> 하면 아이콘·상자·연결선이 편집 가능한 도형으로 붙어요. 그림으로 붙이려면 <kbd>Ctrl</kbd>+<kbd>C</kbd> (PNG).</p></div></details>
+      </div>
+    </section>
+
+    <section class="final">
+      <h2>오늘의 그림, 말로 시작해 보세요.</h2>
+      <div class="ctas" style="justify-content:center">
+        <a class="btn primary" id="dl2" href="https://github.com/svalu/arch-canvas/releases/latest/download/Arch_Canvas_Windows.zip">Arch Canvas 다운로드 ↓</a>
+        <a class="btn ghost" href="../" style="background:transparent;color:inherit;border-color:rgba(255,255,255,.35)">웹에서 바로 쓰기</a>
+      </div>
+    </section>
+
+    <footer>
+      <svg class="mark" width="22" height="22" viewBox="40 70 470 430" role="img" aria-label="만든 사람의 낙관"><title>만든 사람의 낙관</title><path fill="currentColor" d="M496.29,294.9l-163.29-163.29h146.06v-44H70.94v44h146.06L53.71,294.9l31.11,31.11,34.57-34.57c-1.83,9.61-2.8,19.52-2.8,29.66,0,87.34,71.06,158.4,158.4,158.4s158.4-71.06,158.4-158.4c0-10.13-.97-20.04-2.8-29.65l34.57,34.57,31.11-31.11ZM297,208.82c45.47,8.89,81.38,44.8,90.27,90.27h-90.27v-90.27ZM253,299.09h-90.27c8.89-45.47,44.8-81.38,90.27-90.27v90.27ZM162.73,343.09h90.27v90.27c-45.47-8.89-81.38-44.8-90.27-90.27ZM297,433.37v-90.27h90.27c-8.89,45.47-44.8,81.38-90.27,90.27ZM275,162.69c-10.13,0-20.04.97-29.65,2.8l29.65-29.65,29.65,29.65c-9.61-1.83-19.52-2.8-29.65-2.8Z"/></svg>
+      <span>아이콘: AWS Architecture Icons. AWS 가 후원하거나 승인한 도구가 아닙니다.</span>
+    </footer>
   </main>
+
   <script>
-    // 최신 버전 번호와 크기만 보여 준다. 실패해도 내려받기 링크는 그대로 동작한다.
+    // 최신 릴리스: 버전·크기·날짜와 변경 내용. 실패해도 다운로드 링크는 그대로 동작한다.
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const inline = (s) => esc(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
     fetch('https://api.github.com/repos/svalu/arch-canvas/releases/latest')
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
-        if (!j) return;
+        if (!j) throw new Error();
         const a = (j.assets || []).find((x) => x.name === 'Arch_Canvas_Windows.zip') || (j.assets || []).find((x) => /^Arch_Canvas_v.*\.zip$/i.test(x.name));
         const v = String(j.tag_name || '').replace(/^v/, '');
         const d = j.published_at ? new Date(j.published_at).toLocaleDateString('ko-KR') : '';
-        document.getElementById('ver').textContent = `최신 ${v}${d ? ' · ' + d : ''}${a ? ' · ' + (a.size / 1048576).toFixed(1) + 'MB' : ''}`;
-        if (a) document.getElementById('dl').href = a.browser_download_url;
+        $('facts').innerHTML = `<span>v${esc(v)}</span>${a ? `<span>${(a.size / 1048576).toFixed(1)} MB</span>` : ''}<span>zip · 설치 없음</span><span>Windows 10/11</span>`;
+        $('checked').textContent = 'GitHub 최신 배포 버전을 확인했어요.';
+        if (a) { $('dl').href = a.browser_download_url; $('dl2').href = a.browser_download_url; }
+        $('rel-ver').textContent = 'v' + v; $('rel-date').textContent = d;
+        const lines = String(j.body || '').split('\n').map((l) => l.trim()).filter((l) => /^[-*] /.test(l)).map((l) => l.replace(/^[-*] /, ''));
+        $('rel-notes').innerHTML = lines.length ? lines.map((l) => `<li>${inline(l)}</li>`).join('') : '<li>변경 내용은 배포 기록에서 볼 수 있어요.</li>';
       })
-      .catch(() => {});
+      .catch(() => { $('checked').textContent = '최신 버전 정보를 불러오지 못했어요. 다운로드 버튼은 그대로 최신 버전을 받아요.'; $('rel-notes').innerHTML = '<li>배포 기록에서 확인해 주세요.</li>'; });
+    $('copy').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(location.href); $('copy').textContent = '복사했어요'; setTimeout(() => ($('copy').textContent = '링크 복사'), 1800); } catch { /* */ }
+    });
   </script>
 </body>
 </html>
