@@ -74,7 +74,10 @@ export function normalizeGraph(input) {
   const out = emptyGraph(toText(g.title) || '새 다이어그램');
   const c = g.context && typeof g.context === 'object' ? g.context : {};
   const doc = c.doc && typeof c.doc === 'object' && typeof c.doc.text === 'string' && c.doc.text.trim() ? { name: toText(c.doc.name).slice(0, 120) || '문서.md', text: c.doc.text.slice(0, DOC_MAX) } : null;
-  out.context = { title: toText(c.title), requirements: toText(c.requirements), constraints: toText(c.constraints), ...(doc ? { doc } : {}) };
+  const KINDS = new Set(['draw', 'ask', 'review']);
+  const log = (Array.isArray(c.log) ? c.log : []).filter((x) => x && KINDS.has(x.k) && typeof x.q === 'string').slice(-LOG_MAX)
+    .map((x) => ({ k: x.k, q: x.q.slice(0, 1500), a: toText(x.a).slice(0, 800), t: Number.isFinite(+x.t) ? +x.t : 0 }));
+  out.context = { title: toText(c.title), requirements: toText(c.requirements), constraints: toText(c.constraints), ...(doc ? { doc } : {}), ...(log.length ? { log } : {}) };
   out.mode = MODES.includes(g.mode) ? g.mode : 'infra';
   out.theme = THEMES.includes(g.theme) ? g.theme : 'light';
   const hex = (v) => (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v.toUpperCase() : undefined);
@@ -172,6 +175,8 @@ export function normalizeGraph(input) {
 
 // 첨부한 시스템 문서(MD)는 이만큼까지만 보관한다
 export const DOC_MAX = 60000;
+// 이 그림에서 AI 와 주고받은 기록(그려 달라고 한 것, 물어본 것, 검수)은 최근 이만큼 보관한다
+export const LOG_MAX = 20;
 
 // 선의 빈 끝(좌표)
 const ptOf = (p) => (p && Number.isFinite(+p.x) && Number.isFinite(+p.y) ? { x: Math.round(+p.x), y: Math.round(+p.y) } : null);

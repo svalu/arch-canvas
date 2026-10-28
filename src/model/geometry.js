@@ -356,3 +356,48 @@ export function alignNodes(g, ids, tol = 28) {
   }
   return g;
 }
+
+/**
+ * 자동 정렬(사용자가 고른 것): 고른 상자와 그 안의 상자를 내용에 맞게 줄이고 형제끼리 크기·간격을 맞춘 뒤, 아이콘 줄을 맞춘다.
+ * 잠근 것은 skip 에 넣어 건드리지 않는다.
+ */
+export function autoArrange(g, ids, isOverlay = () => false, skip = new Set()) {
+  const groups = new Set(), nodes = new Set();
+  for (const id of ids) {
+    if (skip.has(id)) continue;
+    if (g.groups.some((x) => x.id === id)) { groups.add(id); for (const d of descendants(g, id)) (g.groups.some((x) => x.id === d) ? groups : nodes).add(d); }
+    else nodes.add(id);
+  }
+  for (const id of skip) { groups.delete(id); nodes.delete(id); }
+  // 상자 밖(최상위) 아이콘이 줄어든 상자에서 동떨어지지 않게: 줄이기 전 바깥 상자 테두리와의 거리를 기억해 둔다
+  const tops = g.groups.filter((x) => !x.parent && !isOverlay(x));
+  const before = absoluteRects(g);
+  const box = (rs) => { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const t of tops) { const r = rs.get(t.id); x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, r.x + r.w); y1 = Math.max(y1, r.y + r.h); } return tops.length ? { x0, y0, x1, y1 } : null; };
+  const B0 = box(before);
+  tightenGroups(g, groups, isOverlay);
+  alignNodes(g, nodes);
+  fitGroups(g);
+  const B1 = box(absoluteRects(g));
+  if (B0 && B1) {
+    const after = absoluteRects(g);
+    const GAP = 64;
+    for (const n of g.nodes) {
+      if (n.parent || !nodes.has(n.id) || isBox(n)) continue;
+      const r0 = before.get(n.id);
+      const cx = r0.x + ICON_SIZE / 2;
+      if (cx > B0.x1) n.x = Math.round(B1.x1 + Math.min(Math.max(r0.x - B0.x1, GAP), 160));          // 오른쪽에 있던 것: 오른쪽 테두리 옆으로
+      else if (cx < B0.x0) n.x = Math.round(B1.x0 - ICON_SIZE - Math.min(Math.max(B0.x0 - r0.x - ICON_SIZE, GAP), 160));   // 왼쪽
+      // 연결된 상자 안 아이콘과 같은 높이로 (가장 먼저 이어진 것)
+      const e = g.edges.find((x) => (x.source === n.id && x.target) || (x.target === n.id && x.source));
+      const other = e && (e.source === n.id ? e.target : e.source);
+      const o = other && g.nodes.find((x) => x.id === other && x.parent) ? after.get(other) : null;
+      if (o) n.y = Math.round(o.y + (o.h - ICON_SIZE) / 2);
+      else if (r0.y > B0.y1) n.y = Math.round(B1.y1 + GAP);
+    }
+    // 바깥 아이콘끼리 겹치면 아래로 비킨다
+    const outs = g.nodes.filter((n) => !n.parent && !isBox(n)).sort((a, b) => a.y - b.y || a.x - b.x);
+    const sz = (n) => ({ x: n.x - 20, y: n.y, w: ICON_SIZE + 40, h: ICON_SIZE + LABEL_SPACE });
+    for (let i = 0; i < outs.length; i++) for (let j = 0; j < i; j++) if (hit(sz(outs[i]), sz(outs[j]))) outs[i].y = outs[j].y + ICON_SIZE + LABEL_SPACE + 16;
+  }
+  return g;
+}

@@ -50,7 +50,7 @@ import { AskBar } from './canvas/AskBar.jsx';
 import { edgeTypes } from './canvas/edges.jsx';
 import { graphToFlow, flowToGraph } from './model/convert.js';
 import { normalizeGraph, emptyGraph, uid, allIds, ICON_SIZE, LINES, SHAPES, ARROWS, EDGE_DEFAULTS, setEdgeDefaults, sortGroups, CARD_DEFAULT, LABEL_DROP } from './model/schema.js';
-import { absoluteRects, innermostGroupAt, descendants } from './model/geometry.js';
+import { absoluteRects, innermostGroupAt, descendants, autoArrange } from './model/geometry.js';
 import { applyPatch, PATCH_OPS } from './model/patch.js';
 import { graphToScene, selectionIds, sceneStats } from './export/scene.js';
 import { lint, diffViolations, mergeRuleAnnotations, RULES } from './model/rules.js';
@@ -97,7 +97,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.2';
+export const APP_VERSION = '0.9.3';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -868,6 +868,18 @@ function Editor() {
 
   const setDoc = useCallback((patch) => { const g = currentGraph(); Object.assign(g, patch); commit(g); }, [commit, currentGraph]);
 
+  // 이 그림(탭)에서 AI 와 주고받은 것을 기록한다: 다음 질문·검수·그리기 때 원래 의도를 같이 보게
+  const logAi = useCallback((entry, docId) => {
+    const e = { ...entry, t: Date.now() };
+    if (docId && docsRef.current.active !== docId) {
+      const saved = loadDoc(docId);
+      if (saved) { saved.context = { ...(saved.context || {}), log: [...(saved.context?.log || []), e].slice(-20) }; saveDoc(docId, saved); }
+      return;
+    }
+    const g = currentGraph();
+    g.context = { ...g.context, log: [...(g.context?.log || []), e].slice(-20) };
+    commit(g, null);
+  }, [commit, currentGraph]); // eslint-disable-line react-hooks/exhaustive-deps
   const updateContext = useCallback((ctx) => {
     const g = currentGraph();
     g.context = { ...g.context, ...ctx };
@@ -916,6 +928,7 @@ function Editor() {
         const thread = [...prevHist, { role: 'user', text: request }, { role: 'ai', text: answer }].slice(-6);
         if (docsRef.current.active === docId) askHistory.current = thread; else tabAi.current.set(docId, thread);
         setAi((s) => ({ busy: null, error: null, question: request, result: { mode: 'ask', docId, docTitle, raw, ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, question: request, answer, thread, ...intent } }));
+        logAi({ k: 'ask', q: request, a: answer.slice(0, 800) }, docId);
         return;
       }
       if (!j) j = parseJsonReply(raw);   // 검수·그리기는 JSON 이어야 한다 (못 읽으면 여기서 오류)
@@ -933,14 +946,15 @@ function Editor() {
           toastMsg(`AI 검수 결과를 "${docTitle}" 탭에 넣었습니다.`, 4000);
         }
         setAi({ busy: null, error: null, result: { ...base, findings: annotations, dropped } });
+        logAi({ k: 'review', q: '검수', a: [base.summary, ...annotations.slice(0, 5).map((f) => f.message)].filter(Boolean).join(' / ') }, docId);
       } else {
-        setAi({ busy: null, error: null, result: { ...base, ops: Array.isArray(j.ops) ? j.ops : [] } });
+        setAi({ busy: null, error: null, result: { ...base, request, ops: Array.isArray(j.ops) ? j.ops : [] } });
       }
     } catch (e) {
       if (ac.signal.aborted || e?.kind === 'cancel') { setAi({ busy: null, result: null, error: null }); return; }
       setAi({ busy: null, result: null, error: { message: e.message || String(e), detail: e.detail, kind: e.kind } });
     }
-  }, [aiSettings, catalog, commit, currentGraph, toastMsg]);
+  }, [aiSettings, catalog, commit, currentGraph, toastMsg, logAi]);
 
   const runAiRef = useRef(runAi);
   runAiRef.current = runAi;
@@ -1008,9 +1022,9 @@ function Editor() {
     const r = applyPatch(currentGraph(), ops, catalog.check);
     const ok = tryCommit(r.graph);
     setAi((s) => ({ ...s, result: s.result ? { ...s.result, applied: { ...r, blocked: !ok } } : s.result }));
-    if (ok) setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 30);
+    if (ok) { setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 30); if (ai.result?.request) setTimeout(() => logAi({ k: 'draw', q: ai.result.request, a: ai.result.summary || '' }), 0); }
     return { ...r, blocked: !ok };
-  }, [catalog, currentGraph, tryCommit, ai.result, switchDoc, toastMsg, rf]);
+  }, [catalog, currentGraph, tryCommit, ai.result, switchDoc, toastMsg, rf, logAi]);
 
   const selectById = useCallback((id) => {
     rf.setNodes((ns) => ns.map((n) => ({ ...n, selected: n.id === id })));
@@ -1143,6 +1157,15 @@ function Editor() {
   const alignSel = useCallback((how, ids0 = selIds()) => { const ids = freeOf(ids0); if (ids.length < 2) { toastMsg('두 개 이상 선택하십시오.'); return; } tryCommit(alignItems(currentGraph(), ids, how)); }, [currentGraph, tryCommit, toastMsg]); // eslint-disable-line react-hooks/exhaustive-deps
   const distributeSel = useCallback((axis, ids0 = selIds()) => { const ids = freeOf(ids0); if (ids.length < 3) { toastMsg('간격 맞추기는 세 개 이상 선택하십시오.'); return; } tryCommit(distributeItems(currentGraph(), ids, axis)); }, [currentGraph, tryCommit, toastMsg]); // eslint-disable-line react-hooks/exhaustive-deps
   const sameSizeSel = useCallback((dim, ids0 = selIds()) => { const ids = freeOf(ids0); if (canResizeCount(currentGraph(), ids) < 2) { toastMsg('크기 맞추기는 그룹이나 카드를 두 개 이상 선택하십시오.'); return; } tryCommit(sameSize(currentGraph(), ids, dim)); }, [currentGraph, tryCommit, toastMsg]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 자동 정렬: 고른 것(없으면 전체)의 빈 공간을 줄이고 상자 크기·간격과 아이콘 줄을 맞춘다. 잠근 것은 그대로
+  const autoArrangeSel = useCallback((ids0) => {
+    const g = currentGraph();
+    const all = [...g.groups, ...g.nodes];
+    const picked = ids0 && ids0.length ? ids0 : selIds().length ? selIds() : all.map((x) => x.id);
+    const locked = new Set(all.filter((x) => x.locked).map((x) => x.id));
+    autoArrange(g, picked, isOverlay, locked);
+    if (tryCommit(g)) { toastMsg('자동 정렬했습니다. 마음에 안 들면 Ctrl+Z 로 되돌리십시오.', 3000); setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 30); }
+  }, [currentGraph, tryCommit, toastMsg, rf]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 레이어: 앞뒤 순서, 잠금, 패널에서 끌어 옮기기
   const orderSel = useCallback((how, ids) => {
@@ -1245,13 +1268,14 @@ function Editor() {
       items.push({ label: '가로 정렬', options: [['left', '왼쪽'], ['hcenter', '가운데'], ['right', '오른쪽']], value: null, onPick: (v) => alignSel(v, ids) });
       items.push({ label: '세로 정렬', options: [['top', '위'], ['vcenter', '가운데'], ['bottom', '아래']], value: null, onPick: (v) => alignSel(v, ids) });
       if (ids.length >= 3) items.push({ label: '간격 맞추기', options: [['h', '가로'], ['v', '세로']], value: null, onPick: (v) => distributeSel(v, ids) });
+      items.push({ label: `✦ ${ids.length}개 자동 정렬`, hint: '빈 공간·크기·줄 맞춤', action: () => autoArrangeSel(ids) });
       if (canResizeCount(currentGraph(), ids) >= 2) items.push({ label: '크기 맞추기', options: [['w', '너비'], ['h', '높이'], ['both', '둘 다']], value: null, onPick: (v) => sameSizeSel(v, ids) });
     }
     if (node.type !== 'awsGroup' || true) items.push({ label: 'AI에게 물어보기', ask: true, action: () => askAboutNode(node) });
     items.push('sep');
     items.push({ label: many ? `${ids.length}개 삭제` : '삭제', hint: 'Delete', danger: true, action: () => removeItems(ids) });
     setCtx({ x: e.clientX, y: e.clientY, title: node.type === 'awsGroup' ? (d.label || '그룹') : node.type === 'awsCard' ? (d.label || '카드') : node.type === 'awsText' ? '글상자' : node.type === 'awsBadge' ? `번호 ${d.label || ''}` : (d.label || catalog.icons.get(d.icon)?.name || '아이콘'), items });
-  }, [rf, catalog, selectById, updateItem, currentGraph, duplicateItems, wrapSelection, askAboutNode, removeItems, alignSel, distributeSel, sameSizeSel, copySelection, cutSelection, saveSelectionAsPiece, orderSel, lockItems, groupSel, ungroupSel]);
+  }, [rf, catalog, selectById, updateItem, currentGraph, duplicateItems, wrapSelection, askAboutNode, removeItems, alignSel, distributeSel, sameSizeSel, copySelection, cutSelection, saveSelectionAsPiece, orderSel, lockItems, groupSel, ungroupSel, autoArrangeSel]);
 
   // Shift+클릭 다중 선택: Shift 는 영역 선택 키이기도 해서 React Flow 기본 다중 선택이 안 먹는다.
   // 클릭 직전 선택을 기억해 두었다가, Shift+클릭이면 그 선택에 더하거나(이미 있으면 빼기) 되돌린다.
@@ -1350,6 +1374,7 @@ function Editor() {
     const flowPos = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY });
     const items = [
       { label: '여기에 글상자 추가', hint: '제목·설명·메모', action: () => addAt({ type: 'text' }, flowPos) },
+      { label: '✦ 전체 자동 정렬', hint: '빈 공간·크기·줄 맞춤', action: () => autoArrangeSel([]) },
       ...(docMode === 'card'
         ? [{ label: '여기에 카드 추가', action: () => addAt({ type: 'card' }, flowPos) }, { label: '여기에 섹션 추가', action: () => addAt({ type: 'group', kind: 'section' }, flowPos) }]
         : [{ label: '여기에 그룹 추가', action: () => addAt({ type: 'group', kind: 'generic' }, flowPos) }]),
@@ -1364,7 +1389,7 @@ function Editor() {
       { label: 'AI 검수', ask: true, action: () => runAi('review') },
     ];
     setCtx({ x: e.clientX, y: e.clientY, items });
-  }, [rf, addAt, docMode, runAi, view.pins, setView, pasteClip]);
+  }, [rf, addAt, docMode, runAi, view.pins, setView, pasteClip, autoArrangeSel]);
   const exportImageRef = useRef(null);
 
   // 선택한 것들에 대해 묻기 (떠 있는 바에서)
@@ -1900,7 +1925,7 @@ function Editor() {
         ) : panel === 'help' ? (
           <Help isDesktop={isDesktop} onPatch={() => setPanel('patch')} onTour={() => { setPanel(null); setTour(true); }} onCheckUpdate={() => checkUpdate(true)} updBusy={upd.busy} updInfo={upd.info} onToast={toastMsg} stats={{ groups: nodes.filter((n) => n.type === 'awsGroup').length, nodes: nodes.filter((n) => n.type !== 'awsGroup').length, edges: edges.length, mode: docMode, theme }} />
         ) : (
-          <Inspector allNodes={nodes} nodes={selectedNodes} edges={selectedEdges} onChange={updateItem} onChangeMany={updateMany} onWrap={wrapSelection} onGroup={groupSel} onUngroup={ungroupSel} onAlign={alignSel} onDistribute={distributeSel} onSameSize={sameSizeSel} annotations={annotationsRef.current} violations={violations} onShowRules={() => setPanel('rules')} onStartGuide={startGuide} onAsk={(p) => runAi('ask', askAboutText(p))} stats={{ groups: nodes.filter((n) => n.type === 'awsGroup').length, icons: nodes.filter((n) => n.type === 'awsIcon').length, edges: edges.length }} />
+          <Inspector allNodes={nodes} nodes={selectedNodes} edges={selectedEdges} onChange={updateItem} onChangeMany={updateMany} onWrap={wrapSelection} onGroup={groupSel} onUngroup={ungroupSel} onAlign={alignSel} onDistribute={distributeSel} onSameSize={sameSizeSel} onAutoArrange={() => autoArrangeSel()} annotations={annotationsRef.current} violations={violations} onShowRules={() => setPanel('rules')} onStartGuide={startGuide} onAsk={(p) => runAi('ask', askAboutText(p))} stats={{ groups: nodes.filter((n) => n.type === 'awsGroup').length, icons: nodes.filter((n) => n.type === 'awsIcon').length, edges: edges.length }} />
         )}
       </aside>
 
@@ -2049,7 +2074,7 @@ function TemplateMenu({ builtin, user, onPick, onSave, onSavePiece, onDelete, ha
 }
 
 // ---------------------------------------------------------------------------------------------
-function Inspector({ nodes, edges, onChange, onChangeMany, onWrap, onGroup, onUngroup, onAlign, onDistribute, onSameSize, annotations, violations, onShowRules, onStartGuide, onAsk, stats, allNodes = [] }) {
+function Inspector({ nodes, edges, onChange, onChangeMany, onWrap, onGroup, onUngroup, onAutoArrange, onAlign, onDistribute, onSameSize, annotations, violations, onShowRules, onStartGuide, onAsk, stats, allNodes = [] }) {
   const catalog = useCatalog();
   const parentName = (id) => { const p = allNodes.find((n) => n.id === id); return p?.data?.label || catalog.kinds.get(p?.data?.kind)?.name || '그룹'; };
   const one = nodes.length + edges.length === 1 ? (nodes[0] || edges[0]) : null;
@@ -2083,6 +2108,7 @@ function Inspector({ nodes, edges, onChange, onChangeMany, onWrap, onGroup, onUn
                   <button className="al" title="가로 간격 같게 (3개 이상)" aria-label="가로 간격 같게" disabled={nodes.length < 3} onClick={() => onDistribute('h')}><AlignIcon kind="dist-h" /></button>
                   <button className="al" title="세로 간격 같게 (3개 이상)" aria-label="세로 간격 같게" disabled={nodes.length < 3} onClick={() => onDistribute('v')}><AlignIcon kind="dist-v" /></button>
                   <button className="al wide" title="그룹·카드 크기를 가장 큰 것에 맞춤" onClick={() => onSameSize('both')}>크기 맞추기</button>
+                  <button className="al wide primary" title="빈 공간을 줄이고, 나란한 상자 크기·간격과 아이콘 줄을 맞춥니다 (Ctrl+Z 로 되돌리기)" onClick={() => onAutoArrange()}>✦ 자동 정렬</button>
                 </div>
               </div>
             )}

@@ -56,7 +56,7 @@ export function AiWizard({ open, initialText = '', verified, onOpenConnect, onCl
   const draw = (p, a) => {
     drawAsked.current = true;
     setStep('drawing');
-    onDraw(composeDrawRequest(p, a));
+    onDraw(composeDrawRequest(p, a, text));
   };
   const pick = (opt) => {
     if (!q) return;

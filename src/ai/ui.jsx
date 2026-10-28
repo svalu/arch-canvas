@@ -237,7 +237,8 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
   const p = providerById(settings.provider);
   const busy = state.busy;
   const r = state.result;
-  const flush = () => { if (JSON.stringify(draft) !== JSON.stringify(context)) onContext(draft); };
+  // 직접 적는 칸만 보낸다 (첨부 문서·기록은 따로 관리되므로 덮지 않게)
+  const flush = () => { const pick = (c) => ({ title: c.title || '', requirements: c.requirements || '', constraints: c.constraints || '' }); if (JSON.stringify(pick(draft)) !== JSON.stringify(pick(context))) onContext(pick(draft)); };
 
   const drawResult = r && r.mode === 'draw' ? r : null;
   const reviewResult = r && r.mode === 'review' ? r : null;
@@ -245,7 +246,9 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
   const ctxFilled = !!(draft.title?.trim() || draft.requirements?.trim() || draft.constraints?.trim());
   // AI 에게 알려준 것 (되물음에 답한 것) — 요건 안의 "- [확인]" 줄. 틀렸으면 지운다
   const told = (draft.requirements || '').split('\n').filter((l) => /^- \[확인\]/.test(l));
-  const forget = (line) => { const next = { ...draft, requirements: (draft.requirements || '').split('\n').filter((l) => l !== line).join('\n') }; setDraft(next); onContext(next); };
+  const forget = (line) => { const requirements = (draft.requirements || '').split('\n').filter((l) => l !== line).join('\n'); setDraft({ ...draft, requirements }); onContext({ requirements }); };
+  const log = context.log || [];
+  const KIND = { draw: '그림', ask: '질문', review: '검수' };
   const Intent = ({ res }) => (res.understood || res.assumptions?.length ? (
     <div className="intent">
       {res.understood && <p><b>이렇게 이해했어요</b> {res.understood}</p>}
@@ -346,6 +349,19 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
           <div className="more-head">AI 에게 알려준 것 <small className="hint">다음 답과 검수에 반영됩니다</small></div>
           {told.map((l) => <div key={l} className="told-row"><span>{l.replace(/^- \[확인\]\s*/, '')}</span><button className="x" title="잊게 하기" onClick={() => forget(l)}>×</button></div>)}
         </div>
+      )}
+
+      {log.length > 0 && (
+        <details className="told ai-log">
+          <summary className="more-head">이 그림의 AI 기록 {log.length}개 <small className="hint">AI 가 다음 질문·검수 때 같이 봅니다</small></summary>
+          {[...log].reverse().map((x, i) => (
+            <div key={i} className="log-row">
+              <span className={'log-k ' + x.k}>{KIND[x.k] || x.k}</span>
+              <div><div className="log-q">{x.q.length > 160 ? x.q.slice(0, 160) + '…' : x.q}</div>{x.a && <div className="hint">→ {x.a.length > 160 ? x.a.slice(0, 160) + '…' : x.a}</div>}</div>
+            </div>
+          ))}
+          <button className="small" onClick={() => onContext({ log: [] })}>기록 지우기</button>
+        </details>
       )}
 
       {/* 직접 하기 — 상황과 요청을 직접 적어서 (익숙한 사람용) */}

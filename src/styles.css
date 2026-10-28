@@ -952,3 +952,11 @@ details.ai-step:not([open]) { gap: 0; }
 .web-note { border-radius: 14px; word-break: keep-all; overflow-wrap: anywhere; max-width: min(680px, calc(100% - 32px)); padding: 10px 12px 10px 16px; }
 .web-note > span { flex: 1; min-width: 0; }
 .web-note > button { flex: none; white-space: nowrap; }
+
+/* 이 그림의 AI 기록 */
+.ai-log summary { cursor: pointer; }
+.log-row { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; line-height: 1.5; padding: 4px 0; border-top: 1px dashed var(--line); }
+.log-k { flex: none; font-size: 11px; font-weight: 700; border-radius: 6px; padding: 1px 6px; background: #eef1f5; color: #3b4654; }
+.log-k.draw { background: #e6f3ee; color: #1c6b4b; } .log-k.review { background: #fff4e6; color: #8a4b00; }
+.log-q { word-break: keep-all; overflow-wrap: anywhere; }
+.app.theme-dark .log-k { background: #1f3a3a; color: #cdebe6; }

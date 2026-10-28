@@ -35,8 +35,10 @@ export function summarizeGraph(graph, catalog) {
 const DOC_IN_PROMPT = 16000;   // 첨부 문서는 앞부분 이만큼만 모델에 보낸다
 export function contextText(ctx) {
   const doc = ctx?.doc?.text ? `첨부한 시스템 문서 (${ctx.doc.name}) — 사용자가 다른 AI 나 직접 정리한 시스템 구조. 그림의 1차 근거로 쓴다:\n${ctx.doc.text.slice(0, DOC_IN_PROMPT)}${ctx.doc.text.length > DOC_IN_PROMPT ? '\n…(뒷부분 생략)' : ''}` : '';
-  if (!ctx || (!ctx.title && !ctx.requirements && !ctx.constraints && !doc)) return '(제안서 컨텍스트 없음)';
-  return [ctx.title && `제목: ${ctx.title}`, ctx.requirements && `요건서/RFP 요약:\n${ctx.requirements}`, ctx.constraints && `제약·전제:\n${ctx.constraints}`, doc].filter(Boolean).join('\n\n');
+  const KIND = { draw: '그려 달라고 함', ask: '물어봄', review: '검수 받음' };
+  const log = ctx?.log?.length ? `이 그림에서 지금까지 AI 와 한 일 (오래된 것부터, 사용자가 원래 무엇을 원했는지 알려 주는 맥락이다. 새 질문은 이 맥락 위에서 답한다):\n${ctx.log.slice(-8).map((x) => `- [${KIND[x.k] || x.k}] ${x.q.replace(/\n+/g, ' / ').slice(0, 500)}${x.a ? `\n  → ${x.a.replace(/\n+/g, ' / ').slice(0, 300)}` : ''}`).join('\n')}` : '';
+  if (!ctx || (!ctx.title && !ctx.requirements && !ctx.constraints && !doc && !log)) return '(제안서 컨텍스트 없음)';
+  return [ctx.title && `제목: ${ctx.title}`, ctx.requirements && `요건서/RFP 요약:\n${ctx.requirements}`, ctx.constraints && `제약·전제:\n${ctx.constraints}`, doc, log].filter(Boolean).join('\n\n');
 }
 
 export function violationsText(violations) {
@@ -157,13 +159,13 @@ export function confirmedLines(questions, answers) {
 }
 
 /** 정리 결과 + 사용자의 답 → 최종 그리기 요청 */
-export function composeDrawRequest(plan, answers) {
+export function composeDrawRequest(plan, answers, said = '') {
   const qa = (plan.questions || []).map((q) => {
     const a = answers[q.id];
     const v = Array.isArray(a) ? a.join(', ') : a;
     return v ? `- ${q.question} → ${v}` : null;
   }).filter(Boolean);
-  return [String(plan.drawRequest || '').trim(), qa.length ? `\n추가로 확인한 것:\n${qa.join('\n')}\n("잘 모르겠어요" 는 일반적인 기본값으로 정해 주세요.)` : ''].join('\n').trim();
+  return [said && said.trim() ? `사용자가 처음 적은 말: ${said.trim()}\n` : '', String(plan.drawRequest || '').trim(), qa.length ? `\n추가로 확인한 것:\n${qa.join('\n')}\n("잘 모르겠어요" 는 일반적인 기본값으로 정해 주세요.)` : ''].join('\n').trim();
 }
 
 // 자유 질문: 경고/핀/궁금한 점을 다이어그램 맥락과 함께 묻는다. 답은 JSON 이 아니라 글.
