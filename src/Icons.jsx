@@ -10,7 +10,7 @@ import {
   ArrowRight01Icon, ArrowRight02Icon, ArrowLeft01Icon, Cancel01Icon, Tick02Icon, ArrowUpRight01Icon, DragDropVerticalIcon,
   MoreVerticalIcon, SquareArrowUpRight02Icon, SquareArrowLeft02Icon, BulbIcon, Attachment01Icon, AlertDiamondIcon,
   InformationCircleIcon, Upload04Icon, AlignStartVerticalIcon, AlignEndVerticalIcon, AlignHorizontalCenterIcon,
-  AlignStartHorizontalIcon, AlignEndHorizontalIcon, AlignVerticalCenterIcon, DistributeHorizontalCenterIcon, DistributeVerticalCenterIcon,
+  AlignStartHorizontalIcon, AlignEndHorizontalIcon, AlignVerticalCenterIcon, DistributeHorizontalCenterIcon, DistributeVerticalCenterIcon, Search01Icon, KeyboardIcon,
 } from '@hugeicons/core-free-icons';
 
 const I = {
@@ -22,7 +22,7 @@ const I = {
   lock: SquareLock01Icon, unlock: SquareUnlock01Icon, download: Download04Icon, refresh: Refresh01Icon, upload: Upload04Icon,
   chevron: ArrowRight01Icon, arrow: ArrowRight02Icon, back: ArrowLeft01Icon, close: Cancel01Icon, check: Tick02Icon,
   external: ArrowUpRight01Icon, grip: DragDropVerticalIcon, more: MoreVerticalIcon, detach: SquareArrowUpRight02Icon,
-  dock: SquareArrowLeft02Icon, tip: BulbIcon, attach: Attachment01Icon, alert: AlertDiamondIcon, info: InformationCircleIcon,
+  dock: SquareArrowLeft02Icon, tip: BulbIcon, attach: Attachment01Icon, alert: AlertDiamondIcon, info: InformationCircleIcon, search: Search01Icon, keyboard: KeyboardIcon,
   'al-left': AlignStartVerticalIcon, 'al-hcenter': AlignHorizontalCenterIcon, 'al-right': AlignEndVerticalIcon,
   'al-top': AlignStartHorizontalIcon, 'al-vcenter': AlignVerticalCenterIcon, 'al-bottom': AlignEndHorizontalIcon,
   'al-dist-h': DistributeHorizontalCenterIcon, 'al-dist-v': DistributeVerticalCenterIcon,

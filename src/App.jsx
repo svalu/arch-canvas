@@ -110,6 +110,7 @@ import { GuidePanel, loadGuide, saveGuide, emptyGuide, visibleSteps, opsFor } fr
 import suggestData from '../data/suggest.json' with { type: 'json' };
 import { Tour, tourDone } from './Tour.jsx';
 import { Icon } from './Icons.jsx';
+import { HelpPanel } from './HelpPanel.jsx';
 import { loadDocs, saveList, saveActive, loadDoc, saveDoc, removeDoc, newDocId, readList, docExists, LIST_KEY, trashDoc, closedDocs, untrashDoc } from './docs.js';
 import { hidePinTip } from './canvas/nodes.jsx';
 import { DocTabs } from './DocTabs.jsx';
@@ -140,7 +141,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.7';
+export const APP_VERSION = '0.9.8';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -2017,7 +2018,7 @@ function Editor() {
             onSelect={(id, add) => rf.setNodes((ns) => ns.map((n) => ({ ...n, selected: n.id === id ? (add ? !n.selected : true) : (add ? n.selected : false) })))}
             onMove={layerMove} onOrder={(how) => orderSel(how)} onLock={(id, on) => lockItems([id], on)} onClose={() => setPanel(null)} />
         ) : panel === 'help' ? (
-          <Help isDesktop={isDesktop} onPatch={() => setPanel('patch')} onTour={() => { setPanel(null); setTour(true); }} onCheckUpdate={() => checkUpdate(true)} updBusy={upd.busy} updInfo={upd.info} onToast={toastMsg} stats={{ groups: nodes.filter((n) => n.type === 'awsGroup').length, nodes: nodes.filter((n) => n.type !== 'awsGroup').length, edges: edges.length, mode: docMode, theme }} />
+          <Help isDesktop={isDesktop} ctx={nodes.length === 0 ? 'first' : selectedNodes.length > 1 ? 'align' : selectedEdges.length ? 'connect' : selectedNodes[0]?.type === 'awsGroup' ? 'boxes' : violations.length ? 'pins' : null} onPatch={() => setPanel('patch')} onTour={() => { setPanel(null); setTour(true); }} onCheckUpdate={() => checkUpdate(true)} updBusy={upd.busy} updInfo={upd.info} onToast={toastMsg} stats={{ groups: nodes.filter((n) => n.type === 'awsGroup').length, nodes: nodes.filter((n) => n.type !== 'awsGroup').length, edges: edges.length, mode: docMode, theme }} />
         ) : (
           <Inspector allNodes={nodes} nodes={selectedNodes} edges={selectedEdges} onChange={updateItem} onChangeMany={updateMany} onWrap={wrapSelection} onGroup={groupSel} onUngroup={ungroupSel} onAlign={alignSel} onDistribute={distributeSel} onSameSize={sameSizeSel} onAutoArrange={() => autoArrangeSel()} annotations={annotationsRef.current} violations={violations} onShowRules={() => setPanel('rules')} onStartGuide={startGuide} onAsk={(p) => runAi('ask', askAboutText(p))} stats={{ groups: nodes.filter((n) => n.type === 'awsGroup').length, icons: nodes.filter((n) => n.type === 'awsIcon').length, edges: edges.length }} />
         )}
@@ -2380,38 +2381,13 @@ function PatchPanel({ onApply }) {
   );
 }
 
-function Help({ isDesktop, onPatch, onTour, onCheckUpdate, updBusy, updInfo, onToast, stats }) {
+function Help({ isDesktop, ctx, onPatch, onTour, onCheckUpdate, updBusy, updInfo, onToast, stats }) {
   return (
-    <div className="insp help">
-      <Feedback isDesktop={isDesktop} onToast={onToast} stats={stats} />
-      <h3>쓰는 법</h3>
-      <button className="primary" onClick={onTour}>둘러보기 다시 보기 (30초)</button>
-      {isDesktop && <div className="row"><button onClick={onCheckUpdate} disabled={updBusy}>{updBusy ? '확인하는 중…' : '업데이트 확인'}</button><span className="hint">현재 {APP_VERSION}{updInfo?.newer ? ` · 새 버전 ${updInfo.version}` : ''}</span></div>}
-      <p><b>처음이면</b> 빈 캔버스에 뜨는 "무엇을 그려 볼까요?" 칸에 만들고 싶은 걸 적고 Enter. AI 가 쉬운 질문 몇 개만 묻고 그려 줍니다. 버튼만 눌러 가며 만들고 싶으면 아래 [따라 하기], 이미 정리된 시스템 문서가 있으면 [시스템 문서로], 혼자 그리려면 [직접 그리기].</p>
-      <p><b>패널 떼어 내기</b> 팔레트·오른쪽 패널의 맨 위 막대를 끌면 떨어져 나와 떠 있습니다. 오른쪽 아래 모서리로 크기를 바꿉니다. 화면 가장자리에 놓거나, 막대를 두 번 클릭하거나, [붙이기]를 누르면 제자리로 돌아갑니다.</p>
-      <p><b>경고 표시</b> 잘못 놓인 요소 위에는 주황·빨강 <b>!</b> 가 늘 뜹니다. 눌러 보면 이유와 [AI에게 물어보기]가 나옵니다. 보기 설정에서 숨길 수 있는 건 참고(i)뿐이고, 내보내기(PNG·PPT)에는 어느 표시도 들어가지 않습니다.</p>
-      <p><b>팔레트 추천</b> 그룹을 고르면 그 안에 넣을 만한 것, 아이콘을 고르면 옆에 붙여 연결할 것이 팔레트 위에 뜹니다. 클릭하면 바로 들어갑니다.</p>
-      <p><b>추가</b> 왼쪽 팔레트에서 끌어다 놓기(또는 클릭하면 화면 가운데에).</p>
-      <p><b>연결</b> 노드 가장자리의 작은 점을 끌어 다른 노드 위에 놓기.</p>
-      <p><b>그룹</b> 그룹 안에 놓으면 들어가고, 밖으로 끌면 나옵니다. 그룹을 선택하면 모서리로 크기 조절. 여러 개 고르고 Ctrl+G 로 묶기.</p>
-      <p><b>복사·붙여넣기</b> 요소를 선택하고 Ctrl+C, 마우스를 둔 자리에 Ctrl+V. 다른 탭에도 붙일 수 있습니다. Ctrl+X 잘라내기, Ctrl+D 복제(그룹은 안의 것까지). 선택이 없을 때 Ctrl+C 는 그림(PNG) 복사입니다.</p>
-      <p><b>지우기</b> Delete. <b>이름</b> 더블클릭 또는 F2. <b>옮기기</b> 화살표 키(Shift: 10px). <b>되돌리기</b> Ctrl+Z / Ctrl+Y. <b>선택 해제</b> Esc.</p>
-      <p><b>상자와 레이어</b> 소속은 화면 위치 그대로입니다: 상자 안에 놓은 것은 그 상자를 따라 움직이고, 끄는 동안 들어갈 상자가 빛납니다. 상자만 옮기려면 Alt 를 누른 채 끄십시오. ASG·보안 그룹 같은 겹치는 상자는 아무것도 품지 않고 테두리만 움직입니다. 앞뒤 순서는 오른쪽 클릭 [맨 앞으로 가져오기 · 뒤로 보내기] 또는 Ctrl+[ / Ctrl+] 로 바꾸고, Ctrl+G 로 여러 개를 묶으면 하나를 클릭해도 함께 선택되고 함께 움직입니다(풀기 Ctrl+Shift+G). 잠근 것(Ctrl+L)은 어떤 방법으로도 움직이지 않고 자물쇠가 보입니다. 선을 선택하면 양 끝 손잡이로 연결 대상을 바꾸거나 빈 곳에 끝을 둘 수 있고, 직각선은 가운데 구간에 손잡이가 생겨 꺾이는 위치를 옮길 수 있고(두 번 클릭하면 가운데로), PowerPoint 로 보낼 때도 같은 위치로 갑니다. 상자는 안에 든 것보다 작게 줄어들지 않습니다. 전체 순서를 한눈에 보려면 오른쪽 클릭 [레이어 목록 보기]를 누르십시오(보기 설정 › 고급에서 툴바 버튼으로 둘 수 있습니다).</p>
-      <p><b>조각 템플릿</b> 자주 쓰는 묶음(예: 2-AZ 웹 계층)을 선택해 오른쪽 클릭 [조각 템플릿으로 저장]. 템플릿 메뉴 [내 조각]에서 고르면 지금 그림에 끼워 넣습니다.</p>
-      <p><b>정렬</b> 여러 개를 선택하면 오른쪽 패널과 오른쪽 클릭 메뉴에 정렬·간격·크기 맞추기가 나옵니다. 끌 때는 분홍 안내선에 맞춰 붙습니다.</p>
-      <p><b>글상자·번호</b> 팔레트 위쪽 [글상자] [번호]. 번호는 다음 수가 자동으로 붙습니다.</p>
-      <p><b>찾기</b> Ctrl+F. <b>파일</b> Ctrl+S 저장(같은 파일에 덮어쓰기) · Ctrl+Shift+S 다른 이름으로 · Ctrl+O 열기. <b>탭</b> Ctrl+T 새 탭 · Ctrl+Shift+T 닫은 탭 다시 열기.</p>
-      <p><b>내보내기</b> Ctrl+C 또는 [PNG 복사]로 클립보드에 복사한 뒤 PowerPoint 에서 Ctrl+V. 선택이 있으면 선택 영역만 내보냅니다. [내보내기 ▾ &gt; 내보내기 설정]에서 배율·배경·여백·16:9·제목·범례를 미리 보며 정합니다.</p>
-      <p><b>규칙 검사</b> 아키텍처 규칙에 어긋나면 차단(빨강)하거나 경고(주황)하면서 이유를 알려 드립니다. 상단 [규칙 검사](방패) 버튼에서 전체 목록을 보고, 누르면 해당 요소가 선택됩니다.</p>
-      <p><b>AI 로 그리기</b> AI 패널 맨 위 [말로 그리기]에 만들고 싶은 걸 막 적으세요. AWS 를 몰라도 됩니다. AI 가 부족한 것만 쉬운 질문으로 묻고(고르기만 하면 됨), 그릴 내용을 먼저 보여 준 뒤 [캔버스에 그리기]로 그립니다.</p>
-      <p><b>시스템 문서(MD)로 그리기</b> 이미 만든 프로그램이 있으면, 쓰시는 AI(Claude·ChatGPT·Cursor)에게 프로젝트를 열어 둔 채 안내 문구로 물어 MD 파일을 받으세요. 안내 문구는 [말로 그리기] 옆 [MD 는 어떻게 만들어요?]에 있고 [복사]로 가져갈 수 있습니다. 받은 MD 를 [시스템 구조 문서(MD) 넣기]로 넣으면 그 내용을 근거로 그립니다.</p>
-      <p><b>물어보기·검수</b> 답이 쓰임새(몇 명이 쓰는지, 포트폴리오인지 회사 서비스인지 등)에 따라 크게 달라지면, AI 가 먼저 쉬운 질문으로 되묻고 그 답에 맞춰 답합니다. 답한 내용은 [AI 에게 알려준 것]에 남아 다음에도 반영되고, 틀렸으면 ×로 지울 수 있습니다.</p>
-      {isDesktop && <p><b>PowerPoint 편집 도형</b> (EXE 전용) Ctrl+Shift+C: 아이콘은 1.5cm SVG 그림, 그룹은 사각형, 연결선은 도형에 붙은 연결선으로 들어갑니다.</p>}
-      <p><b>파일</b> 다이어그램은 JSON 그래프(groups / nodes / edges / annotations)로 저장됩니다. 템플릿도 같은 형식이라 '템플릿으로 저장'하면 메뉴에 들어옵니다.</p>
-      <p className="hint">아이콘: AWS Architecture Icons (Icon Shelf 데이터 재사용). AWS가 후원하거나 승인한 도구가 아닙니다.</p>
-      <button className="small" onClick={onPatch}>고급: 패치 명령 직접 넣기</button>
-      <div className="maker"><MakerMark size={22} /><span>Arch Canvas {APP_VERSION}</span></div>
-    </div>
+    <HelpPanel isDesktop={isDesktop} ctx={ctx} on={{ tour: onTour, patch: onPatch }} slots={{
+      feedback: <Feedback isDesktop={isDesktop} onToast={onToast} stats={stats} />,
+      update: <div className="row"><button onClick={onCheckUpdate} disabled={updBusy}>{updBusy ? '확인하는 중…' : '업데이트 확인'}</button><span className="hint">현재 {APP_VERSION}{updInfo?.newer ? ` · 새 버전 ${updInfo.version}` : ''}</span></div>,
+      about: <div className="maker"><MakerMark size={22} /><span>Arch Canvas {APP_VERSION}</span></div>,
+    }} />
   );
 }
 
