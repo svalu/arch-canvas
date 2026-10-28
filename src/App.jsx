@@ -141,7 +141,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.8';
+export const APP_VERSION = '0.9.9';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -1874,7 +1874,7 @@ function Editor() {
               <div className="seg">
                 <button className={view.lines ? 'on' : ''} onClick={() => setView({ lines: !view.lines })}><span className="ic-lines" /> 선</button>
                 <button className={view.dots ? 'on' : ''} onClick={() => setView({ dots: !view.dots })}><span className="ic-dots" /> 점</button>
-                <button className={view.major ? 'on' : ''} onClick={() => setView({ major: !view.major })} disabled={!view.lines && !view.dots}>5칸 굵은 선</button>
+                <button className={view.lines && view.major ? 'on' : ''} onClick={() => setView({ major: !view.major })} disabled={!view.lines} title={view.lines ? '' : '선 격자에서만 씁니다'}>5칸 굵은 선</button>
               </div>
               <label className="menu-opt range">진하기 <input type="range" min="0" max="100" value={view.strength} onChange={(e) => setView({ strength: +e.target.value })} disabled={!view.lines && !view.dots} /> <span>{view.strength}</span></label>
               <div className="menu-sec">간격 <small>{view.gap}px</small></div>
@@ -1949,7 +1949,7 @@ function Editor() {
         >
           {view.lines && view.strength > 0 && <Background id="grid-lines" variant={BackgroundVariant.Lines} gap={view.gap} lineWidth={1} color={gridColor(0.5 * (view.strength / 100))} />}
           {view.dots && view.strength > 0 && <Background id="grid-dots" variant={BackgroundVariant.Dots} gap={view.gap} size={1 + view.strength / 50} color={gridColor(0.1 + 0.6 * (view.strength / 100))} />}
-          {(view.lines || view.dots) && view.major && view.strength > 0 && (
+          {view.lines && view.major && view.strength > 0 && (
             // 5칸마다 굵은 선: 지도 눈금처럼 거리감이 생긴다
             <Background id="grid-major" variant={BackgroundVariant.Lines} gap={view.gap * 5} lineWidth={1} color={gridColor(0.35 * (view.strength / 100))} />
           )}
