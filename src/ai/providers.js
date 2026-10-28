@@ -1,5 +1,6 @@
 // AI 어댑터. 어느 경로든 ask({ system, user }) -> 답 문자열 하나.
 //   claude-cli : EXE 전용. 호스트가 `claude -p` 를 띄운다(사용자 구독, 키 없음).
+//   codex-cli  : EXE 전용. 호스트가 `codex exec` 를 띄운다(ChatGPT 계정 로그인, 키 없음).
 //   claude-api : Anthropic 공식 SDK(브라우저 모드) + API 키.
 //   openai-api : OpenAI Chat Completions + API 키.
 import Anthropic from '@anthropic-ai/sdk';
@@ -9,6 +10,11 @@ export const PROVIDERS = [
     id: 'claude-cli', name: 'Claude CLI', desc: '이 PC의 claude 명령으로 실행. 현재 Claude 구독을 그대로 써서 추가 비용 없음.',
     needsKey: false, desktopOnly: true,
     models: [{ id: '', name: 'CLI 기본 모델' }, { id: 'opus', name: 'Opus' }, { id: 'sonnet', name: 'Sonnet' }],
+  },
+  {
+    id: 'codex-cli', name: 'ChatGPT (Codex CLI)', desc: '이 PC의 codex 명령으로 실행. ChatGPT 계정(Plus·Pro 등)으로 로그인해 두면 추가 비용 없음.',
+    needsKey: false, desktopOnly: true, tool: 'codex',
+    models: [{ id: '', name: 'CLI 기본 모델' }],
   },
   {
     id: 'claude-api', name: 'Claude API 키', desc: 'Anthropic API 키로 직접 호출. 브라우저에서도 됨. 토큰 비용이 별도로 나감.',
@@ -35,7 +41,8 @@ export async function ask(settings, req) {
   if (settings.provider === 'mock') return askMock(req);
   const p = providerById(settings.provider);
   if (!p) throw new AiError('연결 방식이 정해지지 않았습니다', { kind: 'config' });
-  if (p.id === 'claude-cli') return askClaudeCli(settings, req);
+  if (p.id === 'claude-cli') return askCli('claude', settings, req);
+  if (p.id === 'codex-cli') return askCli('codex', settings, req);
   if (p.id === 'claude-api') return askClaudeApi(settings, req);
   if (p.id === 'openai-api') return askOpenAi(settings, req);
   throw new AiError('모르는 연결 방식: ' + p.id, { kind: 'config' });
@@ -94,21 +101,26 @@ async function askOpenAi({ key, model }, { system, user, maxTokens = 8000, signa
   return text;
 }
 
-async function askClaudeCli({ model }, { system, user, signal, timeoutMs = 240000 }) {
-  if (!window.desktop?.call) throw new AiError('Claude CLI 는 EXE 에서만 사용할 수 있습니다', { kind: 'config' });
+const CLI_HELP = {
+  claude: { name: 'Claude CLI', login: '터미널에서 claude auth login 을 실행해 로그인하십시오.', install: 'Claude Code 를 설치하십시오 (npm i -g @anthropic-ai/claude-code).' },
+  codex: { name: 'Codex CLI', login: '터미널에서 codex login 을 실행해 ChatGPT 계정으로 로그인하십시오.', install: 'Codex CLI 를 설치하십시오 (npm i -g @openai/codex).' },
+};
+async function askCli(tool, { model }, { system, user, signal, timeoutMs = 240000 }) {
+  const H = CLI_HELP[tool];
+  if (!window.desktop?.call) throw new AiError(H.name + ' 는 EXE 에서만 사용할 수 있습니다', { kind: 'config' });
   const id = Math.random().toString(36).slice(2);
   const onAbort = () => window.desktop.call('ai.cancel', { runId: id }).catch(() => {});
   signal?.addEventListener('abort', onAbort, { once: true });
   try {
-    const r = await window.desktop.call('ai.run', { runId: id, system, user, model: model || '', timeoutMs });
+    const r = await window.desktop.call('ai.run', { runId: id, tool, system, user, model: model || '', timeoutMs });
     if (!r?.text?.trim()) throw new AiError('빈 응답이 왔습니다', { kind: 'empty', detail: r?.stderr });
     return r.text;
   } catch (e) {
     if (e instanceof AiError) throw e;
     const msg = String(e?.message || e);
     if (/취소|cancel/i.test(msg)) throw new AiError('취소했습니다', { kind: 'cancel' });
-    if (/not logged in|login|auth/i.test(msg)) throw new AiError('claude CLI 에 로그인되어 있지 않습니다. 터미널에서 claude auth login 을 실행해 로그인하십시오.', { kind: 'auth', detail: msg });
-    if (/not found|없음/i.test(msg)) throw new AiError('claude 명령을 찾지 못했습니다. Claude Code 를 설치하십시오 (npm i -g @anthropic-ai/claude-code).', { kind: 'config', detail: msg });
+    if (/not logged in|login|auth|401|unauthorized/i.test(msg)) throw new AiError(H.name + ' 에 로그인되어 있지 않습니다. ' + H.login, { kind: 'auth', detail: msg });
+    if (/not found|없음/i.test(msg)) throw new AiError(tool + ' 명령을 찾지 못했습니다. ' + H.install, { kind: 'config', detail: msg });
     throw new AiError('CLI 실행에 실패했습니다', { detail: msg });
   } finally {
     signal?.removeEventListener('abort', onAbort);

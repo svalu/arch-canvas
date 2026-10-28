@@ -30,8 +30,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: System.Reflection.AssemblyCompany("heerang")]
 [assembly: System.Reflection.AssemblyProduct("Arch Canvas")]
 [assembly: System.Reflection.AssemblyCopyright("2026 heerang")]
-[assembly: System.Reflection.AssemblyVersion("0.9.6.0")]
-[assembly: System.Reflection.AssemblyFileVersion("0.9.6.0")]
+[assembly: System.Reflection.AssemblyVersion("0.9.7.0")]
+[assembly: System.Reflection.AssemblyFileVersion("0.9.7.0")]
 
 static class Program
 {
@@ -88,7 +88,7 @@ static class Program
 /// <summary>EXE에 내장된 리소스(app/..., bin/...)를 data 폴더에 풀고, bin의 DLL을 로드한다.</summary>
 static class Bootstrap
 {
-    public const string AppVersion = "0.9.6";
+    public const string AppVersion = "0.9.7";
     public static readonly string ExePath = Assembly.GetExecutingAssembly().Location;
     public static readonly string BaseDir = Path.GetDirectoryName(ExePath);
     public static string DataDir;    // EXE 옆 data\ (쓰기 불가하면 %LocalAppData%\ArchCanvas\data)
@@ -531,8 +531,10 @@ static class Secrets
 }
 
 /// <summary>
-/// claude CLI 실행기. `claude -p --output-format json` 에 프롬프트(system + user)를 stdin(UTF-8 파일 리다이렉트)으로 넣고 result 를 돌려준다.
-/// 사용자 구독으로 돌아가므로 키가 필요 없다. 이 EXE 가 Claude Code 안에서 실행돼도 겹치지 않게 CLAUDE* 환경변수는 지운다.
+/// AI CLI 실행기. 이 PC 에 설치된 CLI 에 프롬프트(system + user)를 stdin 으로 넣고 답을 돌려준다. 사용자 구독으로 돌아가므로 키가 필요 없다.
+///   claude : `claude -p --output-format json` (Claude 구독)
+///   codex  : `codex exec -` (OpenAI Codex CLI, ChatGPT 계정 로그인). 답은 -o 파일에서 읽는다.
+/// 이 EXE 가 Claude Code 안에서 실행돼도 겹치지 않게 CLAUDE* 환경변수는 지운다.
 /// </summary>
 static class CliRunner
 {
@@ -545,6 +547,10 @@ static class CliRunner
 
     // claude 는 받는 사람 PC 의 설정(~/.claude, 훅, MCP, CLAUDE.md)을 읽지 않고, 도구도 없이, 답만 하게 한다.
     const string LockedArgs = " -p --output-format json --tools \"\" --strict-mcp-config --setting-sources \"\" --disable-slash-commands --no-session-persistence";
+    // codex 는 빈 작업 폴더에서 읽기 전용 샌드박스로, git 저장소 확인 없이 한 번만 답한다.
+    const string CodexArgs = " exec --skip-git-repo-check --sandbox read-only --color never";
+
+    static bool IsCodex(string tool) { return tool == "codex"; }
 
     static string WorkRoot { get { return Path.Combine(Bootstrap.DataDir, "ai-work"); } }
 
@@ -563,17 +569,19 @@ static class CliRunner
         CleanupWork();
     }
 
-    public static string FindClaude()
+    public static string FindClaude() { return FindTool("claude"); }
+
+    public static string FindTool(string name)
     {
         foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(';'))
         {
             if (string.IsNullOrWhiteSpace(dir)) continue;
-            foreach (var n in new[] { "claude.cmd", "claude.exe" })
+            foreach (var n in new[] { name + ".cmd", name + ".exe" })
             {
                 try { string f = Path.Combine(dir.Trim(), n); if (File.Exists(f)) return f; } catch { }
             }
         }
-        string npm = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm", "claude.cmd");
+        string npm = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm", name + ".cmd");
         return File.Exists(npm) ? npm : null;
     }
 
@@ -586,9 +594,15 @@ static class CliRunner
         {
             if (claudeCmd.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) { exe = claudeCmd; return true; }
             string dir = Path.GetDirectoryName(claudeCmd);
-            string native = Path.Combine(dir, "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe");
-            if (File.Exists(native)) { exe = native; return true; }
-            string js = Path.Combine(dir, "node_modules", "@anthropic-ai", "claude-code", "cli.js");
+            string js;
+            if (Path.GetFileNameWithoutExtension(claudeCmd).Equals("codex", StringComparison.OrdinalIgnoreCase))
+                js = Path.Combine(dir, "node_modules", "@openai", "codex", "bin", "codex.js");
+            else
+            {
+                string native = Path.Combine(dir, "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe");
+                if (File.Exists(native)) { exe = native; return true; }
+                js = Path.Combine(dir, "node_modules", "@anthropic-ai", "claude-code", "cli.js");
+            }
             if (!File.Exists(js)) return false;
             foreach (var p in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(';'))
             {
@@ -599,34 +613,56 @@ static class CliRunner
         return false;
     }
 
+    /// <summary>claude 결과는 맨 위에(예전 화면 호환), codex 결과는 "codex" 아래에.</summary>
     public static Dictionary<string, object> Detect()
     {
-        string exe = FindClaude();
-        if (exe == null) return new Dictionary<string, object> { { "found", false }, { "reason", "PATH 에 claude 가 없습니다" } };
-        string ver = "";
+        var r = DetectOne("claude");
+        r["codex"] = DetectOne("codex");
+        return r;
+    }
+
+    static Dictionary<string, object> DetectOne(string tool)
+    {
+        string exe = FindTool(tool);
+        if (exe == null) return new Dictionary<string, object> { { "found", false }, { "reason", "PATH 에 " + tool + " 가 없습니다" } };
+        int code;
+        string ver = Quick(exe, "--version", out code);
+        var r = new Dictionary<string, object> { { "found", true }, { "path", exe }, { "version", ver } };
+        // codex 는 로그인 여부까지 본다 (ChatGPT 계정으로 로그인돼 있으면 exit 0)
+        if (IsCodex(tool)) { string st = Quick(exe, "login status", out code); r["loggedIn"] = code == 0; r["login"] = FirstLine(st); }
+        return r;
+    }
+
+    static string Quick(string exe, string args, out int code)
+    {
+        code = -1;
         try
         {
-            var psi = Psi(exe, "--version");
+            var psi = Psi(exe, args);
+            psi.RedirectStandardError = true; psi.StandardErrorEncoding = Encoding.UTF8;
             using (var job = new Job())
             using (var p = Process.Start(psi))
             {
                 job.Add(p);
                 var sb = new StringBuilder();
                 p.OutputDataReceived += (s, e) => { if (e.Data != null) lock (sb) sb.AppendLine(e.Data); };
-                p.ErrorDataReceived += (s, e) => { };
+                p.ErrorDataReceived += (s, e) => { if (e.Data != null) lock (sb) sb.AppendLine(e.Data); };
                 p.BeginOutputReadLine(); p.BeginErrorReadLine();
-                if (!p.WaitForExit(15000)) ver = "(버전 확인 시간 초과)";
-                else { p.WaitForExit(2000); lock (sb) ver = sb.ToString().Trim(); }
+                if (!p.WaitForExit(15000)) return "(확인 시간 초과)";
+                p.WaitForExit(2000);
+                code = p.ExitCode;
+                lock (sb) return sb.ToString().Trim();
             }
         }
-        catch (Exception ex) { ver = "(버전 확인 실패: " + ex.Message + ")"; }
-        return new Dictionary<string, object> { { "found", true }, { "path", exe }, { "version", ver } };
+        catch (Exception ex) { return "(확인 실패: " + ex.Message + ")"; }
     }
 
     public static Dictionary<string, object> Run(Dictionary<string, object> prm)
     {
-        string exe = FindClaude();
-        if (exe == null) throw new CliException("claude 명령을 찾지 못했습니다 (not found)");
+        string tool = IsCodex(Get(prm, "tool")) ? "codex" : "claude";
+        bool codex = IsCodex(tool);
+        string exe = FindTool(tool);
+        if (exe == null) throw new CliException(tool + " 명령을 찾지 못했습니다 (not found)");
         string runId = Get(prm, "runId"), system = Get(prm, "system"), user = Get(prm, "user"), model = Get(prm, "model");
         if (!SafeId.IsMatch(runId)) throw new CliException("잘못된 실행 id 입니다");
         if (!SafeModel.IsMatch(model)) throw new CliException("모델 이름에 쓸 수 없는 글자가 있습니다");
@@ -638,8 +674,15 @@ static class CliRunner
         Directory.CreateDirectory(work);
         try
         {
-            string args = LockedArgs + (string.IsNullOrEmpty(model) ? "" : " --model " + model);
-            if (!string.IsNullOrEmpty(system))
+            string args, lastFile = Path.Combine(work, "last.txt");
+            if (codex)
+            {
+                // codex exec 에는 system 자리가 따로 없어서 앞에 붙여 한 덩어리로 넣는다. "-" = stdin 에서 읽기
+                args = CodexArgs + (string.IsNullOrEmpty(model) ? "" : " -m " + model) + " -o \"" + lastFile + "\" -";
+                if (!string.IsNullOrEmpty(system)) user = "<지시>\n" + system + "\n</지시>\n\n" + user;
+            }
+            else args = LockedArgs + (string.IsNullOrEmpty(model) ? "" : " --model " + model);
+            if (!codex && !string.IsNullOrEmpty(system))
             {
                 string sysFile = Path.Combine(work, "system.txt");
                 File.WriteAllText(sysFile, system, new UTF8Encoding(false));
@@ -661,7 +704,7 @@ static class CliRunner
             var job = new Job();
             Process p;
             try { p = Process.Start(psi); job.Add(p); }
-            catch (Exception ex) { job.Dispose(); throw new CliException("claude 를 실행하지 못했습니다", ex.Message); }
+            catch (Exception ex) { job.Dispose(); throw new CliException(tool + " 를 실행하지 못했습니다", ex.Message); }
             lock (running) { running[runId] = p; jobs[runId] = job; }
             bool wasCancelled = false;
             try
@@ -699,6 +742,14 @@ static class CliRunner
             if (wasCancelled) throw new CliException("취소했습니다 (cancel)");
             string stdout, stderr; lock (sbOut) stdout = sbOut.ToString(); lock (sbErr) stderr = sbErr.ToString();
             int code; try { code = p.ExitCode; } catch { code = -1; }
+            if (codex)
+            {
+                string last = File.Exists(lastFile) ? File.ReadAllText(lastFile, Encoding.UTF8).Trim() : "";
+                if (last.Length == 0) last = stdout.Trim();
+                if (code != 0 && last.Length == 0)
+                    throw new CliException("codex 가 오류로 끝났습니다 (exit " + code + "): " + LastLine(stderr), stderr);
+                return new Dictionary<string, object> { { "text", last }, { "stderr", stderr } };
+            }
             if (code != 0 && string.IsNullOrWhiteSpace(stdout))
                 throw new CliException("claude 가 오류로 끝났습니다 (exit " + code + "): " + FirstLine(stderr), stderr);
 
@@ -754,6 +805,8 @@ static class CliRunner
     }
 
     static string Get(Dictionary<string, object> d, string k) { object v; return d.TryGetValue(k, out v) && v != null ? v.ToString() : ""; }
+    // codex 는 진행 로그를 stderr 에 길게 찍고 진짜 오류는 끝에 남긴다
+    static string LastLine(string s) { if (string.IsNullOrWhiteSpace(s)) return ""; var a = s.Trim().Split('\n'); return a[a.Length - 1].Trim(); }
     static string FirstLine(string s) { if (string.IsNullOrWhiteSpace(s)) return ""; var i = s.IndexOf('\n'); return (i > 0 ? s.Substring(0, i) : s).Trim(); }
 
     /// <summary>Windows 작업 개체: 닫으면(Dispose) 안에 든 프로세스와 그 자식·손자까지 한꺼번에 끝난다.</summary>

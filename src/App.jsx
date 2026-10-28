@@ -140,7 +140,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.6';
+export const APP_VERSION = '0.9.7';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -1964,7 +1964,7 @@ function Editor() {
           <MiniMap pannable zoomable nodeColor={(n) => (n.type === 'awsGroup' ? (catalog.kinds.get(n.data.kind)?.color || '#999') + '33' : '#232F3E')} />
         </ReactFlow>
         {find.open && <FindBar key={find.n} initial={find.q} onClose={(q) => setFind((f) => ({ ...f, open: false, q }))} />}
-        {webNote && <div className="web-note" role="status"><span><b>웹 버전</b> · 작업은 이 브라우저에만 저장됩니다. 중요한 그림은 [저장]으로 파일을 남기십시오. PowerPoint 도형 복사와 Claude CLI 는 <a href="./download/" target="_blank" rel="noopener">Windows 버전</a>에서 됩니다.</span><button className="small" onClick={closeWebNote}>확인</button></div>}
+        {webNote && <div className="web-note" role="status"><span><b>웹 버전</b> · 작업은 이 브라우저에만 저장됩니다. 중요한 그림은 [저장]으로 파일을 남기십시오. PowerPoint 도형 복사와 Claude·ChatGPT CLI 는 <a href="./download/" target="_blank" rel="noopener">Windows 버전</a>에서 됩니다.</span><button className="small" onClick={closeWebNote}>확인</button></div>}
         {dragHint && <div className="drag-hint" role="status">{[
           dragHint.overlay ? '겹치는 상자 · 테두리만 움직입니다' : dragHint.alone ? `상자만 옮기는 중 · 안의 ${dragHint.n}개는 제자리` : dragHint.n ? `안의 ${dragHint.n}개가 함께 움직입니다 · Alt: 상자만` : null,
           dragHint.live ? (dragHint.into ? `→ ${dragHint.into} 안으로` : '→ 어느 상자에도 속하지 않음') : null,

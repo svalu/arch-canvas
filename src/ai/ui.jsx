@@ -21,7 +21,7 @@ export const Busy = ({ label }) => (
 const ACTION_LABEL = { review: '검수 받기', draw: '그려달라고 하기' };
 
 // 툴바 칩: 지금 어떤 AI 가 연결돼 있는지 한눈에. 누르면 연결 모달.
-export const SHORT_NAME = { 'claude-cli': 'Claude CLI', 'claude-api': 'Claude', 'openai-api': 'GPT', mock: 'Mock' };
+export const SHORT_NAME = { 'claude-cli': 'Claude CLI', 'codex-cli': 'ChatGPT CLI', 'claude-api': 'Claude', 'openai-api': 'GPT', mock: 'Mock' };
 export function AiChip({ settings, onClick }) {
   const p = providerById(settings.provider);
   const on = isVerified(settings);
@@ -44,6 +44,7 @@ const STEPS = [
 ];
 const TIPS = {
   'claude-cli': ['이 PC 에 설치된 claude 명령을 그대로 씁니다. 키를 넣을 필요가 없습니다.', '처음이면 터미널에서 claude auth login 을 한 번 실행해 두어야 합니다.', '비용은 현재 Claude 구독 사용량으로 계산됩니다.'],
+  'codex-cli': ['이 PC 에 설치된 codex 명령(OpenAI Codex CLI)을 그대로 씁니다. 키를 넣을 필요가 없습니다.', '처음이면 터미널에서 npm i -g @openai/codex 로 설치하고 codex login 으로 ChatGPT 계정에 로그인해 두어야 합니다.', '비용은 ChatGPT 구독 사용량으로 계산됩니다.'],
   'claude-api': ['console.anthropic.com 에서 키를 만들어 붙여 넣습니다. 키는 sk-ant- 로 시작합니다.', '키는 이 PC 에만 저장되고 서버로 보내지 않습니다.', '호출마다 토큰 비용이 듭니다. 검수 한 번은 보통 수천 토큰입니다.'],
   'openai-api': ['platform.openai.com 에서 API 키를 만듭니다. ChatGPT 구독과는 별개입니다.', '키는 이 PC 에만 저장됩니다.', '호출마다 토큰 비용이 듭니다.'],
   mock: ['모델을 부르지 않고 정해진 답을 돌려줍니다. 화면 확인용입니다.'],
@@ -52,6 +53,7 @@ const ERROR_HINT = (e, p) => {
   const m = String(e?.message || '').toLowerCase();
   if (/401|invalid.*key|authentication|unauthorized|api key/.test(m)) return '키가 틀렸거나 만료됐습니다. 이전 단계로 돌아가 키를 다시 넣어 보세요.';
   if (/not logged in|login|auth/.test(m) && p?.id === 'claude-cli') return '터미널에서 claude auth login 을 실행해 로그인한 뒤 다시 시도하세요.';
+  if (/not logged in|login|auth|401|unauthorized/.test(m) && p?.id === 'codex-cli') return '터미널에서 codex login 을 실행해 ChatGPT 계정으로 로그인한 뒤 다시 시도하세요.';
   if (/429|rate|quota|credit|billing/.test(m)) return '사용량 한도나 결제 문제입니다. 해당 서비스의 결제 상태를 확인하세요.';
   if (/network|fetch|enotfound|timeout|timed out|econn/.test(m)) return '네트워크가 막혀 있을 수 있습니다. 프록시나 방화벽을 확인하세요.';
   if (/model|not found|404/.test(m)) return '모델 이름이 맞지 않습니다. 이전 단계에서 다른 모델을 골라 보세요.';
@@ -81,7 +83,7 @@ export function ConnectModal({ open, pending, settings, onSettings, onClose, onR
     setProvider(settings.provider || ''); setModel(settings.model || '');
     detectCli().then((r) => {
       setCli(r);
-      if (!settings.provider) { const def = r.found ? 'claude-cli' : 'claude-api'; setProvider(def); setModel(providerById(def).models[0].id); }
+      if (!settings.provider) { const def = r.found ? 'claude-cli' : r.codex?.found && r.codex.loggedIn !== false ? 'codex-cli' : 'claude-api'; setProvider(def); setModel(providerById(def).models[0].id); }
     });
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -104,7 +106,8 @@ export function ConnectModal({ open, pending, settings, onSettings, onClose, onR
 
   const pickProvider = (id) => { setProvider(id); setModel(providerById(id).models[0].id); setError(null); };
   const cancel = () => { abortRef.current?.abort(); gen.current++; onClose(); };
-  const cliBlocked = p?.desktopOnly && (!isDesktop || (cli && !cli.found));
+  const cliOf = (x) => (x?.tool === 'codex' ? cli?.codex : cli);
+  const cliBlocked = p?.desktopOnly && (!isDesktop || (cli && !cliOf(p)?.found));
   const setupOk = p && !cliBlocked && (!p.needsKey || hasKey || keyInput.trim());
   const canNext = step === 0 ? !!p && !cliBlocked : step === 1 ? setupOk : false;
 
@@ -131,7 +134,7 @@ export function ConnectModal({ open, pending, settings, onSettings, onClose, onR
   };
   const goNext = () => { if (step === 0) setStep(1); else if (step === 1) start(); };
   const goBack = () => { if (step === 2) { abortRef.current?.abort(); gen.current++; setPhase('idle'); } setStep(Math.max(0, step - 1)); setError(null); };
-  const recommended = cli?.found ? 'claude-cli' : 'claude-api';
+  const recommended = cli?.found ? 'claude-cli' : cli?.codex?.found ? 'codex-cli' : 'claude-api';
 
   return (
     <div className={'modal-back' + (closing ? ' closing' : '')} onMouseDown={(e) => { if (e.target === e.currentTarget) cancel(); }}>
@@ -153,8 +156,9 @@ export function ConnectModal({ open, pending, settings, onSettings, onClose, onR
         {step === 0 && (
           <div className="prov-list">
             {providerList().map((x) => {
-              const blocked = x.desktopOnly && (!isDesktop || (cli && !cli.found));
-              const why = x.desktopOnly && !isDesktop ? 'EXE 로 열었을 때만' : x.desktopOnly && cli && !cli.found ? 'claude 명령을 찾지 못했습니다' : null;
+              const c = cliOf(x);
+              const blocked = x.desktopOnly && (!isDesktop || (cli && !c?.found));
+              const why = x.desktopOnly && !isDesktop ? 'EXE 로 열었을 때만' : x.desktopOnly && cli && !c?.found ? `${x.tool || 'claude'} 명령을 찾지 못했습니다` : c?.loggedIn === false ? '로그인 필요 (codex login)' : null;
               return (
                 <label key={x.id} className={'prov' + (provider === x.id ? ' on' : '') + (blocked ? ' off' : '')}>
                   <input type="radio" name="prov" checked={provider === x.id} disabled={blocked} onChange={() => pickProvider(x.id)} />
@@ -170,7 +174,7 @@ export function ConnectModal({ open, pending, settings, onSettings, onClose, onR
 
         {step === 1 && p && (
           <div className="prov-opts">
-            <div className="setup-head"><b>{p.name}</b>{cli?.found && p.id === 'claude-cli' && <small className="ok"><i className="dot" /> claude 명령 확인됨{cli.version ? ' · ' + cli.version : ''}</small>}</div>
+            <div className="setup-head"><b>{p.name}</b>{p.desktopOnly && cliOf(p)?.found && <small className="ok"><i className="dot" /> {p.tool || 'claude'} 명령 확인됨{cliOf(p).version ? ' · ' + cliOf(p).version : ''}{cliOf(p).loggedIn === false ? ' · 로그인 필요' : ''}</small>}</div>
             <label>모델<select value={model} onChange={(e) => setModel(e.target.value)}>{p.models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
             {p.needsKey && (
               <label>API 키 {hasKey && !keyInput && <em>저장돼 있음 · 바꾸려면 새로 입력</em>}
