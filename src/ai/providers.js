@@ -121,6 +121,10 @@ export const mockEnabled = () => { try { return localStorage.getItem('arch-canva
 async function askMock({ user }) {
   await new Promise((r) => setTimeout(r, 400));
   if (/연결 확인용/.test(user)) return '연결 확인';
+  const Q = { understood: '(mock) 비용이 얼마나 드는지 궁금하신 거군요.', assumptions: [], questions: [{ id: 'q1', question: '이건 어디에 쓰는 건가요?', why: '쓰임새에 따라 필요한 규모가 크게 달라져요.', options: ['회사 서비스', '포트폴리오·데모', '나 혼자 쓰기', '잘 모르겠어요 (알아서 정해 주세요)'], multi: false }] };
+  if (/# 질문/.test(user) && !/\[확인\]/.test(user)) return JSON.stringify({ ...Q, answer: '' });
+  if (/# 질문/.test(user)) return JSON.stringify({ understood: '(mock) 포트폴리오용 비용이 궁금하신 거군요.', assumptions: ['하루 방문 몇 명'], questions: [], answer: '(mock) 보여줄 때만 켜면 **월 몇천 원~3만 원**이면 돼요.' });
+  if (/검수해서 JSON/.test(user) && !/\[확인\]/.test(user)) return JSON.stringify({ ...Q, summary: '', findings: [] });
   if (/# 질문/.test(user)) return ['(mock) 이 경고는 보안 경계와 관련됩니다. 현재 다이어그램에서는 RDS Primary를 Private subnet (DB)으로 옮기고, 앱 서버 보안 그룹에서만 3306 포트를 허용하면 해결됩니다.', '제안서 근거: "DB 계층은 인터넷에서 직접 접근할 수 없는 프라이빗 서브넷에 배치합니다."'].join('\n');
   if (/# 정리 요청/.test(user)) {
     return JSON.stringify({ understood: '(mock) 내 PC 에서 도는 AI 를 밖에서도 쓰고 싶으신 거군요.', title: '(mock) 개인 AI 를 AWS 에', requirements: ['밖에서도 접속', '기억 공유'], constraints: ['비용 최소'],

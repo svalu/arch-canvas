@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useExit } from '../useExit.js';
 import { Busy } from './ui.jsx';
 import { composeDrawRequest } from './prompts.js';
+import { DocAttach, readDocFile } from './DocAttach.jsx';
 
 const EXAMPLES = [
   '쇼핑몰 웹사이트를 AWS 에 올리고 싶어. 사람 많을 때도 안 멈추게',
@@ -11,7 +12,7 @@ const EXAMPLES = [
   '회사 고객센터에 AI 상담을 붙이고 싶어. 기존 시스템이랑 연결해서',
 ];
 
-export function AiWizard({ open, initialText = '', verified, onOpenConnect, onClarify, onDraw, ai, onApply, onSaveContext, onCancel, onClose, describe }) {
+export function AiWizard({ open, initialText = '', verified, onOpenConnect, onClarify, onDraw, ai, onApply, onSaveContext, onCancel, onClose, describe, doc, onAttachDoc, onError }) {
   const ex = useExit(open || null, 180);
   const [step, setStep] = useState('write');   // write | thinking | ask | drawing | preview | done
   const [text, setText] = useState('');
@@ -45,7 +46,7 @@ export function AiWizard({ open, initialText = '', verified, onOpenConnect, onCl
     if (!verified) { onOpenConnect(); return; }
     setErr(null); setStep('thinking');
     try {
-      const p = await onClarify(text.trim());
+      const p = await onClarify(text.trim() || '첨부한 문서의 시스템을 AWS 아키텍처로 그려 주세요.');
       if (!p) { setStep('write'); return; }   // 취소
       setPlan(p);
       onSaveContext(p);
@@ -90,10 +91,14 @@ export function AiWizard({ open, initialText = '', verified, onOpenConnect, onCl
         {(step === 'write' || step === 'thinking') && (
           <>
             <p className="wz-lead">무엇을 만들고 싶으세요? <b>막 적어도 됩니다.</b> 부족한 건 제가 쉬운 말로 몇 가지만 여쭤볼게요.</p>
+            <DocAttach doc={doc} onAttach={onAttachDoc} onError={(m) => setErr(m)} onCopied={onError} />
+            {doc && <p className="hint">첨부한 문서를 먼저 읽고 그림을 정리합니다. 아래는 비워 둬도 됩니다.</p>}
             <textarea className="wz-text" autoFocus value={text} onChange={(e) => setText(e.target.value)} disabled={step === 'thinking'}
+              onDragOver={(e) => { if ([...(e.dataTransfer?.items || [])].some((i) => i.kind === 'file')) e.preventDefault(); }}
+              onDrop={async (e) => { const f = e.dataTransfer?.files?.[0]; if (!f) return; e.preventDefault(); const d = await readDocFile(f, (m) => setErr(m)); if (d) onAttachDoc(d); }}
               placeholder="예: 내 PC 에서 도는 AI 를 밖에서도 휴대폰으로 쓰고 싶어. 비용은 최대한 적게"
               onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && text.trim()) start(); }} />
-            {!text.trim() && (
+            {!text.trim() && !doc && (
               <div className="wz-examples">
                 <small className="hint">이런 식으로요 (누르면 채워집니다)</small>
                 {EXAMPLES.map((x) => <button key={x} className="chip" onClick={() => setText(x)}>{x}</button>)}
@@ -103,7 +108,7 @@ export function AiWizard({ open, initialText = '', verified, onOpenConnect, onCl
             <div className="modal-actions">
               {step === 'thinking'
                 ? <><div className="modal-wait"><Busy label="읽고 정리하는 중" /></div><button onClick={onCancel}>취소</button></>
-                : <button className="primary" disabled={!text.trim()} onClick={start}>{verified ? '다음' : 'AI 연결하고 시작'}</button>}
+                : <button className="primary" disabled={!text.trim() && !doc} onClick={start}>{verified ? '다음' : 'AI 연결하고 시작'}</button>}
             </div>
           </>
         )}
@@ -162,6 +167,71 @@ export function AiWizard({ open, initialText = '', verified, onOpenConnect, onCl
             <div className="modal-actions"><button className="primary" onClick={onClose}>닫기</button></div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+// 의도 되묻기: 질문·검수 전에 AI 가 "이렇게 이해했어요" + 쉬운 질문 몇 개. 답은 앱이 기억해서 다음부터 다시 묻지 않는다.
+export function AskBackModal({ data, onSubmit, onSkip, onClose }) {
+  const open = !!data;
+  const ex = useExit(data || null, 180);
+  const d = data || ex.v;
+  const [qi, setQi] = useState(0);
+  const [answers, setAnswers] = useState({});
+  const [other, setOther] = useState('');
+  useEffect(() => { if (data) { setQi(0); setAnswers({}); setOther(''); } }, [data]);
+  if (!d) return null;
+  const qs = d.questions || [];
+  const q = qs[qi];
+  const finish = (a) => onSubmit(a);
+  const goNext = (a = answers) => {
+    let cur = a;
+    if (other.trim() && q) { cur = { ...a, [q.id]: [...(Array.isArray(a[q.id]) ? a[q.id] : a[q.id] ? [a[q.id]] : []), other.trim()] }; setAnswers(cur); }
+    setOther('');
+    if (qi + 1 < qs.length) setQi(qi + 1); else finish(cur);
+  };
+  const pick = (opt) => {
+    if (!q) return;
+    if (q.multi && !/잘 모르겠/.test(opt)) {
+      const cur = Array.isArray(answers[q.id]) ? answers[q.id] : [];
+      setAnswers({ ...answers, [q.id]: cur.includes(opt) ? cur.filter((x) => x !== opt) : [...cur, opt] });
+    } else {
+      const next = { ...answers, [q.id]: q.multi ? [opt] : opt };
+      setAnswers(next);
+      if (!q.multi) setTimeout(() => goNext(next), 180);
+    }
+  };
+  const chosen = (opt) => (Array.isArray(answers[q?.id]) ? answers[q?.id].includes(opt) : answers[q?.id] === opt);
+  return (
+    <div className={'modal-back' + (!open ? ' closing' : '')}>
+      <div className="modal wizard" role="dialog" aria-modal="true" aria-labelledby="ab-title">
+        <div className="modal-head">
+          <h3 id="ab-title">{d.mode === 'review' ? '검수 전에 몇 가지만 여쭤볼게요' : '답하기 전에 몇 가지만 여쭤볼게요'}</h3>
+          <button className="x" onClick={onClose} aria-label="닫기">×</button>
+        </div>
+        <div className="wz-progress" aria-hidden="true">{qs.map((_, i) => <span key={i} className={i < qi ? 'done' : i === qi ? 'now' : ''} />)}</div>
+        {qi === 0 && d.understood && <p className="wz-understood">{d.understood}</p>}
+        <p className="hint">쓰임새에 따라 답이 크게 달라져서 여쭤봐요. 답해 주신 건 기억해 두고 다시 묻지 않을게요.</p>
+        {q && (
+          <div className="wz-q" key={q.id}>
+            <small className="hint">질문 {qi + 1} / {qs.length}</small>
+            <p className="wz-question">{q.question}</p>
+            {q.why && <p className="hint">{q.why}{q.multi ? ' · 여러 개 골라도 됩니다' : ''}</p>}
+            <div className="wz-options">
+              {(q.options || []).map((o) => <button key={o} className={'chip big' + (chosen(o) ? ' on' : '')} onClick={() => pick(o)}>{o}</button>)}
+            </div>
+            <label className="wz-field">
+              <span>또는 직접 적기 <small>(선택)</small></span>
+              <input value={other} onChange={(e) => setOther(e.target.value)} placeholder="예: 하루 5명 정도, 보여줄 때만" onKeyDown={(e) => { if (e.key === 'Enter') goNext(); }} />
+            </label>
+          </div>
+        )}
+        <div className="modal-actions">
+          {qi > 0 && <button onClick={() => setQi(qi - 1)}>이전</button>}
+          <button className="link" onClick={onSkip}>그냥 일반적으로 답해 주세요</button>
+          <button className="primary" onClick={() => goNext()}>{qi + 1 < qs.length ? '다음' : d.mode === 'review' ? '이대로 검수 받기' : '이대로 답 받기'}</button>
+        </div>
       </div>
     </div>
   );

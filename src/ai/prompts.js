@@ -32,9 +32,11 @@ export function summarizeGraph(graph, catalog) {
   return lines.join('\n');
 }
 
+const DOC_IN_PROMPT = 16000;   // 첨부 문서는 앞부분 이만큼만 모델에 보낸다
 export function contextText(ctx) {
-  if (!ctx || (!ctx.title && !ctx.requirements && !ctx.constraints)) return '(제안서 컨텍스트 없음)';
-  return [ctx.title && `제목: ${ctx.title}`, ctx.requirements && `요건서/RFP 요약:\n${ctx.requirements}`, ctx.constraints && `제약·전제:\n${ctx.constraints}`].filter(Boolean).join('\n\n');
+  const doc = ctx?.doc?.text ? `첨부한 시스템 문서 (${ctx.doc.name}) — 사용자가 다른 AI 나 직접 정리한 시스템 구조. 그림의 1차 근거로 쓴다:\n${ctx.doc.text.slice(0, DOC_IN_PROMPT)}${ctx.doc.text.length > DOC_IN_PROMPT ? '\n…(뒷부분 생략)' : ''}` : '';
+  if (!ctx || (!ctx.title && !ctx.requirements && !ctx.constraints && !doc)) return '(제안서 컨텍스트 없음)';
+  return [ctx.title && `제목: ${ctx.title}`, ctx.requirements && `요건서/RFP 요약:\n${ctx.requirements}`, ctx.constraints && `제약·전제:\n${ctx.constraints}`, doc].filter(Boolean).join('\n\n');
 }
 
 export function violationsText(violations) {
@@ -59,8 +61,20 @@ export const REVIEW_SYSTEM = `${COMMON_SYSTEM}
 요건서에 있는데 빠진 것, 요건에 비해 과한 것, 가용성/보안/비용/운영 관점의 빈틈, 라벨이 모호한 것.
 각 지적은 그래프의 실제 id(노드/그룹/연결선)에 붙인다. 특정 요소에 붙일 수 없는 전체 의견은 summary 에 쓴다.
 
+
+의도 먼저 (사용자는 AWS 를 잘 모를 수 있다. "요건" 같은 말도 모른다):
+- 먼저 사용자가 실제로 원하는 게 뭔지 파악한다. 질문 문장만 보지 말고 제안서 컨텍스트·다이어그램·앞선 대화를 함께 본다.
+- 답이 크게 달라지는데 아직 모르는 것(누가·몇 명이 쓰는지, 무엇을 위한 것인지(회사 서비스·포트폴리오·개인용), 계속 켜 둬야 하는지, 예산, 데이터 민감도)이 있으면
+  흔한 상용 규모를 멋대로 가정하지 말고 questions 로 먼저 쉬운 말로 묻는다. 최대 3개, 선택지 2~4개 + 마지막은 "잘 모르겠어요 (알아서 정해 주세요)".
+- 컨텍스트에 "[확인]" 으로 시작하는 줄은 사용자가 이미 답한 것이다. 그건 다시 묻지 말고 그대로 따른다.
+- 이미 충분히 알면 questions 는 빈 배열로 두고 바로 답한다. 이때도 무엇을 가정했는지 assumptions 에 짧게 적는다(사용자가 틀린 걸 고칠 수 있게).
+- 질문은 해요체, AWS 용어는 쓰지 않거나 괄호로 풀어 쓴다. 각 질문에 why(왜 묻는지 한 줄).
+검수에서 questions 를 낼 때는 summary 와 findings 를 비워 둔다(답을 받고 다시 검수한다).
+검수 결과는 그 쓰임새(규모·목적)에 맞춰 판단한다. 포트폴리오·개인용에 상용 수준 이중화를 요구하지 않는다. 대신 비용을 줄일 곳을 짚는다.
+
 출력 형식:
 {
+  "understood": "사용자가 원하는 걸 내가 이렇게 이해했다 1문장 (해요체)", "assumptions": ["가정한 것 짧게", ...], "questions": [ { "id": "q1", "question": "쉬운 질문", "why": "왜 묻는지", "options": ["...", "잘 모르겠어요 (알아서 정해 주세요)"], "multi": false } ],
   "summary": "총평 2~4문장",
   "findings": [
     { "target": "<그래프 id>", "level": "error|warn|info", "message": "한 줄 요약", "explain": "왜 문제인지와 어떻게 고치면 되는지 1~3문장" }
@@ -133,6 +147,15 @@ export function buildClarifyMessages(graph, catalog, text) {
   return { system: CLARIFY_SYSTEM, user };
 }
 
+/** 되물은 질문의 답 → 컨텍스트 요건 끝에 붙일 "[확인]" 줄들 (다음부터는 다시 묻지 않는다) */
+export function confirmedLines(questions, answers) {
+  return (questions || []).map((q) => {
+    const a = answers[q.id];
+    const v = Array.isArray(a) ? a.join(', ') : a;
+    return v ? `- [확인] ${q.question} → ${v}` : null;
+  }).filter(Boolean);
+}
+
 /** 정리 결과 + 사용자의 답 → 최종 그리기 요청 */
 export function composeDrawRequest(plan, answers) {
   const qa = (plan.questions || []).map((q) => {
@@ -144,8 +167,25 @@ export function composeDrawRequest(plan, answers) {
 }
 
 // 자유 질문: 경고/핀/궁금한 점을 다이어그램 맥락과 함께 묻는다. 답은 JSON 이 아니라 글.
-export const ASK_SYSTEM = `너는 AWS 솔루션 아키텍트다. 사용자는 고객 제안서용 아키텍처 다이어그램을 그리는 중이고, 지금 뜬 경고나 궁금한 점을 묻는다.
-한국어 문어체(존댓말 "~합니다")로, 결론부터 3~8문장. 왜 그런지 → 이 다이어그램에서 구체적으로 어떻게 고치면 되는지(노드 이름으로) → 제안서에 적을 한 줄 근거 순서로. 코드 펜스·JSON 없이 그냥 글. 필요하면 짧은 목록은 괜찮다.`;
+export const ASK_SYSTEM = `너는 AWS 를 잘 모르는 사람도 이해하게 설명하는 친절한 AWS 솔루션 아키텍트다. 사용자는 아키텍처 다이어그램을 보며 경고나 궁금한 점(비용, 구조, 대안 등)을 묻는다.
+
+의도 먼저 (사용자는 AWS 를 잘 모를 수 있다. "요건" 같은 말도 모른다):
+- 먼저 사용자가 실제로 원하는 게 뭔지 파악한다. 질문 문장만 보지 말고 제안서 컨텍스트·다이어그램·앞선 대화를 함께 본다.
+- 답이 크게 달라지는데 아직 모르는 것(누가·몇 명이 쓰는지, 무엇을 위한 것인지(회사 서비스·포트폴리오·개인용), 계속 켜 둬야 하는지, 예산, 데이터 민감도)이 있으면
+  흔한 상용 규모를 멋대로 가정하지 말고 questions 로 먼저 쉬운 말로 묻는다. 최대 3개, 선택지 2~4개 + 마지막은 "잘 모르겠어요 (알아서 정해 주세요)".
+- 컨텍스트에 "[확인]" 으로 시작하는 줄은 사용자가 이미 답한 것이다. 그건 다시 묻지 말고 그대로 따른다.
+- 이미 충분히 알면 questions 는 빈 배열로 두고 바로 답한다. 이때도 무엇을 가정했는지 assumptions 에 짧게 적는다(사용자가 틀린 걸 고칠 수 있게).
+- 질문은 해요체, AWS 용어는 쓰지 않거나 괄호로 풀어 쓴다. 각 질문에 why(왜 묻는지 한 줄).
+
+답(answer) 쓰는 법: 존댓말(~해요/~합니다), 결론부터 3~8문장. 숫자는 사용자의 실제 규모·쓰임새에 맞춰 계산하고 무엇을 근거로 했는지 밝힌다.
+이 다이어그램에서 구체적으로 어떻게 하면 되는지(노드 이름으로), 돈을 아낄 수 있으면 그 방법도. 마크다운 굵게(**)와 짧은 목록은 써도 된다. 코드 펜스 없이.
+가격은 서울 리전 기준 대략치이고 바뀔 수 있다고 한 번만 짧게 밝힌다.
+
+답은 반드시 JSON 객체 하나만, 코드 펜스 없이:
+{
+  "understood": "사용자가 원하는 걸 내가 이렇게 이해했다 1문장 (해요체)", "assumptions": ["가정한 것 짧게", ...], "questions": [ { "id": "q1", "question": "쉬운 질문", "why": "왜 묻는지", "options": ["...", "잘 모르겠어요 (알아서 정해 주세요)"], "multi": false } ],
+  "answer": "questions 가 비었을 때의 답 (questions 를 냈으면 빈 문자열)"
+}`;
 
 export function buildAskMessages(graph, catalog, question, violations, history = []) {
   const user = `# 제안서 컨텍스트\n${contextText(graph.context)}\n\n# 현재 다이어그램: ${graph.title}${graph.mode === 'card' ? ' (솔루션 구성도)' : ''}\n${summarizeGraph(graph, catalog)}\n\n# 자동 규칙 검사 결과\n${graph.mode === 'card' ? '(카드 모드: 없음)' : violationsText(violations)}\n\n${history.length ? '# 앞선 대화\n' + history.map((h) => `${h.role === 'user' ? '사용자' : 'AI'}: ${h.text}`).join('\n\n') + '\n\n' : ''}# 질문\n${question}`;

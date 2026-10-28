@@ -926,3 +926,29 @@ details.ai-step:not([open]) { gap: 0; }
 .wz-field > span small { font-weight: 400; }
 .app.theme-dark .modal.wizard textarea, .app.theme-dark .modal.wizard input { background: #0f1f22; border-color: #2c4a4a; }
 .app.theme-dark .modal.wizard textarea:focus, .app.theme-dark .modal.wizard input:focus { border-color: #2DD4BF; background: #12262a; box-shadow: 0 0 0 4px rgba(45,212,191,.16); }
+
+/* 시스템 구조 문서(MD) 첨부 · 의도 표시 · 알려준 것 */
+.doc-attach { display: flex; flex-direction: column; gap: 6px; }
+.doc-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.doc-btn { border: 1.5px dashed #b8c3d1; background: transparent; border-radius: 10px; padding: 7px 12px; font-size: 13px; cursor: pointer; }
+.doc-btn:hover { border-color: #2E73B8; color: #2E73B8; }
+.doc-chip { display: inline-flex; align-items: center; gap: 6px; background: #eef4fb; border: 1px solid #cfe0f2; border-radius: 999px; padding: 4px 6px 4px 12px; font-size: 12.5px; }
+.doc-chip small { color: var(--muted); }
+.doc-chip .x, .told-row .x { border: 0; background: transparent; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 4px; color: var(--muted); }
+.doc-how { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fbfcfd; display: flex; flex-direction: column; gap: 8px; }
+.doc-how p { margin: 0; font-size: 12.5px; line-height: 1.6; }
+.doc-how pre { margin: 0; white-space: pre-wrap; font-family: inherit; font-size: 12px; line-height: 1.6; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 10px; max-height: 220px; overflow: auto; }
+.doc-how button { align-self: flex-start; }
+.intent { background: #f3f7fc; border-radius: 8px; padding: 8px 10px; font-size: 12.5px; line-height: 1.55; }
+.intent p { margin: 0; } .intent p + p { margin-top: 4px; }
+.told { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.told-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; font-size: 12.5px; line-height: 1.5; }
+.app.theme-dark .doc-chip { background: #12262a; border-color: #2c4a4a; }
+.app.theme-dark .doc-how, .app.theme-dark .doc-how pre { background: #0f1f22; border-color: #1f3a3a; }
+.app.theme-dark .intent { background: #142225; color: #cdebe6; }
+.app.theme-dark .told { border-color: #1f3a3a; }
+
+/* 웹 버전 안내: 좁아져 여러 줄이 돼도 깨지지 않게 (단어 중간에서 안 끊고, 둥근 네모) */
+.web-note { border-radius: 14px; word-break: keep-all; overflow-wrap: anywhere; max-width: min(680px, calc(100% - 32px)); padding: 10px 12px 10px 16px; }
+.web-note > span { flex: 1; min-width: 0; }
+.web-note > button { flex: none; white-space: nowrap; }

@@ -60,8 +60,8 @@ import { useExit as useExit2 } from './useExit.js';
 import { ConnectModal, AiPanel, AiChip, Busy, describeOps } from './ai/ui.jsx';
 import { useExit } from './useExit.js';
 import { loadSettings, saveSettings, isVerified, run as aiRun } from './ai/connection.js';
-import { buildReviewMessages, buildDrawMessages, buildAskMessages, buildClarifyMessages, parseJsonReply, findingsToAnnotations } from './ai/prompts.js';
-import { AiWizard } from './ai/Wizard.jsx';
+import { buildReviewMessages, buildDrawMessages, buildAskMessages, buildClarifyMessages, parseJsonReply, findingsToAnnotations, confirmedLines } from './ai/prompts.js';
+import { AiWizard, AskBackModal } from './ai/Wizard.jsx';
 import { providerById } from './ai/providers.js';
 import { GuidePanel, loadGuide, saveGuide, emptyGuide, visibleSteps, opsFor } from './guide/GuidePanel.jsx';
 import suggestData from '../data/suggest.json' with { type: 'json' };
@@ -97,7 +97,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.1';
+export const APP_VERSION = '0.9.2';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -876,7 +876,8 @@ function Editor() {
 
   // ----- AI: 검수(annotate 핀) / 그리기(패치 명령 미리보기 → 적용) -----
   const askHistory = useRef([]);   // 자유 질문 이어가기용 (최근 6개)
-  const runAi = useCallback(async (mode, request = '') => {
+  const [askBack, setAskBack] = useState(null);   // AI 가 답하기 전에 되묻는 것 { mode, request, understood, questions }
+  const runAi = useCallback(async (mode, request = '', opts = {}) => {
     if (viewRef.current?.aiOff) { toastMsg('AI 기능이 꺼져 있습니다. 보기 설정에서 켤 수 있습니다.'); return; }
     if (!isVerified(aiSettings)) { pendingDraw.current = request; setConnect({ open: true, pending: mode }); return; }
     const g = currentGraph();
@@ -894,15 +895,31 @@ function Editor() {
     try {
       const raw = await aiRun(aiSettings, { ...msgs, signal: ac.signal, maxTokens: mode === 'ask' ? 4000 : 16000 });
       if (ac.signal.aborted) return;
-      if (mode === 'ask') {
-        const prevHist = docsRef.current.active === docId ? askHistory.current : (tabAi.current.get(docId) || []);
-        const thread = [...prevHist, { role: 'user', text: request }, { role: 'ai', text: raw }].slice(-6);
-        if (docsRef.current.active === docId) askHistory.current = thread; else tabAi.current.set(docId, thread);
-        setAi((s) => ({ busy: null, error: null, question: request, result: { mode: 'ask', docId, docTitle, raw, ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, question: request, answer: raw, thread } }));
+      // 의도 먼저: 답이 크게 달라지는데 모르는 게 있으면 AI 가 먼저 쉬운 말로 되묻는다
+      let j = null;
+      try { j = parseJsonReply(raw); } catch { j = null; }   // 질문 모드는 예전처럼 글로만 올 수도 있다
+      const norm = (qs) => (Array.isArray(qs) ? qs : []).slice(0, 3).map((q, i) => {
+        const o = (Array.isArray(q.options) ? q.options : []).map(String).filter(Boolean).slice(0, 5);
+        if (!o.some((x) => /잘 모르겠/.test(x))) o.push('잘 모르겠어요 (알아서 정해 주세요)');
+        return { id: String(q.id || 'q' + (i + 1)), question: String(q.question || ''), why: q.why ? String(q.why) : '', options: o, multi: !!q.multi };
+      }).filter((q) => q.question);
+      const qs = j && !opts.confirmed ? norm(j.questions) : [];
+      if (qs.length && (mode === 'ask' || mode === 'review')) {
+        setAi((s) => ({ ...s, busy: null, error: null }));
+        setAskBack({ mode, request, understood: String(j.understood || ''), questions: qs });
         return;
       }
-      const j = parseJsonReply(raw);
-      const base = { mode, docId, docTitle, raw, ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary: String(j.summary || '') };
+      const intent = j ? { understood: String(j.understood || ''), assumptions: (Array.isArray(j.assumptions) ? j.assumptions : []).map(String).filter(Boolean).slice(0, 5) } : {};
+      if (mode === 'ask') {
+        const answer = j && typeof j.answer === 'string' && j.answer.trim() ? j.answer : (j ? String(j.summary || raw) : raw);
+        const prevHist = docsRef.current.active === docId ? askHistory.current : (tabAi.current.get(docId) || []);
+        const thread = [...prevHist, { role: 'user', text: request }, { role: 'ai', text: answer }].slice(-6);
+        if (docsRef.current.active === docId) askHistory.current = thread; else tabAi.current.set(docId, thread);
+        setAi((s) => ({ busy: null, error: null, question: request, result: { mode: 'ask', docId, docTitle, raw, ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, question: request, answer, thread, ...intent } }));
+        return;
+      }
+      if (!j) j = parseJsonReply(raw);   // 검수·그리기는 JSON 이어야 한다 (못 읽으면 여기서 오류)
+      const base = { mode, docId, docTitle, raw, ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary: String(j.summary || ''), ...intent };
       if (mode === 'review') {
         const { annotations, dropped } = findingsToAnnotations(j.findings, g);
         if (docsRef.current.active === docId) {
@@ -1829,7 +1846,7 @@ function Editor() {
           <MiniMap pannable zoomable nodeColor={(n) => (n.type === 'awsGroup' ? (catalog.kinds.get(n.data.kind)?.color || '#999') + '33' : '#232F3E')} />
         </ReactFlow>
         {find.open && <FindBar key={find.n} initial={find.q} onClose={(q) => setFind((f) => ({ ...f, open: false, q }))} />}
-        {webNote && <div className="web-note" role="status"><span><b>웹 버전</b> · 작업은 이 브라우저에 저장됩니다. 중요한 다이어그램은 [저장]으로 파일을 남기십시오. Claude CLI·PowerPoint 도형 복사는 <a href="./download/" target="_blank" rel="noopener">Windows 버전</a>에서만 됩니다.</span><button className="small" onClick={closeWebNote}>확인</button></div>}
+        {webNote && <div className="web-note" role="status"><span><b>웹 버전</b> · 작업은 이 브라우저에만 저장됩니다. 중요한 그림은 [저장]으로 파일을 남기십시오. PowerPoint 도형 복사와 Claude CLI 는 <a href="./download/" target="_blank" rel="noopener">Windows 버전</a>에서 됩니다.</span><button className="small" onClick={closeWebNote}>확인</button></div>}
         {dragHint && <div className="drag-hint" role="status">{[
           dragHint.overlay ? '겹치는 상자 · 테두리만 움직입니다' : dragHint.alone ? `상자만 옮기는 중 · 안의 ${dragHint.n}개는 제자리` : dragHint.n ? `안의 ${dragHint.n}개가 함께 움직입니다 · Alt: 상자만` : null,
           dragHint.live ? (dragHint.into ? `→ ${dragHint.into} 안으로` : '→ 어느 상자에도 속하지 않음') : null,
@@ -1874,6 +1891,7 @@ function Editor() {
             state={ai} onReview={() => runAi('review')} onDraw={(req) => runAi('draw', req)} onAsk={(q) => runAi('ask', q)}
             onApplyOps={applyAiOps} onCancel={() => aiAbort.current?.abort()} onPick={selectById} nameOf={labelOf} activeDocId={docs.active}
             onWizard={(text) => setWizard({ open: true, text })}
+            onAttachDoc={(d) => updateContext({ doc: d || undefined })} onToast={toastMsg}
           />
         ) : panel === 'layers' ? (
           <LayersPanel graph={currentGraph()} selected={[...selectedNodes.map((n) => n.id)]}
@@ -1897,11 +1915,21 @@ function Editor() {
         onClose={() => setConnect({ open: false, pending: null })}
         onReady={(pending) => { setConnect({ open: false, pending: null }); if (pending) setTimeout(() => runAiRef.current(pending, pendingDraw.current), 0); }}
       />
+      <AskBackModal data={askBack}
+        onSubmit={(answers) => {
+          const b = askBack; setAskBack(null);
+          const lines = confirmedLines(b.questions, answers);
+          if (lines.length) { const cur = contextRef.current?.requirements || ''; updateContext({ requirements: (cur.trim() ? cur.replace(/\s+$/, '') + '\n' : '') + lines.join('\n') }); }
+          setTimeout(() => runAiRef.current(b.mode, b.request, { confirmed: true }), 0);
+        }}
+        onSkip={() => { const b = askBack; setAskBack(null); setTimeout(() => runAiRef.current(b.mode, b.request, { confirmed: true }), 0); }}
+        onClose={() => setAskBack(null)} />
       <AiWizard open={wizard.open} initialText={wizard.text} verified={isVerified(aiSettings)}
         onOpenConnect={() => setConnect({ open: true, pending: null })}
         onClarify={runClarify} onDraw={(req) => runAi('draw', req)} ai={ai} onApply={applyAiOps} onSaveContext={saveClarifiedContext}
         onCancel={() => aiAbort.current?.abort()} onClose={() => setWizard({ open: false, text: '' })}
-        describe={(ops) => describeOps(ops, labelOf)} />
+        describe={(ops) => describeOps(ops, labelOf)}
+        doc={context?.doc || null} onAttachDoc={(d) => updateContext({ doc: d || undefined })} onError={(m) => toastMsg(m)} />
     </div>
   );
 }
@@ -2258,7 +2286,9 @@ function Help({ isDesktop, onPatch, onTour, onCheckUpdate, updBusy, updInfo, onT
       <p><b>찾기</b> Ctrl+F. <b>파일</b> Ctrl+S 저장(같은 파일에 덮어쓰기) · Ctrl+Shift+S 다른 이름으로 · Ctrl+O 열기. <b>탭</b> Ctrl+T 새 탭 · Ctrl+Shift+T 닫은 탭 다시 열기.</p>
       <p><b>내보내기</b> Ctrl+C 또는 [PNG 복사]로 클립보드에 복사한 뒤 PowerPoint 에서 Ctrl+V. 선택이 있으면 선택 영역만 내보냅니다. [내보내기 ▾ &gt; 내보내기 설정]에서 배율·배경·여백·16:9·제목·범례를 미리 보며 정합니다.</p>
       <p><b>규칙 검사</b> 아키텍처 규칙에 어긋나면 차단(빨강)하거나 경고(주황)하면서 이유를 알려 드립니다. 상단 [규칙 검사](방패) 버튼에서 전체 목록을 보고, 누르면 해당 요소가 선택됩니다.</p>
-      <p><b>AI</b> [AI 검수]를 누르면 제안서 컨텍스트(제목·요건서)와 다이어그램을 함께 보내 요건 대비 빈틈을 표시로 받습니다. [AI] 패널의 "그리기·고치기"에 원하는 구성을 문장으로 적으면 바뀔 내용을 미리 보여 주고, [적용]으로 반영합니다. 상단 칩에서 연결 방식(Claude CLI / API 키)을 고르고 바꿀 수 있습니다.</p>
+      <p><b>AI 로 그리기</b> AI 패널 맨 위 [말로 그리기]에 만들고 싶은 걸 막 적으세요. AWS 를 몰라도 됩니다. AI 가 부족한 것만 쉬운 질문으로 묻고(고르기만 하면 됨), 그릴 내용을 먼저 보여 준 뒤 [캔버스에 그리기]로 그립니다.</p>
+      <p><b>시스템 문서(MD)로 그리기</b> 이미 만든 프로그램이 있으면, 쓰시는 AI(Claude·ChatGPT·Cursor)에게 프로젝트를 열어 둔 채 안내 문구로 물어 MD 파일을 받으세요. 안내 문구는 [말로 그리기] 옆 [MD 는 어떻게 만들어요?]에 있고 [복사]로 가져갈 수 있습니다. 받은 MD 를 [시스템 구조 문서(MD) 넣기]로 넣으면 그 내용을 근거로 그립니다.</p>
+      <p><b>물어보기·검수</b> 답이 쓰임새(몇 명이 쓰는지, 포트폴리오인지 회사 서비스인지 등)에 따라 크게 달라지면, AI 가 먼저 쉬운 질문으로 되묻고 그 답에 맞춰 답합니다. 답한 내용은 [AI 에게 알려준 것]에 남아 다음에도 반영되고, 틀렸으면 ×로 지울 수 있습니다.</p>
       {isDesktop && <p><b>PowerPoint 편집 도형</b> (EXE 전용) Ctrl+Shift+C: 아이콘은 1.5cm SVG 그림, 그룹은 사각형, 연결선은 도형에 붙은 연결선으로 들어갑니다.</p>}
       <p><b>파일</b> 다이어그램은 JSON 그래프(groups / nodes / edges / annotations)로 저장됩니다. 템플릿도 같은 형식이라 '템플릿으로 저장'하면 메뉴에 들어옵니다.</p>
       <p className="hint">아이콘: AWS Architecture Icons (Icon Shelf 데이터 재사용). AWS가 후원하거나 승인한 도구가 아닙니다.</p>

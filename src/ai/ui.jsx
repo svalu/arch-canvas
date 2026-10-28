@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useExit } from '../useExit.js';
 import { PROVIDERS, providerById as providerByIdBase, detectCli, MOCK_PROVIDER, mockEnabled } from './providers.js';
+import { DocAttach } from './DocAttach.jsx';
 
 const providerById = (id) => (id === 'mock' ? MOCK_PROVIDER : providerByIdBase(id));
 const providerList = () => (mockEnabled() ? [...PROVIDERS, MOCK_PROVIDER] : PROVIDERS);
@@ -226,7 +227,7 @@ export function ConnectModal({ open, pending, settings, onSettings, onClose, onR
 }
 
 // ---------------------------------------------------------------------------------------------
-export function AiPanel({ context, onContext, settings, verified, onOpenConnect, state, onReview, onDraw, onAsk, onApplyOps, onCancel, onPick, nameOf, activeDocId, onWizard }) {
+export function AiPanel({ context, onContext, settings, verified, onOpenConnect, state, onReview, onDraw, onAsk, onApplyOps, onCancel, onPick, nameOf, activeDocId, onWizard, onAttachDoc, onToast }) {
   const [talk, setTalk] = useState('');
   const [draft, setDraft] = useState(context);
   const [req, setReq] = useState('');
@@ -242,6 +243,15 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
   const reviewResult = r && r.mode === 'review' ? r : null;
   const askResult = r && r.mode === 'ask' ? r : null;
   const ctxFilled = !!(draft.title?.trim() || draft.requirements?.trim() || draft.constraints?.trim());
+  // AI 에게 알려준 것 (되물음에 답한 것) — 요건 안의 "- [확인]" 줄. 틀렸으면 지운다
+  const told = (draft.requirements || '').split('\n').filter((l) => /^- \[확인\]/.test(l));
+  const forget = (line) => { const next = { ...draft, requirements: (draft.requirements || '').split('\n').filter((l) => l !== line).join('\n') }; setDraft(next); onContext(next); };
+  const Intent = ({ res }) => (res.understood || res.assumptions?.length ? (
+    <div className="intent">
+      {res.understood && <p><b>이렇게 이해했어요</b> {res.understood}</p>}
+      {res.assumptions?.length > 0 && <p className="hint">가정한 것: {res.assumptions.join(' · ')} — 틀리면 아래 물어보기에 "사실은 …" 이라고 적어 주세요.</p>}
+    </div>
+  ) : null);
   const Raw = ({ res }) => (
     <>
       <button className="link" onClick={() => setShowRaw(!showRaw)}>{showRaw ? '원문 닫기' : '모델 원문 보기'}</button>
@@ -261,6 +271,7 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
       <div className="ai-step now">
         <div className="step-head">✦ 말로 그리기 <small className="hint">추천</small></div>
         <p className="hint">만들고 싶은 걸 막 적으세요. 부족한 건 AI 가 쉬운 질문으로 한두 개 묻고, 그림을 먼저 보여 준 뒤 그립니다. 그린 그림을 고칠 때도 여기에 적으면 됩니다.</p>
+        <DocAttach doc={context.doc} onAttach={onAttachDoc} onError={onToast} onCopied={onToast} />
         <textarea className="short" value={talk} onChange={(e) => setTalk(e.target.value)} placeholder="예: 내 PC 에서 도는 AI 를 밖에서도 휴대폰으로 쓰고 싶어" onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { flush(); onWizard(talk.trim()); setTalk(''); } }} />
         <button className="primary big" disabled={!!busy} onClick={() => { flush(); onWizard(talk.trim()); setTalk(''); }}>시작하기</button>
       </div>
@@ -278,6 +289,7 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
         <div className="ai-result">
           <h4>{drawResult.applied ? '그린 내용' : '그릴 내용 (아직 캔버스에 안 그려짐)'} <small className="hint">{drawResult.provider}{drawResult.ms ? ` · ${(drawResult.ms / 1000).toFixed(1)}s` : ''}</small></h4>
           {drawResult.docId && activeDocId && drawResult.docId !== activeDocId && <p className="hint">"{drawResult.docTitle}" 탭에서 요청한 결과입니다.</p>}
+          <Intent res={drawResult} />
           {drawResult.summary && <p className="summary">{drawResult.summary}</p>}
           <ol className="ops">{describeOps(drawResult.ops || [], nameOf).map((t, i) => <li key={i}>{t}</li>)}</ol>
           {!drawResult.ops?.length && <p className="hint">바꿀 내용이 없습니다.</p>}
@@ -298,6 +310,7 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
           <button className={busy === 'review' ? 'waiting' : ''} disabled={!!busy} onClick={() => { flush(); onReview(); }}>{busy === 'review' ? <Busy label="검수 중" /> : '검수 받기'}</button>
           {reviewResult && (
             <div className="ai-result">
+              <Intent res={reviewResult} />
               {reviewResult.summary && <p className="summary">{reviewResult.summary}</p>}
               {!reviewResult.findings?.length && <p className="ok">지적 사항이 없습니다.</p>}
               {reviewResult.findings?.map((f) => (
@@ -320,19 +333,27 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
             <div className="ai-result ask" ref={(el) => { if (el && el.dataset.q !== askResult.question) { el.dataset.q = askResult.question; el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }}>
               <h4>답변 <small className="hint">{askResult.provider}{askResult.ms ? ` · ${(askResult.ms / 1000).toFixed(1)}s` : ''}</small></h4>
               <div className="ask-q">{askResult.question}</div>
-              <div className="ask-a">{askResult.answer}</div>
+              <Intent res={askResult} />
+              <div className="ask-a">{boldText(askResult.answer)}</div>
             </div>
           )}
         </div>
         {busy && <button onClick={onCancel}>취소</button>}
       </div>
 
+      {told.length > 0 && (
+        <div className="told">
+          <div className="more-head">AI 에게 알려준 것 <small className="hint">다음 답과 검수에 반영됩니다</small></div>
+          {told.map((l) => <div key={l} className="told-row"><span>{l.replace(/^- \[확인\]\s*/, '')}</span><button className="x" title="잊게 하기" onClick={() => forget(l)}>×</button></div>)}
+        </div>
+      )}
+
       {/* 직접 하기 — 상황과 요청을 직접 적어서 (익숙한 사람용) */}
       <details className="ai-step">
         <summary>직접 적어서 그리기 <small className="hint">{ctxFilled ? '상황 적혀 있음' : '익숙한 분용'}</small></summary>
-        <label>제목<input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} onBlur={flush} placeholder="예: OO사 차세대 커머스 플랫폼 구축" /></label>
-        <label>요건 (무엇이 필요한가)<textarea value={draft.requirements} onChange={(e) => setDraft({ ...draft, requirements: e.target.value })} onBlur={flush} placeholder={'- 동시 접속 1만, 피크 3배\n- 서울 리전, DR 요구'} /></label>
-        <label>제약 (지켜야 할 것)<textarea className="short" value={draft.constraints} onChange={(e) => setDraft({ ...draft, constraints: e.target.value })} onBlur={flush} placeholder="예: 월 예산 상한, 기존 DB 유지" /></label>
+        <label>무엇을 만드나요<input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} onBlur={flush} placeholder="예: OO사 차세대 커머스 플랫폼 구축" /></label>
+        <label>꼭 되어야 하는 것<textarea value={draft.requirements} onChange={(e) => setDraft({ ...draft, requirements: e.target.value })} onBlur={flush} placeholder={'- 동시 접속 1만, 피크 3배\n- 서울 리전, DR 요구'} /></label>
+        <label>지켜야 할 조건 (예산·보안 등)<textarea className="short" value={draft.constraints} onChange={(e) => setDraft({ ...draft, constraints: e.target.value })} onBlur={flush} placeholder="예: 월 예산 상한, 기존 DB 유지" /></label>
         <label>그릴 내용<textarea className="short" value={req} onChange={(e) => setReq(e.target.value)} placeholder="예: VPC 안에 AZ 2개, ALB 뒤에 EC2 2대, RDS 멀티 AZ" /></label>
         <button className={'primary' + (busy === 'draw' ? ' waiting' : '')} disabled={!!busy || !req.trim()} onClick={() => { flush(); onDraw(req.trim()); }}>{busy === 'draw' ? <Busy label="만드는 중 · 1~2분" /> : '그릴 내용 만들기'}</button>
         <p className="hint">만든 내용은 위에 [그릴 내용]으로 나오고, [캔버스에 그리기]를 눌러야 그려집니다.</p>
@@ -343,6 +364,11 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
 
 // AI 가 만든 명령을 사람이 읽는 문장으로: "VPC 안에 ALB 추가", "ALB → EC2 연결"
 const KIND_KO = { region: '리전', vpc: 'VPC', az: '가용 영역', 'public-subnet': '퍼블릭 서브넷', 'private-subnet': '프라이빗 서브넷', 'auto-scaling-group': '오토 스케일링 그룹', 'security-group': '보안 그룹', section: '섹션', generic: '그룹' };
+// 답변 안의 **굵게** 만 굵은 글씨로 (나머지 마크다운은 글자 그대로)
+function boldText(t) {
+  return String(t || '').split(/(\*\*[^*\n]+\*\*)/g).map((p, i) => (/^\*\*[^*\n]+\*\*$/.test(p) ? <b key={i}>{p.slice(2, -2)}</b> : p));
+}
+
 export function describeOps(ops, nameOf) {
   const local = new Map();
   for (const o of ops) if (o?.id && (o.label || o.kind)) local.set(String(o.id), o.label || KIND_KO[o.kind] || o.kind);

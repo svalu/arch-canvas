@@ -73,7 +73,8 @@ export function normalizeGraph(input) {
   const g = input && typeof input === 'object' ? input : {};
   const out = emptyGraph(toText(g.title) || '새 다이어그램');
   const c = g.context && typeof g.context === 'object' ? g.context : {};
-  out.context = { title: toText(c.title), requirements: toText(c.requirements), constraints: toText(c.constraints) };
+  const doc = c.doc && typeof c.doc === 'object' && typeof c.doc.text === 'string' && c.doc.text.trim() ? { name: toText(c.doc.name).slice(0, 120) || '문서.md', text: c.doc.text.slice(0, DOC_MAX) } : null;
+  out.context = { title: toText(c.title), requirements: toText(c.requirements), constraints: toText(c.constraints), ...(doc ? { doc } : {}) };
   out.mode = MODES.includes(g.mode) ? g.mode : 'infra';
   out.theme = THEMES.includes(g.theme) ? g.theme : 'light';
   const hex = (v) => (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v.toUpperCase() : undefined);
@@ -168,6 +169,9 @@ export function normalizeGraph(input) {
   }
   return out;
 }
+
+// 첨부한 시스템 문서(MD)는 이만큼까지만 보관한다
+export const DOC_MAX = 60000;
 
 // 선의 빈 끝(좌표)
 const ptOf = (p) => (p && Number.isFinite(+p.x) && Number.isFinite(+p.y) ? { x: Math.round(+p.x), y: Math.round(+p.y) } : null);
