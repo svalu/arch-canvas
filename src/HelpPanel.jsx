@@ -8,7 +8,7 @@ const GROUPS = [
   { id: 'draw', icon: 'draw', title: '그리기', sub: '추가 · 연결 · 상자 · 고치기' },
   { id: 'arrange', icon: 'grid', title: '정리하기', sub: '정렬 · 순서와 묶기 · 조각 · 찾기' },
   { id: 'ai', icon: 'shield', title: '검사와 AI', sub: '경고 · 말로 그리기 · 물어보기 · 연결' },
-  { id: 'export', icon: 'download', title: '내보내기', sub: 'PNG 복사 · PowerPoint 도형' },
+  { id: 'export', icon: 'download', title: '내보내기', sub: '압축 버전 · PNG 복사 · PowerPoint 도형' },
   { id: 'more', icon: 'settings', title: '설정과 도움', sub: '보기 설정 · 업데이트 · 피드백' },
 ];
 
@@ -99,6 +99,12 @@ const TOPICS = [
     'API 키(Claude·OpenAI)도 됩니다. 이 경우 사용량만큼 요금이 듭니다.',
   ], spot: ['.ai-chip'] },
 
+  { id: 'compact', group: 'export', title: '압축 버전 (슬라이드 한 칸용)', lines: [
+    '빈 곳 오른쪽 클릭 [압축 버전 새 탭에 만들기] 또는 아무것도 고르지 않은 상태의 오른쪽 패널 버튼. 원본 탭은 그대로 둡니다.',
+    'AZ A·B 처럼 같은 구조가 반복되면 하나만 남기고 이름에 ×2 를 붙입니다. NAT Gateway 같은 보조 아이콘과 빈 상자는 뺍니다.',
+    'Auto Scaling 같은 겹치는 상자는 접어서 아이콘 이름에 "(Auto Scaling)" 으로 적고, 합친 AZ 의 DB 는 "(Multi-AZ)" 가 붙습니다.',
+    '세로로 쌓인 상자는 한 줄로 눕혀 가로로 긴 그림이 됩니다. 마음에 안 드는 부분은 새 탭에서 손으로 고치면 됩니다.',
+  ] },
   { id: 'png', group: 'export', title: 'PNG 로 복사', lines: [
     '[PNG 복사] 또는 Ctrl+C 로 클립보드에 넣고 PowerPoint 에서 Ctrl+V. 선택이 있으면 그 부분만 내보냅니다.',
     '[내보내기 ▾ › 내보내기 설정]에서 배율·배경·여백·16:9·제목·범례를 미리 보며 정합니다.',
