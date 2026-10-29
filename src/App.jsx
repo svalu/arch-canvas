@@ -142,7 +142,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.12';
+export const APP_VERSION = '0.9.13';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -1912,7 +1912,7 @@ function Editor() {
       <Palette onAdd={addAtCenter} onSuggest={addSuggested} suggest={suggestFor(selectedNodes, catalog, docMode)} cardMode={docMode === 'card'} resizer={floatOf('pal') ? null : <Resizer which="pal" onResize={onResize} />} frame={frameOf('pal', '팔레트')} />
 
       <div className="canvas" ref={wrapRef} onPointerDownCapture={onCanvasPointerDownCapture} onMouseDownCapture={(e) => { if (shiftHandled.current) { e.stopPropagation(); e.preventDefault(); } }} onClickCapture={onCanvasClickCapture}>
-        {nodes.length === 0 && !startHidden && !wizard.open && (
+        {nodes.length === 0 && !startHidden && !wizard.open && !connect.open && (
           <CanvasStart
             onWizard={(t) => setWizard({ open: true, text: t, auto: !!t })}
             onTemplates={() => document.querySelector('summary[aria-label="템플릿"]')?.click()}

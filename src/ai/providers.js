@@ -105,20 +105,63 @@ const CLI_HELP = {
   claude: { name: 'Claude CLI', login: '터미널에서 claude auth login 을 실행해 로그인하십시오.', install: 'Claude Code 를 설치하십시오 (npm i -g @anthropic-ai/claude-code).' },
   codex: { name: 'Codex CLI', login: '터미널에서 codex login 을 실행해 ChatGPT 계정으로 로그인하십시오.', install: 'Codex CLI 를 설치하십시오 (npm i -g @openai/codex).' },
 };
+// ---- 웹 버전: 내 PC 에 띄운 브리지(web/bridge.mjs)를 거쳐 CLI 를 쓴다 ------------------------------
+// 웹은 준비만 해 둔다. 브리지를 켜고 연결 코드를 넣는 건 사용자 몫.
+const BRIDGE_KEY = 'arch-canvas:bridge';
+export const BRIDGE_PORT = 47821;
+export const bridgeConf = () => { try { return JSON.parse(localStorage.getItem(BRIDGE_KEY)) || {}; } catch { return {}; } };
+const saveBridge = (c) => { try { localStorage.setItem(BRIDGE_KEY, JSON.stringify(c)); } catch { /* */ } };
+async function bridgeFetch(path, body, { signal, timeoutMs = 4000, method } = {}) {
+  const c = bridgeConf();
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), timeoutMs);
+  const stop = () => ac.abort();
+  signal?.addEventListener('abort', stop, { once: true });
+  try {
+    const r = await fetch(`http://127.0.0.1:${c.port || BRIDGE_PORT}${path}`, {
+      method: method || (body ? 'POST' : 'GET'), signal: ac.signal,
+      headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(c.token ? { Authorization: 'Bearer ' + c.token } : {}) },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status);
+    return j;
+  } finally { clearTimeout(t); signal?.removeEventListener('abort', stop); }
+}
+/** 브리지 상태: { reachable, paired, claude?, codex? } */
+export async function bridgeHealth() {
+  // 꺼져 있으면 바로 실패한다. 켜져 있으면 CLI 버전 확인 때문에 처음 한 번은 몇 초 걸릴 수 있다
+  try { const j = await bridgeFetch('/health', null, { timeoutMs: 25000 }); return { reachable: true, ...j }; } catch { return { reachable: false, paired: false }; }
+}
+/** 연결 코드로 짝 맺기. 성공하면 토큰을 이 브라우저에 저장한다. */
+export async function bridgePair(code, port) {
+  if (port) saveBridge({ ...bridgeConf(), port });
+  const j = await bridgeFetch('/pair', { code: String(code).replace(/\D/g, '') }, { timeoutMs: 25000 });
+  saveBridge({ ...bridgeConf(), token: j.token });
+  return j;
+}
+export const bridgeForget = () => saveBridge({ port: bridgeConf().port });
+const cliCall = (method, prm, opt) => {
+  if (window.desktop?.call) return window.desktop.call(method, prm);
+  if (method === 'ai.cancel') return bridgeFetch('/cancel', prm);
+  return bridgeFetch('/run', prm, { ...opt, timeoutMs: (prm.timeoutMs || 240000) + 15000 });
+};
+
 async function askCli(tool, { model }, { system, user, signal, timeoutMs = 240000 }) {
   const H = CLI_HELP[tool];
-  if (!window.desktop?.call) throw new AiError(H.name + ' 는 EXE 에서만 사용할 수 있습니다', { kind: 'config' });
   const id = Math.random().toString(36).slice(2);
-  const onAbort = () => window.desktop.call('ai.cancel', { runId: id }).catch(() => {});
+  const onAbort = () => cliCall('ai.cancel', { runId: id }).catch(() => {});
   signal?.addEventListener('abort', onAbort, { once: true });
   try {
-    const r = await window.desktop.call('ai.run', { runId: id, tool, system, user, model: model || '', timeoutMs });
+    const r = await cliCall('ai.run', { runId: id, tool, system, user, model: model || '', timeoutMs });
     if (!r?.text?.trim()) throw new AiError('빈 응답이 왔습니다', { kind: 'empty', detail: r?.stderr });
     return r.text;
   } catch (e) {
     if (e instanceof AiError) throw e;
     const msg = String(e?.message || e);
     if (/취소|cancel/i.test(msg)) throw new AiError('취소했습니다', { kind: 'cancel' });
+    if (/not paired/i.test(msg)) throw new AiError('브리지와 다시 연결해야 합니다. [AI 연결]에서 브리지 창의 연결 코드를 넣으세요.', { kind: 'auth', detail: msg });
+    if (!window.desktop?.call && /failed to fetch|networkerror|load failed|abort/i.test(msg)) throw new AiError('내 PC 의 브리지가 꺼져 있습니다. 터미널에서 node bridge.mjs 를 다시 켜 주세요.', { kind: 'config', detail: msg });
     if (/not logged in|login|auth|401|unauthorized/i.test(msg)) throw new AiError(H.name + ' 에 로그인되어 있지 않습니다. ' + H.login, { kind: 'auth', detail: msg });
     if (/not found|없음/i.test(msg)) throw new AiError(tool + ' 명령을 찾지 못했습니다. ' + H.install, { kind: 'config', detail: msg });
     throw new AiError('CLI 실행에 실패했습니다', { detail: msg });
@@ -163,6 +206,12 @@ async function askMock({ user }) {
 
 /** EXE 에서 claude CLI 가 있는지. 브라우저면 { found:false }. */
 export async function detectCli() {
-  if (!window.desktop?.call) return { found: false, reason: 'browser' };
+  if (!window.desktop?.call) {
+    // 웹: 브리지가 켜져 있고 연결돼 있으면 EXE 와 같은 모양으로 돌려준다
+    const b = await bridgeHealth();
+    const bridge = { reachable: b.reachable, paired: !!b.paired };
+    if (!b.paired) return { found: false, reason: 'browser', bridge };
+    return { ...(b.claude || { found: false }), codex: b.codex || { found: false }, bridge };
+  }
   try { return await window.desktop.call('cli.detect', {}); } catch (e) { return { found: false, reason: String(e?.message || e) }; }
 }

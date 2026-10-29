@@ -4,6 +4,7 @@ import { Icon } from '../Icons.jsx';
 import { useExit } from '../useExit.js';
 import { PROVIDERS, providerById as providerByIdBase, detectCli, MOCK_PROVIDER, mockEnabled } from './providers.js';
 import { DocAttach } from './DocAttach.jsx';
+import { BridgeSetup } from './BridgeSetup.jsx';
 
 const providerById = (id) => (id === 'mock' ? MOCK_PROVIDER : providerByIdBase(id));
 const providerList = () => (mockEnabled() ? [...PROVIDERS, MOCK_PROVIDER] : PROVIDERS);
@@ -107,9 +108,9 @@ export function ConnectModal({ open, pending, settings, onSettings, onClose, onR
   const pickProvider = (id) => { setProvider(id); setModel(providerById(id).models[0].id); setError(null); };
   const cancel = () => { abortRef.current?.abort(); gen.current++; onClose(); };
   const cliOf = (x) => (x?.tool === 'codex' ? cli?.codex : cli);
-  const cliBlocked = p?.desktopOnly && (!isDesktop || (cli && !cliOf(p)?.found));
+  const cliBlocked = p?.desktopOnly && (isDesktop ? cli && !cliOf(p)?.found : !(cli?.bridge?.paired && cliOf(p)?.found));
   const setupOk = p && !cliBlocked && (!p.needsKey || hasKey || keyInput.trim());
-  const canNext = step === 0 ? !!p && !cliBlocked : step === 1 ? setupOk : false;
+  const canNext = step === 0 ? !!p && !(isDesktop && cliBlocked) : step === 1 ? setupOk : false;
 
   const start = async () => {
     if (!p) return;
@@ -157,8 +158,10 @@ export function ConnectModal({ open, pending, settings, onSettings, onClose, onR
           <div className="prov-list">
             {providerList().map((x) => {
               const c = cliOf(x);
-              const blocked = x.desktopOnly && (!isDesktop || (cli && !c?.found));
-              const why = x.desktopOnly && !isDesktop ? 'EXE 로 열었을 때만' : x.desktopOnly && cli && !c?.found ? `${x.tool || 'claude'} 명령을 찾지 못했습니다` : c?.loggedIn === false ? '로그인 필요 (codex login)' : null;
+              // EXE: 명령이 없으면 막는다. 웹: 고를 수는 있고, 다음 단계에서 브리지 안내가 나온다
+              const blocked = x.desktopOnly && isDesktop && cli && !c?.found;
+              const why = x.desktopOnly && !isDesktop ? (cli?.bridge?.paired ? (c?.found ? '브리지로 연결됨' : `브리지에 ${x.tool || 'claude'} 명령이 없음`) : '내 PC 에 브리지를 켜면 됨')
+                : x.desktopOnly && cli && !c?.found ? `${x.tool || 'claude'} 명령을 찾지 못했습니다` : c?.loggedIn === false ? '로그인 필요 (codex login)' : null;
               return (
                 <label key={x.id} className={'prov' + (provider === x.id ? ' on' : '') + (blocked ? ' off' : '')}>
                   <input type="radio" name="prov" checked={provider === x.id} disabled={blocked} onChange={() => pickProvider(x.id)} />
@@ -175,6 +178,7 @@ export function ConnectModal({ open, pending, settings, onSettings, onClose, onR
         {step === 1 && p && (
           <div className="prov-opts">
             <div className="setup-head"><b>{p.name}</b>{p.desktopOnly && cliOf(p)?.found && <small className="ok"><i className="dot" /> {p.tool || 'claude'} 명령 확인됨{cliOf(p).version ? ' · ' + cliOf(p).version : ''}{cliOf(p).loggedIn === false ? ' · 로그인 필요' : ''}</small>}</div>
+            {p.desktopOnly && !isDesktop && <BridgeSetup tool={p.tool || 'claude'} onChange={setCli} />}
             <label>모델<select value={model} onChange={(e) => setModel(e.target.value)}>{p.models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
             {p.needsKey && (
               <label>API 키 {hasKey && !keyInput && <em>저장돼 있음 · 바꾸려면 새로 입력</em>}

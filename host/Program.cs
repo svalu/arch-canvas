@@ -30,8 +30,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: System.Reflection.AssemblyCompany("heerang")]
 [assembly: System.Reflection.AssemblyProduct("Arch Canvas")]
 [assembly: System.Reflection.AssemblyCopyright("2026 heerang")]
-[assembly: System.Reflection.AssemblyVersion("0.9.12.0")]
-[assembly: System.Reflection.AssemblyFileVersion("0.9.12.0")]
+[assembly: System.Reflection.AssemblyVersion("0.9.13.0")]
+[assembly: System.Reflection.AssemblyFileVersion("0.9.13.0")]
 
 static class Program
 {
@@ -88,7 +88,7 @@ static class Program
 /// <summary>EXE에 내장된 리소스(app/..., bin/...)를 data 폴더에 풀고, bin의 DLL을 로드한다.</summary>
 static class Bootstrap
 {
-    public const string AppVersion = "0.9.12";
+    public const string AppVersion = "0.9.13";
     public static readonly string ExePath = Assembly.GetExecutingAssembly().Location;
     public static readonly string BaseDir = Path.GetDirectoryName(ExePath);
     public static string DataDir;    // EXE 옆 data\ (쓰기 불가하면 %LocalAppData%\ArchCanvas\data)

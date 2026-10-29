@@ -1088,3 +1088,27 @@ button.x, .tpl-x, .doctab-x { display: inline-flex; align-items: center; justify
 .hp-group.open .hp-group-h small { max-height: 18px; opacity: 1; }
 .hp-group .hp-ic { transition: transform .22s cubic-bezier(.2,.75,.2,1); }
 .hp-group.open .hp-ic { transform: scale(1.06); }
+
+/* ----- 웹 브리지 안내 ----- */
+.bridge { display: flex; flex-direction: column; gap: 10px; }
+.br-state { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; padding: 8px 10px; border-radius: 10px; background: rgba(24,33,43,.05); }
+.br-state .dot { width: 8px; height: 8px; border-radius: 50%; background: #9AA7B4; }
+.br-state.off .dot { background: #E08A2C; }
+.br-state.code .dot { background: #2E73B8; animation: pulse 1.4s ease-in-out infinite; }
+.br-state.on { background: rgba(46,160,90,.1); color: #1E7A45; }
+.br-state.on .dot { background: #2EA05A; }
+.br-state small { font-weight: 400; color: var(--muted); }
+.br-state .link-btn { margin-left: auto; font-weight: 400; font-size: 12px; }
+.br-pair { display: flex; gap: 6px; }
+.br-pair input { flex: 1; font-size: 16px; letter-spacing: .2em; text-align: center; }
+.br-guide { display: flex; flex-direction: column; gap: 8px; border: 1px dashed var(--line); border-radius: 12px; padding: 10px 12px; }
+.br-lead { margin: 0; font-size: 13px; }
+.br-guide ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; }
+.br-guide li { display: flex; flex-direction: column; gap: 4px; }
+.br-guide li a { font-size: 12px; display: inline-flex; align-items: center; gap: 3px; }
+.br-cmd { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.br-cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font: 11.5px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; padding: 4px 7px; border-radius: 6px; background: rgba(24,33,43,.06); }
+.br-cmd button { flex: none; display: inline-flex; padding: 3px 6px; }
+.app.theme-dark .br-state { background: rgba(255,255,255,.05); }
+.app.theme-dark .br-state.on { background: rgba(46,160,90,.15); color: #7DDBA3; }
+.app.theme-dark .br-cmd code { background: rgba(255,255,255,.07); }

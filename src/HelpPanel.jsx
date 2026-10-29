@@ -94,8 +94,8 @@ const TOPICS = [
     '답한 내용은 [AI 에게 알려준 것]에 남고, 틀렸으면 × 로 지웁니다.',
   ], spot: ['.toolbar-ai'] },
   { id: 'aiconnect', group: 'ai', title: 'AI 연결', lines: [
-    'Claude CLI 나 ChatGPT(Codex CLI)를 쓰면 내 구독으로 동작해 추가 비용이 없습니다(EXE 전용).',
-    '처음이면 터미널에서 claude auth login 또는 codex login 으로 로그인해 두세요.',
+    'Claude CLI 나 ChatGPT(Codex CLI)를 쓰면 내 구독으로 동작해 추가 비용이 없습니다. 처음이면 claude auth login 또는 codex login 으로 로그인해 두세요.',
+    'Windows 버전은 바로 됩니다. 웹 버전은 내 PC 에서 브리지(node bridge.mjs)를 켜고, 브리지 창의 6자리 연결 코드를 [AI 연결]에 넣으면 됩니다. 방법은 연결 창에 그대로 나옵니다.',
     'API 키(Claude·OpenAI)도 됩니다. 이 경우 사용량만큼 요금이 듭니다.',
   ], spot: ['.ai-chip'] },
 
