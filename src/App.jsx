@@ -142,7 +142,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.11';
+export const APP_VERSION = '0.9.12';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -511,13 +511,13 @@ function Editor() {
     commit(g, null, { fit: !!graph });
   }, [commit, currentGraph, setDocs]);
 
-  // 압축 버전: 원본은 그대로 두고, 제안서 한 칸용으로 줄인 그림을 새 탭에 연다
+  // 개요도: 원본(구성도)은 그대로 두고, 제안서 한 칸용으로 줄인 그림을 새 탭에 연다
   const makeCompact = useCallback(() => {
     const g = currentGraph();
     if (!g.nodes.length && !g.groups.length) { toastMsg('먼저 그림을 그려 주세요.'); return; }
     const { graph, notes } = compactGraph(g);
     addDoc(normalizeGraph(graph));
-    toastMsg(`압축 버전을 새 탭에 만들었습니다 · ${notes.join(' · ')} · 원본 탭은 그대로입니다`, 5000);
+    toastMsg(`개요도를 새 탭에 만들었습니다 · ${notes.join(' · ')} · 원본 탭은 그대로입니다`, 5000);
   }, [currentGraph, addDoc]);
 
   const closeDoc = useCallback((id) => {
@@ -1472,7 +1472,7 @@ function Editor() {
     const items = [
       { label: '여기에 글상자 추가', hint: '제목·설명·메모', action: () => addAt({ type: 'text' }, flowPos) },
       { label: '전체 자동 정렬', hint: '빈 공간·크기·줄 맞춤', action: () => autoArrangeSel([]) },
-      { label: '압축 버전 새 탭에 만들기', hint: '제안서 한 칸용', action: makeCompact },
+      { label: '개요도 새 탭에 만들기', hint: '제안서 한 칸용', action: makeCompact },
       ...(docMode === 'card'
         ? [{ label: '여기에 카드 추가', action: () => addAt({ type: 'card' }, flowPos) }, { label: '여기에 섹션 추가', action: () => addAt({ type: 'group', kind: 'section' }, flowPos) }]
         : [{ label: '여기에 그룹 추가', action: () => addAt({ type: 'group', kind: 'generic' }, flowPos) }]),
@@ -2234,7 +2234,7 @@ function Inspector({ nodes, edges, onChange, onChangeMany, onWrap, onGroup, onUn
             {violations.length > 0
               ? <button className="warnbtn" onClick={onShowRules}>규칙 위반 {violations.length}건 보기</button>
               : stats.groups + stats.icons > 0 && <p className="ok">규칙 위반 없음</p>}
-            {stats.groups + stats.icons > 0 && <button className="al wide" title="같은 구조 반복은 하나로 합치고 보조 요소는 빼서, 슬라이드 한 칸에 들어가는 그림을 새 탭에 만듭니다. 원본은 그대로입니다." onClick={onCompact}><Icon name="arrow" size={14} /> 압축 버전 새 탭에 만들기</button>}
+            {stats.groups + stats.icons > 0 && <button className="al wide" title="같은 구조 반복은 하나로 합치고 보조 요소는 빼서, 슬라이드 한 칸에 들어가는 그림을 새 탭에 만듭니다. 원본은 그대로입니다." onClick={onCompact}><Icon name="arrow" size={14} /> 개요도 새 탭에 만들기</button>}
             <p className="hint">왼쪽에서 아이콘을 끌어다 놓고, 노드 가장자리 점을 끌어 다른 노드에 놓으면 연결됩니다. 그룹 안에 놓으면 그 그룹에 들어가고, 그룹을 끌면 안의 것이 같이 움직입니다.</p>
             <p className="hint">Shift+드래그: 영역 선택 · Shift+클릭: 여러 개 선택(선도 가능) · 그룹 선택 후 모서리로 크기 조절</p>
           </>

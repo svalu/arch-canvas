@@ -1,4 +1,4 @@
-// 압축 버전: 제안서 한 칸(슬라이드 1/4)에 들어가게 원본 그림을 줄인다. 원본은 건드리지 않고 새 그래프를 돌려준다.
+// 개요도: 제안서 한 칸(슬라이드 1/4)에 들어가게 원본 그림을 줄인다. 원본은 건드리지 않고 새 그래프를 돌려준다.
 //   1. 같은 구조가 반복되는 상자(AZ A·B 같은 쌍둥이)는 하나만 남기고 이름에 ×N 을 붙인다. 선은 남은 쪽으로 옮기고 겹치면 하나로.
 //   2. 보조 요소(NAT Gateway 등)는 뺀다.
 //   3. 겹치는 상자(Auto Scaling 등)는 접고, 안에 있던 아이콘 이름에 "(Auto Scaling)" 처럼 붙인다. 합친 AZ 안의 DB 는 "Multi-AZ".
@@ -6,7 +6,7 @@
 import { absoluteRects, autoArrange, depthMap } from './geometry.js';
 import { isOverlay, membersOf } from './contain.js';
 
-const HELPER_ICON = /NAT-Gateway|Bastion/i;                 // 압축본에서 빼는 보조 아이콘
+const HELPER_ICON = /NAT-Gateway|Bastion/i;                 // 개요도에서 빼는 보조 아이콘
 const DB_ICON = /RDS|Aurora|DynamoDB|DocumentDB|ElastiCache/i;
 const OVERLAY_TAG = { 'auto-scaling': 'Auto Scaling', 'auto-scaling-group': 'Auto Scaling', 'security-group': '', 'spot-fleet': 'Spot' };
 const GAP = 12;
@@ -139,7 +139,7 @@ export function compactGraph(src) {
   rowify(g, alias.size > 0 || helpers.size > 0);
   autoArrange(g, all(), isOverlay);
 
-  g.title = `${src.title || '다이어그램'} (압축)`;
+  g.title = `${src.title || '다이어그램'} (개요도)`;
   g.annotations = [];
   notes.push(`선 ${n0.edges} → ${g.edges.length}`);
   return { graph: g, notes, before: n0, after: { groups: g.groups.length, nodes: g.nodes.length, edges: g.edges.length } };

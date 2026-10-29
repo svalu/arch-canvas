@@ -1,4 +1,4 @@
-// 모든 템플릿에 압축 버전을 돌려 무엇이 얼마나 줄었는지 본다. 사용: node tools/compact_cli.mjs [템플릿 id]
+// 모든 템플릿에 개요도 만들기를 돌려 무엇이 얼마나 줄었는지 본다. 사용: node tools/compact_cli.mjs [템플릿 id]
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
