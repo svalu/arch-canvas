@@ -1,7 +1,7 @@
 // 개요도: 제안서 한 칸(슬라이드 1/4)에 들어가게 원본 그림을 줄인다. 원본은 건드리지 않고 새 그래프를 돌려준다.
 //   1. 같은 상자가 반복되면(AZ A·C 처럼 종류가 같고 이름이 끝 글자만 다른 형제) 하나만 남기고 이름에 ×N 을 붙인다.
 //      안의 것은 종류·이름(아이콘은 모양·이름)으로 짝지어 합치고, 한쪽에만 있는 것은 남는 상자로 옮겨 살린다. 선은 남은 쪽으로.
-//   2. 보조 요소(NAT Gateway 등)는 뺀다.
+//   2. 보조 요소(NAT Gateway 등)는 뺀다. DR·백업 같은 보조 환경과 관리·보안 서비스 묶음은 상자 하나로 접고, 선은 그 상자로 잇는다.
 //   3. 겹치는 상자(Auto Scaling 등)는 접고, 안에 있던 아이콘 이름에 "(Auto Scaling)" 처럼 붙인다. 합친 AZ 안의 DB 는 "Multi-AZ".
 //   4. 세로로 쌓인 상자들은 한 줄로 눕혀서 가로로 긴 모양을 만들고, 빈 공간을 줄인다.
 import { absoluteRects, autoArrange, depthMap } from './geometry.js';
@@ -10,6 +10,9 @@ import { isOverlay, membersOf } from './contain.js';
 const HELPER_ICON = /NAT-Gateway|Bastion/i;                 // 개요도에서 빼는 보조 아이콘
 const DB_ICON = /RDS|Aurora|DynamoDB|DocumentDB|ElastiCache/i;
 const EC2_ICON = /EC2|Instance|Auto-Scaling|Container|Fargate|ECS|EKS/i;
+const AUX_ENV = /(^|[^A-Za-z])DR([^A-Za-z]|$)|재해|복구|백업|backup|standby|스탠바이|disaster/i;   // 보조 환경 상자 이름
+const MGMT_ICON = /CloudWatch|CloudTrail|Identity-and-Access|IAM|Identity-Center|Config|GuardDuty|Security-Hub|Key-Management|Systems-Manager|Organizations|Inspector|Macie|Audit-Manager|Control-Tower/i;
+const shortName = (s) => String(s || '').replace(/\s*\(.*?\)\s*/g, ' ').replace(/^[①-⑳\s]+/, '').trim();
 const OVERLAY_TAG = { 'auto-scaling': 'Auto Scaling', 'auto-scaling-group': 'Auto Scaling', 'security-group': '', 'spot-fleet': 'Spot' };
 const GAP = 12;
 
@@ -130,6 +133,32 @@ export function compactGraph(src) {
   const helpers = new Set(g.nodes.filter((n) => HELPER_ICON.test(n.icon || '')).map((n) => n.id));
   if (helpers.size) { notes.push(`보조 아이콘 ${helpers.size}개 뺌`); g.nodes = g.nodes.filter((n) => !helpers.has(n.id)); g.edges = g.edges.filter((e) => !helpers.has(e.source) && !helpers.has(e.target)); }
 
+  // 2-1. 보조 환경(DR 등)·관리 묶음 접기: 안의 것을 지우고 그 상자 하나만 남긴다. 선은 상자로 옮긴다
+  const folded = new Set();
+  const under = (id) => { const out = new Set(); let grew = true; out.add(id); while (grew) { grew = false; for (const x of [...g.groups, ...g.nodes]) if (x.parent && out.has(x.parent) && !out.has(x.id)) { out.add(x.id); grew = true; } } out.delete(id); return out; };
+  const fold = (grp, label) => {
+    const gone = under(grp.id);
+    g.groups = g.groups.filter((x) => !gone.has(x.id));
+    g.nodes = g.nodes.filter((x) => !gone.has(x.id));
+    g.edges = g.edges.map((e) => ({ ...e, source: gone.has(e.source) ? grp.id : e.source, target: gone.has(e.target) ? grp.id : e.target })).filter((e) => e.source !== e.target);
+    if (label) grp.label = label;
+    grp.w = Math.max(200, Math.round(String(grp.label).length * 8 + 90)); grp.h = 96;
+    folded.add(grp.id);
+    return gone.size;
+  };
+  const isFoldedIn = (x) => { let p = x.parent; while (p) { if (folded.has(p)) return true; p = g.groups.find((q) => q.id === p)?.parent; } return false; };
+  const dep = depthMap(g);
+  for (const grp of [...g.groups].sort((a, b) => dep.get(a.id) - dep.get(b.id) || byPos(a, b))) {   // 바깥 상자부터
+    if (!g.groups.includes(grp) || isFoldedIn(grp) || isOverlay(grp)) continue;
+    if (AUX_ENV.test(grp.label || '') && under(grp.id).size) { const n = fold(grp); notes.push(`${shortName(grp.label) || '보조 환경'} 접음 (${n}개)`); continue; }
+    const kids = g.nodes.filter((n) => n.parent === grp.id);
+    if (kids.length >= 2 && !g.groups.some((c) => c.parent === grp.id && !isOverlay(c)) && kids.every((n) => MGMT_ICON.test(n.icon || ''))) {
+      const names = [...new Set(kids.map((n) => shortName(n.label)).filter(Boolean))];
+      fold(grp, `${shortName(grp.label) || '관리·보안'} · ${names.slice(0, 4).join('·')}${names.length > 4 ? ' 외' : ''}`);
+      notes.push(`관리 서비스 ${kids.length}개를 묶음 하나로`);
+    }
+  }
+
   // 3. 겹치는 상자 접기 + 이름표에 표시
   const rects = absoluteRects(g);
   const tag = (n, t) => { if (t && !String(n.label || '').includes(t)) n.label = `${n.label || ''} (${t})`.trim(); };
@@ -168,7 +197,7 @@ export function compactGraph(src) {
     while (again) {
       again = false;
       for (const x of [...g.groups]) {
-        if (g.nodes.some((n) => n.parent === x.id) || g.groups.some((c) => c.parent === x.id)) continue;
+        if (folded.has(x.id) || g.nodes.some((n) => n.parent === x.id) || g.groups.some((c) => c.parent === x.id)) continue;
         g.groups = g.groups.filter((y) => y !== x); removed++; again = true;
       }
     }

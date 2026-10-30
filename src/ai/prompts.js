@@ -219,3 +219,19 @@ export function findingsToAnnotations(findings, graph) {
   }
   return { annotations: out, dropped: dropped.filter(Boolean) };
 }
+
+// 물어보기 답변(조언)을 그대로 고치기 요청으로 바꾼다. 그리기 프롬프트는 좌표를 쓰지 말라고 하므로 이번엔 move 를 허락한다.
+export function fixFromAnswer(question, answer) {
+  return [
+    '방금 이 그림에 대해 이렇게 물었습니다:', String(question || '').slice(0, 3000), '',
+    '그에 대한 답변(제안)입니다:', String(answer || '').slice(0, 6000), '',
+    '위 제안을 지금 그림에 실제로 반영해 주세요.',
+    '- 새로 만들기보다 기존 요소를 move_into(다른 상자로 옮기기)·update(이름)·remove(중복 삭제)·connect/disconnect(선 다시 잇기)로 고칩니다.',
+    '- 상자나 아이콘의 위치를 바꿔야 하면 이번에는 {"op":"move","id","x","y"} 를 써도 됩니다(x·y 는 부모 상자 안 좌표). 크기는 {"op":"resize","id","w","h"}.',
+    '- 답변에서 "선택"·"참고"라고만 한 것은 바꾸지 않습니다. 요구사항에 있는 요소는 지우지 않습니다.',
+    '- 중요: 앱의 자동 정렬은 간격만 붙여 줄 뿐, 상자·아이콘의 순서나 위·아래·왼쪽·오른쪽 자리는 바꾸지 않습니다.',
+    '  그러니 답변에서 "위에 두기", "오른쪽 끝으로", "한 줄로 맞추기", "같은 열에 맞추기"처럼 자리를 말한 것은 하나도 빠짐없이 move 로 직접 옮기세요.',
+    '  지금 좌표(x, y, w, h)는 위 그래프에 있습니다. 같은 부모 안에서 원하는 순서가 되도록 x·y 를 정하고, 흐름(①→⑦)은 왼쪽→오른쪽, 위→아래로 이어지게 하세요.',
+    '- 선을 다시 잇는 것만으로 끝내지 말고, 답변의 항목마다 그에 해당하는 move·move_into·connect 를 만드세요. summary 에는 항목별로 무엇을 했는지 적습니다.',
+  ].join('\n');
+}

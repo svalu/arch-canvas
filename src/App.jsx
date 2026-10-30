@@ -102,7 +102,7 @@ import { useExit as useExit2 } from './useExit.js';
 import { ConnectModal, AiPanel, AiChip, Busy, describeOps } from './ai/ui.jsx';
 import { useExit } from './useExit.js';
 import { loadSettings, saveSettings, isVerified, run as aiRun } from './ai/connection.js';
-import { buildReviewMessages, buildDrawMessages, buildAskMessages, buildClarifyMessages, parseJsonReply, findingsToAnnotations, confirmedLines } from './ai/prompts.js';
+import { buildReviewMessages, buildDrawMessages, buildAskMessages, buildClarifyMessages, parseJsonReply, findingsToAnnotations, confirmedLines, fixFromAnswer } from './ai/prompts.js';
 import { AiWizard, AskBackModal } from './ai/Wizard.jsx';
 import { MakerMark } from './MakerMark.jsx';
 import { CanvasStart } from './CanvasStart.jsx';
@@ -142,7 +142,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.15';
+export const APP_VERSION = '0.9.16';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -2404,19 +2404,6 @@ function Help({ isDesktop, ctx, onPatch, onTour, onCheckUpdate, updBusy, updInfo
       about: <div className="maker"><MakerMark size={22} /><span>Arch Canvas {APP_VERSION}</span></div>,
     }} />
   );
-}
-
-// 물어보기 답변(조언)을 그대로 고치기 요청으로 바꾼다. 그리기 프롬프트는 좌표를 쓰지 말라고 하므로 이번엔 move 를 허락한다.
-function fixFromAnswer(question, answer) {
-  return [
-    '방금 이 그림에 대해 이렇게 물었습니다:', String(question || '').slice(0, 3000), '',
-    '그에 대한 답변(제안)입니다:', String(answer || '').slice(0, 6000), '',
-    '위 제안을 지금 그림에 실제로 반영해 주세요.',
-    '- 새로 만들기보다 기존 요소를 move_into(다른 상자로 옮기기)·update(이름)·remove(중복 삭제)·connect/disconnect(선 다시 잇기)로 고칩니다.',
-    '- 상자나 아이콘의 위치를 바꿔야 하면 이번에는 {"op":"move","id","x","y"} 를 써도 됩니다(x·y 는 부모 상자 안 좌표). 크기는 {"op":"resize","id","w","h"}.',
-    '- 답변에서 "선택"·"참고"라고만 한 것은 바꾸지 않습니다. 요구사항에 있는 요소는 지우지 않습니다.',
-    '- 적용한 뒤 앱이 자동 정렬로 간격을 맞추므로 세세한 간격은 신경 쓰지 않아도 됩니다.',
-  ].join('\n');
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -309,7 +309,7 @@ function tidySiblings(groups, nodes = [], GAP = 24) {
     ...groups.map((o) => ({ o, grp: true, x: o.x, y: o.y, w: o.w, h: o.h })),
     ...nodes.map((o) => (isBox(o) ? { o, x: o.x, y: o.y, w: o.w, h: o.h } : { o, icon: true, x: o.x - half, y: o.y, w: ICON_SIZE + half * 2, h: ICON_SIZE + LABEL_SPACE })),
   ];
-  if (!groups.length || items.length < 2) return;
+  if (items.length < 2) return;
   const xOver = (a, b) => Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > Math.min(a.w, b.w) * 0.5;
   const yOver = (a, b) => Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > Math.min(a.h, b.h) * 0.5;
   const clusters = (same) => {
@@ -320,7 +320,7 @@ function tidySiblings(groups, nodes = [], GAP = 24) {
       hits[0].push(x);
       for (const h of hits.slice(1)) { hits[0].push(...h); out.splice(out.indexOf(h), 1); }   // 이어진 무리는 하나로
     }
-    return out.filter((c) => c.length > 1 && c.some((k) => k.grp));
+    return out.filter((c) => c.length > 1);
   };
   // 크기 맞추기는 이미 비슷한 것끼리만 (좁은 상자를 아래 넓은 띠에 맞춰 늘리지 않게)
   const similar = (vals) => Math.min(...vals) >= Math.max(...vals) * 0.7;
@@ -386,6 +386,32 @@ export function alignNodes(g, ids, tol = 28) {
  * 자동 정렬(사용자가 고른 것): 고른 상자와 그 안의 상자를 내용에 맞게 줄이고 형제끼리 크기·간격을 맞춘 뒤, 아이콘 줄을 맞춘다.
  * 잠근 것은 skip 에 넣어 건드리지 않는다.
  */
+/**
+ * 마지막 안전망: 상자를 내용에 맞춰 키운 뒤(fitGroups) 형제끼리 다시 겹치면, 덜 움직이는 쪽(오른쪽 또는 아래)으로 비킨다.
+ * 안쪽 상자부터 하고, 비킨 만큼 부모가 다시 커진다.
+ */
+function separate(g, ids, isOverlay, GAP = 24) {
+  const depth = depthMap(g);
+  const parents = [...new Set(g.groups.filter((x) => ids.has(x.id)).map((x) => x.parent))]
+    .sort((a, b) => (b == null ? -1 : depth.get(b)) - (a == null ? -1 : depth.get(a)));
+  for (const pid of parents) {
+    const L = g.groups.filter((x) => x.parent === pid && !isOverlay(x) && ids.has(x.id));
+    for (let round = 0; round < 6; round++) {
+      let moved = false;
+      L.sort((a, b) => a.x - b.x || a.y - b.y);
+      for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) {
+        const a = L[i], b = L[j];
+        if (!(a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h)) continue;
+        const dx = a.x + a.w + GAP - b.x, dy = a.y + a.h + GAP - b.y;
+        if (dx <= dy) b.x += dx; else b.y += dy;
+        moved = true;
+      }
+      if (!moved) break;
+    }
+    fitGroups(g);
+  }
+}
+
 function hugMembers(g, list) {
   if (!list.length) return;
   const rects = absoluteRects(g);
@@ -421,6 +447,7 @@ export function autoArrange(g, ids, isOverlay = () => false, skip = new Set()) {
   tidySiblings(g.groups.filter((x) => !x.parent && !isOverlay(x) && groups.has(x.id)), g.nodes.filter((n) => !n.parent && nodes.has(n.id)));
   alignNodes(g, nodes);
   fitGroups(g);
+  separate(g, groups, isOverlay);
   hugMembers(g, overlayMembers);
   const B1 = box(absoluteRects(g));
   if (B0 && B1) {
