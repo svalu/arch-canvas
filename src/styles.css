@@ -1116,3 +1116,7 @@ button.x, .tpl-x, .doctab-x { display: inline-flex; align-items: center; justify
 /* 도움말 맨 위 업데이트 줄: 펼치지 않아도 바로 보이게 */
 .hp-update .row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
 .hp-update .row .hint { margin-left: auto; }
+
+/* 물어보기 답변 다음 행동 */
+.ask-next { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.ask-next button { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; }

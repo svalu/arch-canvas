@@ -92,6 +92,7 @@ const TOPICS = [
     '[AI 검수]는 요건 대비 빠진 것과 과한 것을 해당 요소 위에 표시합니다.',
     '답이 쓰임새(몇 명이 쓰는지, 회사 서비스인지 등)에 따라 달라지면 AI 가 먼저 쉬운 질문으로 되묻습니다.',
     '답한 내용은 [AI 에게 알려준 것]에 남고, 틀렸으면 × 로 지웁니다.',
+    '답변 아래 [이 답변대로 그림 고치기]를 누르면 제안을 그림 변경으로 바꿔 보여 주고, 적용하면 자동 정렬까지 합니다.',
   ], spot: ['.toolbar-ai'] },
   { id: 'aiconnect', group: 'ai', title: 'AI 연결', lines: [
     'Claude CLI 나 ChatGPT(Codex CLI)를 쓰면 내 구독으로 동작해 추가 비용이 없습니다. 처음이면 claude auth login 또는 codex login 으로 로그인해 두세요.',

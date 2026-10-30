@@ -236,7 +236,7 @@ export function ConnectModal({ open, pending, settings, onSettings, onClose, onR
 }
 
 // ---------------------------------------------------------------------------------------------
-export function AiPanel({ context, onContext, settings, verified, onOpenConnect, state, onReview, onDraw, onAsk, onApplyOps, onCancel, onPick, nameOf, activeDocId, onWizard, onAttachDoc, onToast }) {
+export function AiPanel({ context, onContext, settings, verified, onOpenConnect, state, onReview, onDraw, onAsk, onFixFromAnswer, onApplyOps, onCancel, onPick, nameOf, activeDocId, onWizard, onAttachDoc, onToast }) {
   const [talk, setTalk] = useState('');
   const [draft, setDraft] = useState(context);
   const [req, setReq] = useState('');
@@ -298,7 +298,7 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
 
       {/* 마지막으로 만든 그림 (말로 그리기·직접 그리기 모두 여기 남는다) */}
       {drawResult && (
-        <div className="ai-result">
+        <div className="ai-result" ref={(el) => { if (el && el.dataset.k !== String(drawResult.ms)) { el.dataset.k = String(drawResult.ms); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }}>
           <h4>{drawResult.applied ? '그린 내용' : '그릴 내용 (아직 캔버스에 안 그려짐)'} <small className="hint">{drawResult.provider}{drawResult.ms ? ` · ${(drawResult.ms / 1000).toFixed(1)}s` : ''}</small></h4>
           {drawResult.docId && activeDocId && drawResult.docId !== activeDocId && <p className="hint">"{drawResult.docTitle}" 탭에서 요청한 결과입니다.</p>}
           <Intent res={drawResult} />
@@ -347,6 +347,14 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
               <div className="ask-q">{askResult.question}</div>
               <Intent res={askResult} />
               <div className="ask-a">{boldText(askResult.answer)}</div>
+              {onFixFromAnswer && (
+                <div className="ask-next">
+                  <button className="primary" disabled={!!busy} onClick={() => { flush(); onFixFromAnswer(askResult.question, askResult.answer); }}>
+                    {busy === 'draw' ? <Busy label="고칠 내용 만드는 중" /> : <><Icon name="sparkle" size={14} /> 이 답변대로 그림 고치기</>}
+                  </button>
+                  <small className="hint">고칠 내용을 먼저 보여 줍니다. [적용]을 눌러야 바뀌고, 적용하면 자동 정렬까지 합니다. Ctrl+Z 로 되돌릴 수 있어요.</small>
+                </div>
+              )}
             </div>
           )}
         </div>
