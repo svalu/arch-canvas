@@ -240,6 +240,7 @@ export function HelpPanel({ isDesktop, ctx, slots = {}, on = {} }) {
     <div className="insp help hp" key="list">
       <div className={'hp-page ' + (dir === 'out' ? 'back' : 'fade')} ref={listRef}>
         <h3>도움말</h3>
+        {isDesktop && slots.update && <div className="hp-update">{slots.update}</div>}
         <label className="hp-search">
           <Icon name="search" size={15} />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="찾기: 잠금, PPT, 연결…" spellCheck={false} />

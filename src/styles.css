@@ -1112,3 +1112,7 @@ button.x, .tpl-x, .doctab-x { display: inline-flex; align-items: center; justify
 .app.theme-dark .br-state { background: rgba(255,255,255,.05); }
 .app.theme-dark .br-state.on { background: rgba(46,160,90,.15); color: #7DDBA3; }
 .app.theme-dark .br-cmd code { background: rgba(255,255,255,.07); }
+
+/* 도움말 맨 위 업데이트 줄: 펼치지 않아도 바로 보이게 */
+.hp-update .row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
+.hp-update .row .hint { margin-left: auto; }
