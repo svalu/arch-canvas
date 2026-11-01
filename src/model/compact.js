@@ -30,7 +30,7 @@ function signature(g, grp, memo) {
 }
 
 // "Availability Zone A" → "Availability Zone", "App 서브넷 C" → "App 서브넷", "Private subnet (App)" 은 그대로
-const baseLabel = (s) => String(s || '').replace(/\s*[-·]?\s*(?:[A-Z]|\d{1,2}|[가-힣])$/, '').trim() || String(s || '');
+const baseLabel = (s) => String(s || '').replace(/(?:\s+|\s*[-·]\s*)(?:[A-Z]|\d{1,2}|[가-힣])$/, '').trim() || String(s || '');   // 띄어쓰기·하이픈 뒤 한 글자만 (VPC 의 C 는 남긴다)
 const groupKey = (x) => `${x.kind}|${baseLabel(x.label).toLowerCase()}`;
 // 아이콘 짝짓기용 이름: 끝의 A/C, (주)·(대기)·Primary·Standby 같은 역할 표시는 뺀다
 const nodeKey = (n) => `${n.icon || n.type}|${baseLabel(String(n.label || '').replace(/\s*\((?:주|대기|primary|standby|active|passive|replica|복제본?)\)/gi, '').replace(/(?:primary|standby)/gi, '')).toLowerCase()}`;

@@ -310,8 +310,18 @@ function tidySiblings(groups, nodes = [], GAP = 24) {
     ...nodes.map((o) => (isBox(o) ? { o, x: o.x, y: o.y, w: o.w, h: o.h } : { o, icon: true, x: o.x - half, y: o.y, w: ICON_SIZE + half * 2, h: ICON_SIZE + LABEL_SPACE })),
   ];
   if (items.length < 2) return;
-  const xOver = (a, b) => Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > Math.min(a.w, b.w) * 0.5;
-  const yOver = (a, b) => Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > Math.min(a.h, b.h) * 0.5;
+  const ox = (a, b) => Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x), oy = (a, b) => Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+  // 서로 위아래·좌우로 다 겹친 둘은 어느 쪽으로 풀지 정한다: AZ·VPC·리전은 나란히(가로), 서브넷은 쌓기(세로), 나머지는 덜 움직이는 쪽
+  const SIDE = /^(az|vpc|region|aws-cloud|aws-cloud-dark|aws-cloud-logo|aws-cloud-logo-dark|aws-account|corporate-dc)$/, STACK = /subnet$/;
+  const prefer = (a, b) => {
+    const ka = a.o.kind, kb = b.o.kind;
+    if (ka && kb && SIDE.test(ka) && SIDE.test(kb)) return 'x';
+    if (ka && kb && STACK.test(ka) && STACK.test(kb)) return 'y';
+    return ox(a, b) <= oy(a, b) ? 'x' : 'y';
+  };
+  const both = (a, b) => ox(a, b) > 2 && oy(a, b) > 2;
+  const xOver = (a, b) => ox(a, b) > Math.min(a.w, b.w) * 0.5 && !(both(a, b) && prefer(a, b) === 'x');
+  const yOver = (a, b) => oy(a, b) > Math.min(a.h, b.h) * 0.5 && !(both(a, b) && prefer(a, b) === 'y');
   const clusters = (same) => {
     const out = [];
     for (const x of items) {
@@ -390,25 +400,48 @@ export function alignNodes(g, ids, tol = 28) {
  * 마지막 안전망: 상자를 내용에 맞춰 키운 뒤(fitGroups) 형제끼리 다시 겹치면, 덜 움직이는 쪽(오른쪽 또는 아래)으로 비킨다.
  * 안쪽 상자부터 하고, 비킨 만큼 부모가 다시 커진다.
  */
-function separate(g, ids, isOverlay, GAP = 24) {
+function separate(g, ids, isOverlay, GAP = 24, refit = true) {
   const depth = depthMap(g);
-  const parents = [...new Set(g.groups.filter((x) => ids.has(x.id)).map((x) => x.parent))]
+  const half = Math.max(0, (LABEL_WIDTH - ICON_SIZE) / 2);
+  const parents = [...new Set([...g.groups, ...g.nodes].filter((x) => ids.has(x.id)).map((x) => x.parent ?? null))]
     .sort((a, b) => (b == null ? -1 : depth.get(b)) - (a == null ? -1 : depth.get(a)));
   for (const pid of parents) {
-    const L = g.groups.filter((x) => x.parent === pid && !isOverlay(x) && ids.has(x.id));
-    for (let round = 0; round < 6; round++) {
+    // 상자와 아이콘(이름표까지)을 같은 판에 놓고 겹침을 푼다. 아이콘끼리는 이름표 사이 간격을 좁게
+    const L = [
+      ...g.groups.filter((x) => x.parent == pid && !isOverlay(x) && ids.has(x.id)).map((o) => ({ o, x: o.x, y: o.y, w: o.w, h: o.h })),
+      ...g.nodes.filter((n) => n.parent == pid && ids.has(n.id)).map((o) => (isBox(o) ? { o, x: o.x, y: o.y, w: o.w, h: o.h } : { o, icon: true, x: o.x - half, y: o.y, w: ICON_SIZE + half * 2, h: ICON_SIZE + LABEL_SPACE })),
+    ];
+    for (let round = 0; round < 12; round++) {
       let moved = false;
       L.sort((a, b) => a.x - b.x || a.y - b.y);
       for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) {
-        const a = L[i], b = L[j];
+        const a = L[i], b = L[j], gap = a.icon && b.icon ? 8 : GAP;
         if (!(a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h)) continue;
-        const dx = a.x + a.w + GAP - b.x, dy = a.y + a.h + GAP - b.y;
+        const dx = a.x + a.w + gap - b.x, dy = a.y + a.h + gap - b.y;
         if (dx <= dy) b.x += dx; else b.y += dy;
         moved = true;
       }
       if (!moved) break;
     }
-    fitGroups(g);
+    for (const k of L) { k.o.x = Math.round(k.icon ? k.x + half : k.x); k.o.y = Math.round(k.y); }
+    if (refit) fitGroups(g);
+  }
+}
+
+/** 오른쪽·아래에 남은 빈 공간만 걷어 낸다(안의 것은 움직이지 않음). 앞 단계에서 자리가 당겨진 뒤 상자가 넓게 남는 것을 막는다. */
+function trimGroups(g, ids, isOverlay) {
+  const half = Math.max(0, (LABEL_WIDTH - ICON_SIZE) / 2);
+  const depth = depthMap(g);
+  for (const grp of g.groups.filter((x) => ids.has(x.id) && !isOverlay(x)).sort((a, b) => depth.get(b.id) - depth.get(a.id))) {
+    const kids = [...g.groups.filter((c) => c.parent === grp.id), ...g.nodes.filter((n) => n.parent === grp.id)];
+    if (!kids.length) continue;
+    let r = 0, b = 0;
+    for (const k of kids) {
+      if ('kind' in k || isBox(k)) { r = Math.max(r, k.x + k.w); b = Math.max(b, k.y + k.h); }
+      else { r = Math.max(r, k.x + ICON_SIZE + half); b = Math.max(b, k.y + ICON_SIZE + LABEL_SPACE); }
+    }
+    grp.w = Math.min(grp.w, Math.max(160, Math.round(r + 24)));   // 줄이기만 한다
+    grp.h = Math.min(grp.h, Math.max(110, Math.round(b + 20)));
   }
 }
 
@@ -439,6 +472,10 @@ export function autoArrange(g, ids, isOverlay = () => false, skip = new Set()) {
   const before = absoluteRects(g);
   const box = (rs) => { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const t of tops) { const r = rs.get(t.id); x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, r.x + r.w); y1 = Math.max(y1, r.y + r.h); } return tops.length ? { x0, y0, x1, y1 } : null; };
   const B0 = box(before);
+  // 맨 바깥에서 고른 것들의 왼쪽 위 모서리: 정리가 끝나면 그 자리로 되돌려, 누를 때마다 그림 전체가 미끄러지지 않게 한다
+  const topSel = [...g.groups.filter((x) => !x.parent && !isOverlay(x) && groups.has(x.id)), ...g.nodes.filter((n) => !n.parent && nodes.has(n.id))];
+  const corner = (rs) => topSel.length ? { x: Math.min(...topSel.map((t) => rs.get(t.id).x)), y: Math.min(...topSel.map((t) => rs.get(t.id).y)) } : null;
+  const C0 = corner(before);
   // 겹치는 상자(ASG 등)는 멤버를 기억해 두었다가 정리 뒤 멤버에 다시 맞춘다
   const inside = (r, q) => q.x + q.w / 2 >= r.x && q.x + q.w / 2 <= r.x + r.w && q.y + q.h / 2 >= r.y && q.y + q.h / 2 <= r.y + r.h;
   const overlayMembers = g.groups.filter((x) => isOverlay(x) && groups.has(x.id)).map((ov) => [ov, g.nodes.filter((n) => inside(before.get(ov.id), before.get(n.id))).map((n) => n.id)]);
@@ -447,8 +484,9 @@ export function autoArrange(g, ids, isOverlay = () => false, skip = new Set()) {
   tidySiblings(g.groups.filter((x) => !x.parent && !isOverlay(x) && groups.has(x.id)), g.nodes.filter((n) => !n.parent && nodes.has(n.id)));
   alignNodes(g, nodes);
   fitGroups(g);
-  separate(g, groups, isOverlay);
+  separate(g, new Set([...groups, ...nodes]), isOverlay);
   hugMembers(g, overlayMembers);
+  trimGroups(g, groups, isOverlay);
   const B1 = box(absoluteRects(g));
   if (B0 && B1) {
     const after = absoluteRects(g);
@@ -470,6 +508,15 @@ export function autoArrange(g, ids, isOverlay = () => false, skip = new Set()) {
     const outs = g.nodes.filter((n) => !n.parent && !isBox(n)).sort((a, b) => a.y - b.y || a.x - b.x);
     const sz = (n) => ({ x: n.x - 20, y: n.y, w: ICON_SIZE + 40, h: ICON_SIZE + LABEL_SPACE });
     for (let i = 0; i < outs.length; i++) for (let j = 0; j < i; j++) if (hit(sz(outs[i]), sz(outs[j]))) outs[i].y = outs[j].y + ICON_SIZE + LABEL_SPACE + 16;
+  }
+  // 바깥 아이콘을 다시 놓은 뒤에도 상자 위에 얹힌 것(소속 없이 상자 자리에 놓인 아이콘)이 없게 한 번 더
+  separate(g, new Set(topSel.map((t) => t.id)), isOverlay, 24, false);   // 맨 바깥만 옮긴다(상자 크기는 그대로)
+  if (C0) {
+    const C1 = corner(absoluteRects(g));
+    const dx = Math.round(C0.x - C1.x), dy = Math.round(C0.y - C1.y);
+    if (dx || dy) for (const t of topSel) { t.x += dx; t.y += dy; }
+    // 겹치는 상자 중 맨 바깥에 있는 것도 같이
+    if (dx || dy) for (const ov of g.groups.filter((x) => !x.parent && isOverlay(x) && groups.has(x.id))) { ov.x += dx; ov.y += dy; }
   }
   return g;
 }
