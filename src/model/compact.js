@@ -59,23 +59,43 @@ function mergeInto(g, keep, drop, alias) {
   }
 }
 
-/** 세로로 쌓인 자식 상자들은 한 줄로 눕히고, 같은 상자에 직접 든 아이콘(IGW·ALB 등)은 그 왼쪽에 흐름 순서로 세운다. */
+/**
+ * 개요도의 줄 세우기. 안쪽 상자부터:
+ *   - 자식 상자가 세로로 쌓여 있으면(또는 무언가 줄어든 개요도라면 5개까지는 어떤 배치든) 한 줄로 눕힌다. Public 서브넷이 맨 앞.
+ *   - 아이콘만 든 상자에서 아이콘이 한 줄로 쌓여 있으면(4개까지) 가로로 눕힌다.
+ *   - 같은 상자에 직접 든 아이콘(IGW·ALB 등)은 자식 상자들 왼쪽에 흐름 순서로 세운다.
+ */
 function rowify(g, changed) {
-  // 안쪽 상자부터: 바깥 상자가 줄을 세울 때 안쪽이 이미 납작해져 있어야 세로 가운데가 맞는다
   const depth = depthMap(g);
   const parents = [...new Set(g.groups.map((x) => x.parent))].sort((a, b) => (b == null ? -1 : depth.get(b)) - (a == null ? -1 : depth.get(a)));
+  const rank = (k) => (/public/.test(k.kind) ? 0 : 1);
+  const stackedList = (list, h) => { let ok = list.length >= 2; for (let i = 1; i < list.length && ok; i++) if (list[i].y < list[i - 1].y + h(list[i - 1]) - 4) ok = false; return ok; };
+  // 아이콘만 든 상자: 세로로 쌓인 아이콘을 가로로
+  if (changed) {
+    for (const grp of g.groups) {
+      if (isOverlay(grp) || g.groups.some((c) => c.parent === grp.id)) continue;
+      const ns = g.nodes.filter((n) => n.parent === grp.id && !n.type).sort((a, b) => a.y - b.y || a.x - b.x);
+      if (ns.length < 2 || ns.length > 4 || !stackedList(ns, () => 48 + 34)) continue;
+      const x0 = Math.min(...ns.map((n) => n.x)), y0 = Math.min(...ns.map((n) => n.y));
+      ns.forEach((n, i) => { n.x = Math.round(x0 + i * (48 + 84)); n.y = y0; });
+      grp.w = Math.round(x0 + ns.length * (48 + 84) + 12); grp.h = Math.round(y0 + 48 + 34 + 16);
+    }
+  }
   for (const pid of parents) {
     const kids = g.groups.filter((c) => c.parent === pid && !isOverlay(c)).sort((a, b) => a.y - b.y);
     const siblings = g.nodes.filter((n) => n.parent === pid).sort((a, b) => a.x - b.x || a.y - b.y);
     if (!kids.length) continue;
-    let stacked = kids.length >= 2;
-    for (let i = 1; i < kids.length && stacked; i++) if (kids[i].y < kids[i - 1].y + kids[i - 1].h - 4) stacked = false;
-    if (!stacked && !(changed && siblings.length)) continue;   // 아무것도 안 줄었으면 자리도 안 건드린다
+    const stacked = stackedList(kids, (k) => k.h);
+    const rowAll = stacked || (changed && kids.length >= 2 && kids.length <= 5);
+    if (!rowAll && !(changed && siblings.length)) continue;   // 아무것도 안 줄었으면 자리도 안 건드린다
+    // 읽는 순서: 위가 먼저, 같은 줄(위아래 차이가 작은 것)이면 왼쪽이 먼저. 조이기로 생긴 몇 px 차이에 순서가 뒤집히지 않게
+    const sameRow = (a, b) => Math.abs(a.y - b.y) < Math.min(a.h, b.h) * 0.5;
+    if (rowAll) kids.sort((a, b) => rank(a) - rank(b) || (sameRow(a, b) ? a.x - b.x : a.y - b.y));
     const y = Math.min(...kids.map((k) => k.y));
-    const bandH = stacked ? Math.max(...kids.map((k) => k.h)) : Math.max(...kids.map((k) => k.y + k.h)) - y;
+    const bandH = rowAll ? Math.max(...kids.map((k) => k.h)) : Math.max(...kids.map((k) => k.y + k.h)) - y;
     let x = Math.min(...kids.map((k) => k.x), ...siblings.map((n) => n.x));
     for (const n of siblings) { n.x = Math.round(x); n.y = Math.round(y + bandH / 2 - 24); x += 48 + 72; }
-    if (stacked) for (const k of kids) { k.x = Math.round(x); k.y = y; x += k.w + GAP; }
+    if (rowAll) for (const k of kids) { k.x = Math.round(x); k.y = y; x += k.w + GAP; }
     else {
       const dx = Math.round(x - Math.min(...kids.map((k) => k.x))); if (dx > 0) for (const k of kids) k.x += dx;
       // 안쪽 상자가 넓어져서 옆 상자와 겹치면 옆으로 민다 (위아래로 쌓이지 않게)
@@ -94,7 +114,8 @@ function rowify(g, changed) {
 /**
  * @returns { graph, notes: string[] }  notes 는 무엇을 줄였는지 한 줄씩 (토스트용)
  */
-export function compactGraph(src) {
+export function compactGraph(src, { trace = null } = {}) {
+  const snap = (t) => { if (trace) trace.push([t, JSON.parse(JSON.stringify(g))]); };
   const g = clone(src);
   const notes = [];
   const n0 = { groups: g.groups.length, nodes: g.nodes.length, edges: g.edges.length };
@@ -207,9 +228,13 @@ export function compactGraph(src) {
   // 5. 눕히고 조이기
   // 먼저 조여서 상자들이 실제 크기가 된 뒤에 줄을 세우고, 다시 조인다
   const all = () => [...g.groups.map((x) => x.id), ...g.nodes.map((x) => x.id)];
+  snap('접기 뒤');
   autoArrange(g, all(), isOverlay);
+  snap('1차 정렬');
   rowify(g, alias.size > 0 || helpers.size > 0);
+  snap('줄 세우기');
   autoArrange(g, all(), isOverlay);
+  snap('2차 정렬');
 
   g.title = `${src.title || '다이어그램'} (개요도)`;
   g.annotations = [];

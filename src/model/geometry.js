@@ -344,6 +344,8 @@ function tidySiblings(groups, nodes = [], GAP = 24) {
     for (const k of list) {
       let v = start;
       for (const d of done) if (hit(d, k, cross)) v = Math.max(v, d[pos] + d[len] + GAP);
+      // 앞의 것을 추월하지 않는다: 줄 세운 순서(아이콘 → 상자)가 짧은 상자가 긴 상자 옆 아이콘을 지나치며 깨지지 않게
+      if (done.length) v = Math.max(v, done[done.length - 1][pos]);
       k[pos] = v; done.push(k);
     }
   };
