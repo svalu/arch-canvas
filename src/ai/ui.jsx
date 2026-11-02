@@ -276,7 +276,7 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
   };
 
   // 지금 결과가 기록에도 들어 있으면 기록 쪽은 숨긴다 (같은 것이 두 번 보이지 않게)
-  const dupOf = (x) => !!r && (!r.docId || !activeDocId || r.docId === activeDocId) && ((r.mode === 'ask' && x.k === 'ask' && x.q === r.question) || (r.mode === 'review' && x.k === 'review') || (r.mode === 'draw' && x.k === 'draw' && x.q === r.request));
+  const dupOf = (x) => !!r && (!r.docId || !activeDocId || r.docId === activeDocId) && ((r.mode === 'ask' && x.k === 'ask' && x.q === r.question) || (r.mode === 'review' && x.k === 'review') || (r.mode === 'draw' && x.k === 'draw' && x.q === r.request) || (r.mode === 'arrange' && x.k === 'arrange'));
   const lastDup = log.map(dupOf).lastIndexOf(true);
   const history = log.filter((x, i) => i !== lastDup);
   const key = r ? String(r.at || r.question || r.mode) : '';
@@ -355,7 +355,7 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
         <div className="send-row">
           {busy ? (
             <>
-              <Busy label={busy === 'review' ? '검수 중' : busy === 'ask' ? '생각 중' : '그릴 내용 만드는 중 · 1~2분'} />
+              <Busy label={busy === 'review' ? '검수 중' : busy === 'ask' ? '생각 중' : busy === 'arrange' ? '배치안 정하는 중 · 1분쯤' : '그릴 내용 만드는 중 · 1~2분'} />
               <button onClick={onCancel}>취소</button>
             </>
           ) : (
@@ -392,6 +392,18 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
             </div>
           ))}
 
+          {r && r.mode === 'arrange' && (
+            <div className="turn now" ref={(el) => { if (el && el.dataset.k !== key) { el.dataset.k = key; el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } }}>
+              <div className="turn-user"><span className="log-k draw">정렬</span><div className="log-q">AI 정렬</div></div>
+              <div className="turn-ai">
+                <h4>AI 정렬</h4>
+                {r.summary && <p className="summary">{r.summary}</p>}
+                <p className={r.blocked ? 'hint' : 'ok'}>{r.blocked ? '규칙 검사에서 막혀 적용하지 않았습니다.' : `AI 가 정한 순서(${r.placed}개)대로 배치했습니다 · Ctrl+Z 로 되돌릴 수 있습니다`}</p>
+                <Raw res={r} />
+                <Foot res={r} />
+              </div>
+            </div>
+          )}
           {r && r.mode === 'draw' && (
             <div className="turn now" ref={(el) => { if (el && el.dataset.k !== key) { el.dataset.k = key; el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } }}>
               {r.request && <div className="turn-user"><span className="log-k draw">그림</span><div className="log-q">{r.request}</div></div>}

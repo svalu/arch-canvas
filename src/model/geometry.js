@@ -490,7 +490,18 @@ function tidySiblings(groups, nodes = [], GAP = 24) {
  * 단이 많아 너무 길쭉해지면 줄을 바꾼다(가로:세로 2.2 근처). 양방향·순환은 지금 그림의 읽는 순서(왼쪽 위가 먼저)를 따른다.
  * 형제 사이에 선이 하나도 없으면 자리를 건드리지 않는다.
  */
-function flowSiblings(g, pid, groupIds, nodeIds, isOverlay, GAP = 24) {
+/**
+ * AI 배치안(plan): Map 또는 객체, 키 = 부모 그룹 id('root' = 맨 바깥), 값 = 단(왼쪽→오른쪽) 배열, 단마다 위→아래 순서의 자식 id 배열.
+ * 있으면 그 부모의 단·순서는 선을 보고 계산하지 않고 이것을 쓴다(없는 id 는 무시, 빠진 자식은 마지막 단 뒤에).
+ */
+const planFor = (plan, pid) => {
+  if (!plan) return null;
+  const k = pid == null ? 'root' : pid;
+  const v = plan instanceof Map ? plan.get(k) : plan[k];
+  return Array.isArray(v) && v.length ? v : null;
+};
+
+function flowSiblings(g, pid, groupIds, nodeIds, isOverlay, GAP = 24, plan = null) {
   const half = Math.max(0, (LABEL_WIDTH - ICON_SIZE) / 2);
   const kids = g.groups.filter((c) => (c.parent ?? null) === pid && !isOverlay(c) && groupIds.has(c.id));
   const ns = pid == null ? [] : g.nodes.filter((n) => (n.parent ?? null) === pid && nodeIds.has(n.id) && n.type !== 'badge');   // 맨 바깥 아이콘은 뒤에서 상자 옆에 따로 놓고, 번호 배지는 붙여 둔 자리 그대로
@@ -514,7 +525,8 @@ function flowSiblings(g, pid, groupIds, nodeIds, isOverlay, GAP = 24) {
     else W[a][b] += 1;
     any = true;
   }
-  if (!any) return false;
+  const given = planFor(plan, pid);
+  if (!any && !given) return false;
   const stack = kids.length && kids.every((k) => /subnet$/.test(k.kind || ''));
   const P = pid == null ? null : g.groups.find((q) => q.id === pid);
   // 서브넷끼리는 세로로 쌓고, 서브넷 안의 아이콘은 가로로 늘어놓는다(띠 모양). 나머지는 왼쪽 → 오른쪽 흐름
@@ -548,12 +560,20 @@ function flowSiblings(g, pid, groupIds, nodeIds, isOverlay, GAP = 24) {
   const cols = [];
   for (let i = 0; i < n; i++) (cols[rank[i]] ||= []).push(i);
   let columns = cols.filter(Boolean);
+  if (given) {
+    // AI 배치안대로: 단과 단 안 순서를 그대로. 안 나온 자식은 마지막 단 뒤에
+    const used = new Set();
+    columns = given.map((col) => (Array.isArray(col) ? col : [col]).map((id) => idx.get(String(id))).filter((i) => i != null && !used.has(i) && used.add(i))).filter((c) => c.length);
+    const rest = items.map((_, i) => i).filter((i) => !used.has(i));
+    if (rest.length) columns.push(rest);
+    columns.forEach((col, c) => col.forEach((i) => { rank[i] = c; }));
+  }
   if (stack) columns = columns.flat().map((i) => [i]);   // 서브넷은 단마다 하나씩, 한 줄로 쌓는다
   // 단 안의 순서: 앞 단에서 이어진 것의 평균 자리(가까운 것끼리 붙게), 없으면 지금 자리
   const at = items.map((k) => k[cross]), mo = items.map(() => 0);
   for (let c = 0; c < columns.length; c++) {
     const key = (i) => { const src = c ? columns[c - 1].filter((u) => W[u][i] || W[i][u]) : []; return src.length ? src.reduce((s, u) => s + at[u], 0) / src.length : null; };
-    columns[c].sort((i, j) => (key(i) ?? Infinity) - (key(j) ?? Infinity) || rankOf[i] - rankOf[j]);   // 이어진 것이 먼저, 그다음 읽는 순서
+    if (!given) columns[c].sort((i, j) => (key(i) ?? Infinity) - (key(j) ?? Infinity) || rankOf[i] - rankOf[j]);   // 이어진 것이 먼저, 그다음 읽는 순서 (AI 배치안은 그 순서대로)
     // 아이콘만 넷 이상 한 단에 몰리면 길게 늘어놓지 않고 3개씩 접어 격자로
     const col = columns[c], per = col.every((i) => items[i].icon) && col.length > 3 ? Math.ceil(col.length / Math.ceil(col.length / 3)) : col.length;
     let v = 0, m = 0, k = 0;
@@ -572,7 +592,7 @@ function flowSiblings(g, pid, groupIds, nodeIds, isOverlay, GAP = 24) {
   let size = columns.map((col, c) => sizeOf(col, sideBy[c]));
   // 낮은 단 합치기: 높은 단(VPC 등) 옆에 아이콘 한둘짜리 단이 줄줄이 서면 빈 공간만 커진다.
   // 이어지는 낮은 단들을 세로로 쌓아 한 단으로 (위에서 아래가 흐름 순서). 가장 높은 단과 AZ 줄은 그대로
-  if (!stack && columns.length > 2) {
+  if (!stack && !given && columns.length > 2) {
     const tallest = Math.max(...size.map((z) => z.cross));
     const cols2 = [], side2 = [];
     for (let c = 0; c < columns.length; c++) {
@@ -717,7 +737,7 @@ function hugMembers(g, list) {
   }
 }
 
-export function autoArrange(g, ids, isOverlay = () => false, skip = new Set()) {
+export function autoArrange(g, ids, isOverlay = () => false, skip = new Set(), { plan = null } = {}) {
   // 흐름 배치 뒤의 줄 맞춤(평균 자리)은 한 번에 자리를 잡지 못할 수 있어, 자리가 더 안 바뀔 때까지(최대 3번) 되풀이한다
   // 3번 안에 안 멈추면(어지럽힌 큰 그림) 그중 가장 작게 나온 결과를 택한다 — 되풀이할수록 커지지 않게
   const snap = () => JSON.stringify([...g.groups.map((x) => [x.x, x.y, x.w, x.h]), ...g.nodes.map((n) => [n.x, n.y])]);
@@ -725,7 +745,7 @@ export function autoArrange(g, ids, isOverlay = () => false, skip = new Set()) {
   const tries = [];
   for (let pass = 0; pass < 3; pass++) {
     const before = snap();
-    arrangeOnce(g, ids, isOverlay, skip);
+    arrangeOnce(g, ids, isOverlay, skip, plan);
     const after = snap();
     tries.push({ area: area(), groups: g.groups.map((x) => [x.x, x.y, x.w, x.h]), nodes: g.nodes.map((n) => [n.x, n.y]) });
     if (after === before) return g;
@@ -738,7 +758,7 @@ export function autoArrange(g, ids, isOverlay = () => false, skip = new Set()) {
   return g;
 }
 
-function arrangeOnce(g, ids, isOverlay, skip) {
+function arrangeOnce(g, ids, isOverlay, skip, plan = null) {
   const groups = new Set(), nodes = new Set();
   for (const id of ids) {
     if (skip.has(id)) continue;
@@ -764,9 +784,9 @@ function arrangeOnce(g, ids, isOverlay, skip) {
   // 흐름대로 단 나누기: 안쪽 상자부터(자식 자리가 정해져야 그 상자 크기가 정해진다). 맨 바깥은 고른 상자끼리만
   const depth = depthMap(g);
   for (const grp of g.groups.filter((x) => groups.has(x.id) && !isOverlay(x)).sort((a, b) => depth.get(b.id) - depth.get(a.id))) {
-    if (flowSiblings(g, grp.id, groups, nodes, isOverlay)) tightenGroups(g, new Set([grp.id]), isOverlay);
+    if (flowSiblings(g, grp.id, groups, nodes, isOverlay, 24, plan)) tightenGroups(g, new Set([grp.id]), isOverlay);
   }
-  flowSiblings(g, null, groups, nodes, isOverlay);
+  flowSiblings(g, null, groups, nodes, isOverlay, 24, plan);
   // 맨 바깥 상자·아이콘끼리도 겹치거나 동떨어지지 않게 (선택에 든 것만)
   tidySiblings(g.groups.filter((x) => !x.parent && !isOverlay(x) && groups.has(x.id)), g.nodes.filter((n) => !n.parent && nodes.has(n.id)));
   alignNodes(g, nodes);

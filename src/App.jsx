@@ -102,7 +102,7 @@ import { useExit as useExit2 } from './useExit.js';
 import { ConnectModal, AiPanel, AiChip, Busy, describeOps } from './ai/ui.jsx';
 import { useExit } from './useExit.js';
 import { loadSettings, saveSettings, isVerified, run as aiRun } from './ai/connection.js';
-import { buildReviewMessages, buildDrawMessages, buildAskMessages, buildClarifyMessages, parseJsonReply, findingsToAnnotations, confirmedLines, fixFromAnswer } from './ai/prompts.js';
+import { buildReviewMessages, buildDrawMessages, buildAskMessages, buildClarifyMessages, buildArrangeMessages, parseJsonReply, findingsToAnnotations, confirmedLines, fixFromAnswer } from './ai/prompts.js';
 import { AiWizard, AskBackModal } from './ai/Wizard.jsx';
 import { MakerMark } from './MakerMark.jsx';
 import { CanvasStart } from './CanvasStart.jsx';
@@ -142,7 +142,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.28';
+export const APP_VERSION = '0.9.29';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -1003,6 +1003,7 @@ function Editor() {
     const docTitle = docsRef.current.list.find((x) => x.id === docId)?.title || g.title;
     const msgs = mode === 'review' ? buildReviewMessages(g, catalog, lintRef.current)
       : mode === 'ask' ? buildAskMessages(g, catalog, request, lintRef.current, askHistory.current)
+      : mode === 'arrange' ? buildArrangeMessages(g, catalog)
       : buildDrawMessages(g, catalog, request, lintRef.current);
     const ac = new AbortController();
     aiAbort.current?.abort();
@@ -1038,6 +1039,23 @@ function Editor() {
         return;
       }
       if (!j) j = parseJsonReply(raw);   // 검수·그리기는 JSON 이어야 한다 (못 읽으면 여기서 오류)
+      if (mode === 'arrange') {
+        // AI 정렬: AI 가 준 단·순서(columns)대로 기본 정렬이 자리를 잡는다. 바로 적용(Ctrl+Z 로 되돌림)
+        const plan = j.columns && typeof j.columns === 'object' ? j.columns : {};
+        const known = new Set([...g.groups.map((x) => x.id), ...g.nodes.map((x) => x.id)]);
+        let placed = 0;
+        for (const k of Object.keys(plan)) { if (k !== 'root' && !known.has(k)) { delete plan[k]; continue; } for (const col of plan[k] || []) for (const id of (Array.isArray(col) ? col : [])) if (known.has(String(id))) placed++; }
+        if (docsRef.current.active !== docId) { setAi({ busy: null, error: null, result: null }); toastMsg(`AI 정렬은 요청한 "${docTitle}" 탭에서만 적용됩니다. 그 탭에서 다시 누르십시오.`, 5000); return; }
+        const cur = currentGraph();
+        const all = [...cur.groups, ...cur.nodes];
+        autoArrange(cur, all.map((x) => x.id), isOverlay, new Set(all.filter((x) => x.locked).map((x) => x.id)), { plan });
+        const ok = tryCommit(cur);
+        if (ok) setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 30);
+        const summary = String(j.summary || '');
+        setAi({ busy: null, error: null, result: { mode: 'arrange', docId, docTitle, raw, at: Date.now(), ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary, placed, blocked: !ok } });
+        logAi({ k: 'arrange', q: 'AI 정렬', a: summary.slice(0, 400) }, docId);
+        return;
+      }
       const base = { mode, docId, docTitle, raw, at: Date.now(), ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary: String(j.summary || ''), ...intent };
       if (mode === 'review') {
         const { annotations, dropped } = findingsToAnnotations(j.findings, g);
@@ -1060,7 +1078,7 @@ function Editor() {
       if (ac.signal.aborted || e?.kind === 'cancel') { setAi({ busy: null, result: null, error: null }); return; }
       setAi({ busy: null, result: null, error: { message: e.message || String(e), detail: e.detail, kind: e.kind } });
     }
-  }, [aiSettings, catalog, commit, currentGraph, toastMsg, logAi]);
+  }, [aiSettings, catalog, commit, currentGraph, toastMsg, logAi, tryCommit, rf]);
 
   const runAiRef = useRef(runAi);
   // AI 결과 평가(👍👎): 만든 사람의 피드백 시트로 한 줄. 질문·답은 앞부분만
@@ -1389,7 +1407,7 @@ function Editor() {
       items.push({ label: '가로 정렬', options: [['left', '왼쪽'], ['hcenter', '가운데'], ['right', '오른쪽']], value: null, onPick: (v) => alignSel(v, ids) });
       items.push({ label: '세로 정렬', options: [['top', '위'], ['vcenter', '가운데'], ['bottom', '아래']], value: null, onPick: (v) => alignSel(v, ids) });
       if (ids.length >= 3) items.push({ label: '간격 맞추기', options: [['h', '가로'], ['v', '세로']], value: null, onPick: (v) => distributeSel(v, ids) });
-      items.push({ label: `${ids.length}개 자동 정렬`, hint: '빈 공간·크기·줄 맞춤', action: () => autoArrangeSel(ids) });
+      items.push({ label: `${ids.length}개 기본 정렬`, hint: '연결 흐름대로 · 빈 공간·크기·줄 맞춤', action: () => autoArrangeSel(ids) });
       items.push({ label: '개요도 새 탭에 만들기', hint: '그림 전체를 줄여서', action: makeCompact });
       if (canResizeCount(currentGraph(), ids) >= 2) items.push({ label: '크기 맞추기', options: [['w', '너비'], ['h', '높이'], ['both', '둘 다']], value: null, onPick: (v) => sameSizeSel(v, ids) });
     }
@@ -1496,7 +1514,8 @@ function Editor() {
     const flowPos = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY });
     const items = [
       { label: '여기에 글상자 추가', hint: '제목·설명·메모', action: () => addAt({ type: 'text' }, flowPos) },
-      { label: '전체 자동 정렬', hint: '빈 공간·크기·줄 맞춤', action: () => autoArrangeSel([]) },
+      { label: '전체 기본 정렬', hint: '연결 흐름대로 · 빈 공간·크기·줄 맞춤', action: () => autoArrangeSel([]) },
+      { label: 'AI 정렬', hint: 'AI 가 구역·순서를 정하고 기본 정렬로 배치', action: () => runAi('arrange') },
       { label: '개요도 새 탭에 만들기', hint: '제안서 한 칸용', action: makeCompact },
       ...(docMode === 'card'
         ? [{ label: '여기에 카드 추가', action: () => addAt({ type: 'card' }, flowPos) }, { label: '여기에 섹션 추가', action: () => addAt({ type: 'group', kind: 'section' }, flowPos) }]
@@ -1803,7 +1822,7 @@ function Editor() {
       load: (graph) => commit(normalizeGraph(graph), undefined, { fit: true }),
       update: { check: () => checkUpdate(false), apply: applyUpdate, state: () => updRef.current },
       select: (ids) => { const set = new Set(ids); rf.setNodes((ns) => ns.map((n) => ({ ...n, selected: set.has(n.id) }))); rf.setEdges((es) => es.map((x) => ({ ...x, selected: set.has(x.id) }))); },
-      ai: { review: () => runAi('review'), draw: (req) => runAi('draw', req), ask: (q) => runAi('ask', q), state: () => ai, settings: () => aiSettings, setSettings: setAiSettings, applyOps: applyAiOps, setContext: updateContext },
+      ai: { review: () => runAi('review'), draw: (req) => runAi('draw', req), ask: (q) => runAi('ask', q), arrange: () => runAi('arrange'), state: () => ai, settings: () => aiSettings, setSettings: setAiSettings, applyOps: applyAiOps, setContext: updateContext },
       guide: {
         state: () => guide, set: (s) => { setGuide(s); setPanel('guide'); }, start: startGuide,
         steps: (s) => visibleSteps(s || guide), ops: (step, s) => opsFor(step, s || guide),
@@ -2061,7 +2080,7 @@ function Editor() {
         ) : panel === 'help' ? (
           <Help isDesktop={isDesktop} ctx={nodes.length === 0 ? 'first' : selectedNodes.length > 1 ? 'align' : selectedEdges.length ? 'connect' : selectedNodes[0]?.type === 'awsGroup' ? 'boxes' : violations.length ? 'pins' : null} onPatch={() => setPanel('patch')} onTour={() => { setPanel(null); setTour(true); }} onCheckUpdate={() => checkUpdate(true)} updBusy={upd.busy} updInfo={upd.info} onToast={toastMsg} stats={{ groups: nodes.filter((n) => n.type === 'awsGroup').length, nodes: nodes.filter((n) => n.type !== 'awsGroup').length, edges: edges.length, mode: docMode, theme }} />
         ) : (
-          <Inspector allNodes={nodes} nodes={selectedNodes} edges={selectedEdges} onChange={updateItem} onChangeMany={updateMany} onWrap={wrapSelection} onGroup={groupSel} onUngroup={ungroupSel} onAlign={alignSel} onDistribute={distributeSel} onSameSize={sameSizeSel} onAutoArrange={() => autoArrangeSel()} onCompact={makeCompact} annotations={annotationsRef.current} violations={violations} onShowRules={() => setPanel('rules')} onStartGuide={startGuide} onAsk={(p) => runAi('ask', askAboutText(p))} stats={{ groups: nodes.filter((n) => n.type === 'awsGroup').length, icons: nodes.filter((n) => n.type === 'awsIcon').length, edges: edges.length }} />
+          <Inspector allNodes={nodes} nodes={selectedNodes} edges={selectedEdges} onChange={updateItem} onChangeMany={updateMany} onWrap={wrapSelection} onGroup={groupSel} onUngroup={ungroupSel} onAlign={alignSel} onDistribute={distributeSel} onSameSize={sameSizeSel} onAutoArrange={() => autoArrangeSel()} onAiArrange={() => runAi('arrange')} onCompact={makeCompact} annotations={annotationsRef.current} violations={violations} onShowRules={() => setPanel('rules')} onStartGuide={startGuide} onAsk={(p) => runAi('ask', askAboutText(p))} stats={{ groups: nodes.filter((n) => n.type === 'awsGroup').length, icons: nodes.filter((n) => n.type === 'awsIcon').length, edges: edges.length }} />
         )}
       </aside>
 
@@ -2211,7 +2230,7 @@ function TemplateMenu({ builtin, user, onPick, onSave, onSavePiece, onDelete, ha
 }
 
 // ---------------------------------------------------------------------------------------------
-function Inspector({ nodes, edges, onChange, onChangeMany, onWrap, onGroup, onUngroup, onAutoArrange, onCompact, onAlign, onDistribute, onSameSize, annotations, violations, onShowRules, onStartGuide, onAsk, stats, allNodes = [] }) {
+function Inspector({ nodes, edges, onChange, onChangeMany, onWrap, onGroup, onUngroup, onAutoArrange, onAiArrange, onCompact, onAlign, onDistribute, onSameSize, annotations, violations, onShowRules, onStartGuide, onAsk, stats, allNodes = [] }) {
   const catalog = useCatalog();
   const parentName = (id) => { const p = allNodes.find((n) => n.id === id); return p?.data?.label || catalog.kinds.get(p?.data?.kind)?.name || '그룹'; };
   const one = nodes.length + edges.length === 1 ? (nodes[0] || edges[0]) : null;
@@ -2245,7 +2264,8 @@ function Inspector({ nodes, edges, onChange, onChangeMany, onWrap, onGroup, onUn
                   <button className="al" title="가로 간격 같게 (3개 이상)" aria-label="가로 간격 같게" disabled={nodes.length < 3} onClick={() => onDistribute('h')}><AlignIcon kind="dist-h" /></button>
                   <button className="al" title="세로 간격 같게 (3개 이상)" aria-label="세로 간격 같게" disabled={nodes.length < 3} onClick={() => onDistribute('v')}><AlignIcon kind="dist-v" /></button>
                   <button className="al wide" title="그룹·카드 크기를 가장 큰 것에 맞춤" onClick={() => onSameSize('both')}>크기 맞추기</button>
-                  <button className="al wide primary" title="빈 공간을 줄이고, 나란한 상자 크기·간격과 아이콘 줄을 맞춥니다 (Ctrl+Z 로 되돌리기)" onClick={() => onAutoArrange()}><Icon name="sparkle" size={14} /> 자동 정렬</button>
+                  <button className="al wide primary" title="연결 흐름(왼쪽→오른쪽)대로 자리를 잡고, 빈 공간을 줄이고, 상자 크기·간격과 아이콘 줄을 맞춥니다 (Ctrl+Z 로 되돌리기)" onClick={() => onAutoArrange()}><Icon name="sparkle" size={14} /> 기본 정렬</button>
+                  <button className="al wide" title="AI 가 역할을 보고 구역 순서(입구 왼쪽 → 핵심 → 데이터 → 사내 오른쪽)와 상자 안 순서를 정하면, 기본 정렬이 그 순서대로 자리를 잡습니다. 1분쯤 걸림 (Ctrl+Z 로 되돌리기)" onClick={() => onAiArrange()}><Icon name="sparkle" size={14} /> AI 정렬</button>
                 </div>
               </div>
             )}
@@ -2264,6 +2284,12 @@ function Inspector({ nodes, edges, onChange, onChangeMany, onWrap, onGroup, onUn
             {violations.length > 0
               ? <button className="warnbtn" onClick={onShowRules}>규칙 위반 {violations.length}건 보기</button>
               : stats.groups + stats.icons > 0 && <p className="ok">규칙 위반 없음</p>}
+            {stats.groups + stats.icons > 1 && (
+              <div className="align-row" role="group" aria-label="전체 정렬">
+                <button className="al wide primary" title="연결 흐름(왼쪽→오른쪽)대로 자리를 잡고, 빈 공간을 줄이고, 상자 크기·간격과 아이콘 줄을 맞춥니다 (Ctrl+Z 로 되돌리기)" onClick={() => onAutoArrange()}><Icon name="sparkle" size={14} /> 기본 정렬</button>
+                <button className="al wide" title="AI 가 역할을 보고 구역 순서(입구 왼쪽 → 핵심 → 데이터 → 사내 오른쪽)와 상자 안 순서를 정하면, 기본 정렬이 그 순서대로 자리를 잡습니다. 1분쯤 걸림 (Ctrl+Z 로 되돌리기)" onClick={() => onAiArrange()}><Icon name="sparkle" size={14} /> AI 정렬</button>
+              </div>
+            )}
             {stats.groups + stats.icons > 0 && <button className="al wide" title="같은 구조 반복은 하나로 합치고 보조 요소는 빼서, 슬라이드 한 칸에 들어가는 그림을 새 탭에 만듭니다. 원본은 그대로입니다." onClick={onCompact}><Icon name="arrow" size={14} /> 개요도 새 탭에 만들기</button>}
             <p className="hint">왼쪽에서 아이콘을 끌어다 놓고, 노드 가장자리 점을 끌어 다른 노드에 놓으면 연결됩니다. 그룹 안에 놓으면 그 그룹에 들어가고, 그룹을 끌면 안의 것이 같이 움직입니다.</p>
             <p className="hint">빈 곳 드래그: 영역 선택 · Space+드래그(또는 휠 버튼): 화면 이동 · Shift+클릭: 여러 개 선택(선도 가능) · 그룹 선택 후 모서리로 크기 조절</p>

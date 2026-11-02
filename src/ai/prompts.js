@@ -109,6 +109,28 @@ const CARD_NOTE = `\n\n이 다이어그램은 "솔루션 구성도"(카드 모�
 검수 관점은 요건 커버리지다 — 요건서 항목 중 카드로 표현되지 않은 것, 설명이 모호한 카드, 연동 흐름이 끊긴 곳, 제안서에서 강조해야 할 차별점이 빠진 곳. 서브넷/AZ 같은 인프라 규칙은 보지 않는다.`;
 const CARD_DRAW_NOTE = `\n\n카드 모드다: 기능 블록은 {"op":"add_card","id"?,"icon"?,"label":"제목","body":"설명 1~2줄","parent"?,"w"?,"h"?} 로, 묶음은 {"op":"add_group","kind":"section","label":"섹션 이름","color"?:"#RRGGBB"} 로 만든다. 아이콘 노드(add_node)보다 카드를 우선 쓴다.`;
 
+export const ARRANGE_SYSTEM = `${COMMON_SYSTEM}
+
+역할: 다이어그램의 배치안을 정한다. 좌표는 쓰지 않는다. 상자(그룹)마다 그 안의 자식(그룹·노드)을 "단"(왼쪽→오른쪽 흐름)으로 나누고, 단 안에서는 위→아래 순서를 정한다. 앱이 이 순서대로 자리를 잡고 크기·간격을 맞춘다.
+읽는 사람이 흐름을 따라갈 수 있게: 입구(사용자·고객 채널·인터넷)는 왼쪽, 핵심 처리(Connect·ALB·앱)는 가운데, 데이터·분석·연동은 오른쪽, 사내 시스템·온프레미스는 맨 오른쪽. 같은 역할끼리는 한 단에 세로로 모은다(고객 채널 5개 → 한 단). 서로 많이 이어진 것은 이웃한 단에.
+AZ 끼리, VPC 끼리는 각각 다른 단(옆으로 나란히). 서브넷은 AZ 안에서 Public → Private 순서로 한 단에 하나씩. 아이콘이 한 단에 넷 넘게 몰리면 둘로 나눈다.
+모든 부모(최상위 = "root" 와 그룹 id)마다 그 부모의 직접 자식 전부를 정확히 한 번씩 쓴다. 겹치는 상자(auto-scaling·security-group 등 members 가 있는 것)는 쓰지 않는다. 자식이 하나뿐인 부모는 생략해도 된다.
+
+출력 형식(JSON 만):
+{
+  "summary": "어떻게 배치했는지 1~2문장(구역 순서와 이유)",
+  "columns": {
+    "root": [["users","channels"], ["region"], ["onprem"]],
+    "region": [["ai-tier"], ["connect-core"], ["data-tier"]],
+    "connect-core": [["connect"], ["agent-ws","flows","outbound"]]
+  }
+}`;
+
+export function buildArrangeMessages(graph, catalog) {
+  const user = `# 제안서 컨텍스트\n${contextText(graph.context)}\n\n# 현재 다이어그램: ${graph.title}\n${summarizeGraph(graph, catalog)}\n\n# 배치 요청\n위 다이어그램의 배치안을 출력 형식대로 JSON 으로 적어라. 부모마다 직접 자식 id 만 쓰고(손자는 그 부모 항목에), id 는 위 목록의 것을 그대로 쓴다.`;
+  return { system: ARRANGE_SYSTEM, user };
+}
+
 export function buildReviewMessages(graph, catalog, violations) {
   const card = graph.mode === 'card';
   const user = `# 제안서 컨텍스트\n${contextText(graph.context)}\n\n# 현재 다이어그램: ${graph.title}${card ? ' (솔루션 구성도)' : ''}\n${summarizeGraph(graph, catalog)}\n\n# 자동 규칙 검사 결과\n${card ? '(카드 모드: 인프라 규칙 검사 없음)' : violationsText(violations)}\n\n위 다이어그램을 검수해서 JSON 으로 답해줘.`;

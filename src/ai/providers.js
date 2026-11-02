@@ -189,6 +189,10 @@ async function askMock({ user }) {
       ],
       drawRequest: '(mock) CloudFront 와 S3 를 추가하고 사용자와 연결' });
   }
+  if (/# 배치 요청/.test(user)) {
+    const ids = [...user.matchAll(/^\s*- (?:group|node|card) ([\w-]+):/gm)].map((m) => m[1]);
+    return JSON.stringify({ summary: '(mock) 목록 순서대로 둘씩 한 단에 두었습니다.', columns: { root: ids.filter((_, i) => i % 2 === 0).map((id, i) => [id, ids[i * 2 + 1]].filter(Boolean)) } });
+  }
   if (/요청을 ops 로/.test(user)) {
     return JSON.stringify({ summary: '(mock) 사용자와 ALB 사이에 CloudFront 와 WAF 를 넣고 S3 를 연결했습니다.', ops: [
       { op: 'add_node', id: 'cf', icon: 'Arch_Amazon-CloudFront', label: 'Amazon CloudFront', parent: null, x: 40, y: 300 },
