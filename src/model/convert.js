@@ -1,6 +1,6 @@
 // JSON 그래프 <-> React Flow 노드/엣지.
 // 그리는 순서: 그룹은 groups 배열 순서대로 zIndex 를 주고, 엣지는 그룹 위, 아이콘은 맨 위.
-import { normalizeGraph, sortGroups, SCHEMA, ICON_SIZE } from './schema.js';
+import { normalizeGraph, sortGroups, SCHEMA, ICON_SIZE, LABEL_DROP } from './schema.js';
 import { isOverlay } from './contain.js';
 import { absoluteRects, portOffsets } from './geometry.js';
 
@@ -42,7 +42,8 @@ export function graphToFlow(input) {
       data: { locked: !!n.locked, dark, ...(n.set ? { set: n.set } : {}), icon: n.icon, label: n.label, pins: pins.get(n.id) || [], ...(card ? { body: n.body, accent: n.accent } : {}), ...(text ? { size: n.size, bold: n.bold, accent: n.accent } : {}), ...(badge ? { accent: n.accent } : {}) },
     });
   });
-  const ports = portOffsets(g.edges, absoluteRects(g));
+  const labeled = new Set(g.nodes.filter((n) => n.type !== 'card' && n.type !== 'text' && n.type !== 'badge' && n.label).map((n) => n.id));
+  const ports = portOffsets(g.edges, absoluteRects(g), (id) => (labeled.has(id) ? LABEL_DROP : 0));
   const edges = g.edges.map((e) => edgeToFlow(e, pins.get(e.id), g.theme, ports.get(e.id)));
   return { nodes, edges, title: g.title, annotations: g.annotations, context: g.context, mode: g.mode, theme: g.theme };
 }
@@ -58,7 +59,7 @@ export function edgeToFlow(e, pins = [], theme = 'light', po = null) {
     zIndex: Z_EDGE,
     ...(e.arrow !== 'none' ? { markerEnd: ARROW(theme) } : {}),
     ...(e.arrow === 'both' ? { markerStart: ARROW(theme) } : {}),
-    data: { label: e.label, line: e.line, shape: e.shape, arrow: e.arrow, pins, ...(typeof e.bend === 'number' ? { bend: e.bend } : {}), ...(e.sp ? { sp: e.sp } : {}), ...(e.tp ? { tp: e.tp } : {}), ...(po && (po.s || po.t) ? { po } : {}) },
+    data: { label: e.label, line: e.line, shape: e.shape, arrow: e.arrow, pins, ...(typeof e.bend === 'number' ? { bend: e.bend } : {}), ...(e.sp ? { sp: e.sp } : {}), ...(e.tp ? { tp: e.tp } : {}), ...(po && (po.s || po.t || po.b != null) ? { po } : {}) },
   };
 }
 

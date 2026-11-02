@@ -131,11 +131,20 @@ export function graphToScene(graph, catalog, include = null, { textScale = 1 } =
     if (icon) shapes.push({ t: 'pic', id: c.id + '#icon', name: catalog.icons.get(icon).name, x: E(r.x + 12), y: E(r.y + 10), w: E(32), h: E(32), media: useMedia(icon) });
   }
 
+  // 1c) 아이콘 뒤 바탕(연결선이 아이콘을 가르지 않게). 연결선보다 먼저 그려야 화살촉이 바탕에 묻히지 않는다
+  const haloFill = dark ? '#0B1416' : '#FFFFFF';
+  for (const n of graph.nodes) {
+    if (!has(n.id) || n.type === 'card' || n.type === 'text' || n.type === 'badge' || !catalog.icons.has(n.icon)) continue;
+    const r = rects.get(n.id);
+    shapes.push({ t: 'rect', id: n.id + '#halo', name: '바탕', x: E(r.x - 3), y: E(r.y - 3), w: E(ICON_SIZE + 6), h: E(ICON_SIZE + 6), prst: 'roundRect', fill: haloFill, fillAlpha: 86, line: null });
+  }
+
   // 2) 연결선: 그룹 위, 아이콘 아래. 아이콘의 아래 면으로 나갈 때는 라벨 글상자 밑에 붙인다.
   const labeled = new Map(graph.nodes.filter((n) => n.type !== 'card' && n.label && catalog.icons.has(n.icon)).map((n) => [n.id, true]));
   const edgeLabels = [];
   const drawn = drawnIds(graph, catalog);
-  const ports = portOffsets(graph.edges, rects);
+  const ports = portOffsets(graph.edges, rects, (id) => (labeled.has(id) ? LABEL_DROP : 0));
+  const bendOfEdge = (e) => (typeof e.bend === 'number' ? e.bend : (ports.get(e.id) || {}).b);
   const sites = new Map();   // 도형 id → 쓰인 연결점 [{ side, off }] (면 중앙 말고 다른 곳에 붙는 도형만 custom geometry 로)
   for (const e of graph.edges) {
     const okEnd = (id, pt) => (id ? has(id) && drawn.has(id) : !!pt);
@@ -156,7 +165,7 @@ export function graphToScene(graph, catalog, include = null, { textScale = 1 } =
     };
     shapes.push({
       t: 'cxn', id: e.id, name: e.label ? `연결: ${e.label}` : '연결선',
-      ...connectorXfrm(geo, e.shape, e.bend),
+      ...connectorXfrm(geo, e.shape, bendOfEdge(e)),
       ...(e.source ? { st: anchor(e.source, geo.s, po.s || 0) } : {}),   // 빈 끝은 도형에 붙이지 않는다
       ...(e.target ? { end: anchor(e.target, geo.t, po.t || 0) } : {}),
       line: { color: edgeColor, w: LINE_EMU, dash: e.line === 'dashed' ? 'dash' : null },
@@ -164,7 +173,7 @@ export function graphToScene(graph, catalog, include = null, { textScale = 1 } =
       tail: e.arrow === 'none' ? 'none' : 'triangle',
     });
     if (e.label) {
-      const { mid } = edgePath(geo, e.shape, e.bend);
+      const { mid } = edgePath(geo, e.shape, bendOfEdge(e));
       const mx = mid.x, my = mid.y;
       edgeLabels.push({
         t: 'text', id: e.id + '#label', name: e.label, x: E(mx - 50), y: E(my - 18), w: E(100), h: E(16),
@@ -179,9 +188,6 @@ export function graphToScene(graph, catalog, include = null, { textScale = 1 } =
     const r = rects.get(n.id);
     const key = useMedia(n.icon);
     if (!key) continue;
-    // 아이콘 뒤 바탕(연결선이 아이콘을 가르지 않게). 화면과 같은 반투명
-    const haloFill = dark ? '#0B1416' : '#FFFFFF';
-    shapes.push({ t: 'rect', id: n.id + '#halo', name: '바탕', x: E(r.x - 3), y: E(r.y - 3), w: E(ICON_SIZE + 6), h: E(ICON_SIZE + 6), prst: 'roundRect', fill: haloFill, fillAlpha: 86, line: null });
     shapes.push({ t: 'pic', id: n.id, name: n.label || catalog.icons.get(n.icon).name, x: E(r.x), y: E(r.y), w: E(ICON_SIZE), h: E(ICON_SIZE), media: key });
     if (n.label) {
       shapes.push({

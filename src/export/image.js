@@ -79,11 +79,11 @@ export function graphToSvg(graph, catalog, include = null, { background = 'trans
   for (const e of edges) for (const p of [e.sp, e.tp]) if (p) grow(p.x - 6, p.y - 6, 12, 12);   // 빈 끝도 범위에
   const texts = graph.nodes.filter((n) => has(n.id) && (n.type === 'text' || n.type === 'badge'));
   for (const c of texts) { const r = rects.get(c.id); grow(r.x, r.y, r.w, r.h); }
-  const ports = portOffsets(edges, rects);
+  const ports = portOffsets(edges, rects, (id) => (labeled.has(id) ? LABEL_DROP : 0));
   const edgeGeos = edges.map((e) => {
     const po = ports.get(e.id) || {};
     const geo = edgeGeometry(endRect(rects, e.source, e.sp), endRect(rects, e.target, e.tp), labeled.has(e.source) ? LABEL_DROP : 0, labeled.has(e.target) ? LABEL_DROP : 0, po.s || 0, po.t || 0);
-    const path = edgePath(geo, e.shape, e.bend);
+    const path = edgePath(geo, e.shape, typeof e.bend === 'number' ? e.bend : po.b);
     grow(Math.min(geo.p1.x, geo.p2.x), Math.min(geo.p1.y, geo.p2.y), Math.abs(geo.p1.x - geo.p2.x), Math.abs(geo.p1.y - geo.p2.y));
     return { e, geo, path };
   });
@@ -115,6 +115,9 @@ export function graphToSvg(graph, catalog, include = null, { background = 'trans
       out.push(`<text x="${X(lx)}" y="${Y(ly)}" dominant-baseline="hanging" font-size="${LABEL_PX_S}" font-weight="500" fill="${paint.text}">${esc(g.label)}</text>`);
     }
   }
+  // 아이콘 뒤 바탕: 연결선보다 먼저 그려야 화살촉이 바탕에 묻히지 않는다
+  const haloC = background === 'white' && graph.theme !== 'dark' ? '#ffffff' : T.halo;
+  for (const n of nodes) { const r = rects.get(n.id); out.push(`<rect x="${X(r.x - 3)}" y="${Y(r.y - 3)}" width="${ICON_SIZE + 6}" height="${ICON_SIZE + 6}" rx="9" fill="${haloC}" fill-opacity="0.86"/>`); }
   // 연결선
   for (const { e, path } of edgeGeos) {
     const markers = (e.arrow !== 'none' ? ' marker-end="url(#arr)"' : '') + (e.arrow === 'both' ? ' marker-start="url(#arr)"' : '');
@@ -158,7 +161,6 @@ export function graphToSvg(graph, catalog, include = null, { background = 'trans
     const r = rects.get(n.id);
     // 아이콘·이름표 뒤 바탕: 지나가는 선이 아이콘·글자를 가르지 않게 (캔버스와 같은 반투명)
     const halo = background === 'white' && graph.theme !== 'dark' ? '#ffffff' : T.halo;
-    out.push(`<rect x="${X(r.x - 3)}" y="${Y(r.y - 3)}" width="${ICON_SIZE + 6}" height="${ICON_SIZE + 6}" rx="9" fill="${halo}" fill-opacity="0.86"/>`);
     out.push(`<image x="${X(r.x)}" y="${Y(r.y)}" width="${ICON_SIZE}" height="${ICON_SIZE}" href="${catalog.icons.get(themedIcon(catalog.icons, n.icon, graph.theme === 'dark')).src}"/>`);
     if (n.label) {
       const lines = wrapText(n.label, LABEL_WIDTH, LABEL_PX_S);

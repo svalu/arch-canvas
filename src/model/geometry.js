@@ -72,7 +72,7 @@ export const PORT_GAP_MAX = 28;   // 포트 사이 최대 간격(px). 아이콘(
  * 반대쪽 끝이 있는 방향 순서로 배정해서 포트 앞에서 서로 꼬이지 않는다.
  * 반환: Map edgeId → { s, t } = 면 중앙에서의 px 오프셋(위·아래 면은 x, 왼쪽·오른쪽 면은 y). 캔버스·PNG·PowerPoint 가 같이 쓴다.
  */
-export function portOffsets(edges, rects) {
+export function portOffsets(edges, rects, drops = () => 0) {
   const bySide = new Map();   // "id:side" → [{ e, end, far, len }]
   for (const e of edges) {
     const a = endRect(rects, e.source, e.sp), b = endRect(rects, e.target, e.tp);
@@ -97,7 +97,88 @@ export function portOffsets(edges, rects) {
     const gap = Math.min(PORT_GAP_MAX, list[0].len / (list.length + 1));
     list.forEach((p, i) => { get(p.e.id)[p.end] = Math.round((i - (list.length - 1) / 2) * gap * 10) / 10; });
   }
+  staggerBends(edges, rects, drops, bySide, out);
   return out;
+}
+
+export const BEND_GAP = 12;    // 같은 면으로 모이는 직각선들의 꺾임 간격(px)
+export const BEND_MIN = 18;    // 면에서 첫 꺾임까지
+
+/**
+ * 꺾임 계단 배치(채널 라우팅): 같은 면으로 모이는 직각선들은 꺾이는 위치를 면에서 18, 30, 42px… 로 비켜 둔다.
+ * 전부 가운데(0.5)에서 꺾으면 세로 구간이 서로 엇갈려 어느 선이 어디로 가는지 안 보이기 때문.
+ * 순서는 선끼리 교차가 가장 적은 배열을 고른다(≤6개는 전부 시도, 그 이상은 긴 구간이 바깥).
+ * 결과는 out 의 b(꺾임 비율, PowerPoint bentConnector3 adj1 과 같은 뜻). 사용자가 직접 옮긴 꺾임(edge.bend)이 있으면 쓰는 쪽에서 그것을 우선한다.
+ */
+function staggerBends(edges, rects, drops, bySide, out) {
+  // 선마다 더 붐비는 쪽 면을 고른다(허브 쪽). 둘 다 1개면 계단 없음
+  const pick = new Map();   // edgeId → { key, end }
+  for (const [key, list] of bySide) {
+    if (list.length < 2) continue;
+    for (const p of list) {
+      const cur = pick.get(p.e.id);
+      if (!cur || list.length > bySide.get(cur.key).length || (list.length === bySide.get(cur.key).length && p.end === 't')) pick.set(p.e.id, { key, end: p.end });
+    }
+  }
+  const byKey = new Map();
+  for (const [id, v] of pick) { if (!byKey.has(v.key)) byKey.set(v.key, []); byKey.get(v.key).push(id); }
+  const geoOf = new Map();
+  for (const e of edges) {
+    if (!pick.has(e.id) || e.shape !== 'elbow') continue;
+    const a = endRect(rects, e.source, e.sp), b = endRect(rects, e.target, e.tp);
+    const po = out.get(e.id) || { s: 0, t: 0 };
+    const geo = edgeGeometry(a, b, drops(e.source), drops(e.target), po.s, po.t);
+    if (Math.abs(geo.p1.x - geo.p2.x) < 1 || Math.abs(geo.p1.y - geo.p2.y) < 1) continue;   // 직선이면 꺾임 없음
+    geoOf.set(e.id, geo);
+  }
+  for (const [key, ids0] of byKey) {
+    const ids = ids0.filter((id) => geoOf.has(id));
+    if (ids.length < 2) continue;
+    const side = key.slice(key.lastIndexOf(':') + 1);
+    const vert = side === 'l' || side === 'r';   // 면이 세로면 → 선은 가로로 나가고 꺾임은 x 위치
+    // 선 i 가 면에서 d 만큼 떨어진 곳에서 꺾일 때의 꺾임 비율과 3구간 꺾은선
+    const polyAt = (id, d) => {
+      const geo = geoOf.get(id), { p1, p2 } = geo;
+      const end = pick.get(id).end;
+      const at = end === 's' ? p1 : p2, other = end === 's' ? p2 : p1;
+      const dir = vert ? Math.sign(other.x - at.x) : Math.sign(other.y - at.y);
+      const span = vert ? Math.abs(p2.x - p1.x) : Math.abs(p2.y - p1.y);
+      if (span < d + 8) return null;
+      const m = vert ? at.x + dir * d : at.y + dir * d;
+      const k = vert ? (m - p1.x) / (p2.x - p1.x) : (m - p1.y) / (p2.y - p1.y);
+      const pts = vert ? [p1, { x: m, y: p1.y }, { x: m, y: p2.y }, p2] : [p1, { x: p1.x, y: m }, { x: p2.x, y: m }, p2];
+      return { k: Math.round(k * 1000) / 1000, pts };
+    };
+    const crosses = (A, B) => {
+      let n = 0;
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) if (segCross(A[i], A[i + 1], B[j], B[j + 1])) n++;
+      return n;
+    };
+    const score = (order) => {
+      const polys = order.map((id, i) => polyAt(id, BEND_MIN + i * BEND_GAP));
+      let n = 0;
+      for (let i = 0; i < polys.length; i++) for (let j = i + 1; j < polys.length; j++) if (polys[i] && polys[j]) n += crosses(polys[i].pts, polys[j].pts);
+      return n;
+    };
+    const spanOf = (id) => { const g = geoOf.get(id); return vert ? Math.abs(g.p2.y - g.p1.y) : Math.abs(g.p2.x - g.p1.x); };
+    let best = [...ids].sort((p, q) => spanOf(p) - spanOf(q)), bestScore = score(best);   // 기본: 짧은 구간이 안쪽
+    if (ids.length <= 6) {
+      for (const order of permutations(ids)) { const s = score(order); if (s < bestScore) { best = order; bestScore = s; if (!s) break; } }
+    }
+    best.forEach((id, i) => { const r = polyAt(id, BEND_MIN + i * BEND_GAP); if (r) out.get(id).b = r.k; });
+  }
+}
+
+function* permutations(arr) {
+  if (arr.length <= 1) { yield arr; return; }
+  for (let i = 0; i < arr.length; i++) for (const rest of permutations([...arr.slice(0, i), ...arr.slice(i + 1)])) yield [arr[i], ...rest];
+}
+
+// 두 선분이 서로 가로지르는지(끝점이 닿는 것·같은 선 위는 제외)
+function segCross(a, b, c, d) {
+  const o = (p, q, r) => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
+  const o1 = o(a, b, c), o2 = o(a, b, d), o3 = o(c, d, a), o4 = o(c, d, b);
+  return o1 !== o2 && o3 !== o4 && o1 !== 0 && o2 !== 0 && o3 !== 0 && o4 !== 0;
 }
 
 /** 선 한쪽 끝의 사각형: 요소면 그 사각형, 빈 곳이면 크기 0 인 점 */
