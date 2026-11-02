@@ -132,7 +132,7 @@ export const AwsIcon = memo(function AwsIcon({ data, selected }) {
       {icon ? <img src={icon.src} draggable={false} alt="" /> : <div className="ico-missing">?</div>}
       {data.label && (
         <div className="ico-label" style={{ width: LABEL_WIDTH, left: -(LABEL_WIDTH - 48) / 2, top: 48 + ICON_LABEL_GAP, fontSize: `calc(${LABEL_PX}px * var(--label-scale, 1))`, color: INK }}>
-          {data.label}
+          <span>{data.label}</span>
         </div>
       )}
       <Pins pins={data.pins} />

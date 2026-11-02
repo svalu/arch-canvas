@@ -54,6 +54,9 @@ try {
   console.log(`graph: ${graph.groups.length} groups, ${graph.nodes.length} nodes, ${graph.edges.length} edges`);
   fs.mkdirSync(path.join(root, '_dev'), { recursive: true });
   fs.writeFileSync(path.join(root, '_dev', 'e2e_graph.json'), JSON.stringify(graph, null, 2));
+  // 검증용 장면: 앱이 PowerPoint 로 보내는 것과 같은 JSON (verify_ppt.ps1 이 클립보드와 맞춰 본다)
+  const scene = await evaluate('JSON.stringify(window.__arch.scene())');
+  fs.writeFileSync(path.join(root, '_dev', 'e2e_scene.json'), scene);
   await evaluate('window.__arch.copyAll()');
   await sleep(800);   // 호스트가 클립보드에 쓸 시간
   console.log('copyAll sent');

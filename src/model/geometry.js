@@ -129,7 +129,7 @@ export function descendants(g, id) {
   return out;
 }
 
-const PAD = 24;
+const PAD = 32;
 const LABEL_SPACE = 34; // 아이콘 아래 라벨 공간
 
 /** 자식이 그룹 밖으로 삐져나오면 그룹을 키운다(줄이지는 않음). 안쪽 그룹부터 처리. */
@@ -275,7 +275,7 @@ function pushSiblings(g, grp, old, GAP) {
  */
 export function tightenGroups(g, ids, isOverlay = () => false) {
   if (!ids?.size) return g;
-  const L = 24, T = 48, R = 24, B = 20;                // 왼쪽·위(이름표 자리)·오른쪽·아래 여백
+  const L = 32, T = 56, R = 32, B = 32;                // 왼쪽·위(이름표 자리)·오른쪽·아래 여백
   const half = Math.max(0, (LABEL_WIDTH - ICON_SIZE) / 2);   // 아이콘 이름표가 양옆으로 넘치는 폭
   const depth = depthMap(g);
   const order = g.groups.filter((x) => ids.has(x.id) && !isOverlay(x)).sort((a, b) => depth.get(b.id) - depth.get(a.id));

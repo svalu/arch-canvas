@@ -34,7 +34,8 @@ const TOPICS = [
     '왼쪽 팔레트에서 끌어다 놓거나, 클릭하면 화면 가운데에 들어갑니다.',
     '상자를 고르면 그 안에 넣을 만한 것, 아이콘을 고르면 옆에 붙여 연결할 것이 팔레트 위에 추천됩니다.',
     '팔레트 위쪽 [글상자] [번호]로 설명과 순번을 붙입니다. 번호는 다음 수가 자동으로 붙습니다.',
-  ], spot: ['.palette'] },
+    '빈 곳을 끌면 영역 선택, Space 를 누른 채 끌면 화면 이동(일러스트와 같습니다). 휠로 확대·축소, 휠 버튼 끌기로도 이동합니다.',
+  ], keys: ['Space+끌기 화면 이동', '끌기 영역 선택'], spot: ['.palette'] },
   { id: 'connect', group: 'draw', title: '선 잇기', lines: [
     '아이콘 가장자리의 작은 점을 끌어 다른 아이콘 위에 놓으면 연결됩니다.',
     '선을 선택하면 양 끝 손잡이로 대상을 바꾸거나, 빈 곳에 끝을 놓아 둘 수 있습니다.',
@@ -140,7 +141,7 @@ const SHORTCUTS = [
   ['파일', ['Ctrl+S 저장', 'Ctrl+Shift+S 다른 이름', 'Ctrl+O 열기', 'Ctrl+T 새 탭', 'Ctrl+Shift+T 닫은 탭 열기']],
   ['고치기', ['Ctrl+Z 되돌리기', 'Ctrl+Y 다시', 'Ctrl+C 복사', 'Ctrl+V 붙이기', 'Ctrl+X 잘라내기', 'Ctrl+D 복제', 'Delete 지우기', 'F2 이름', 'Esc 선택 해제']],
   ['정리', ['Ctrl+A 전체 선택', 'Ctrl+G 묶기', 'Ctrl+Shift+G 풀기', 'Ctrl+L 잠금', 'Ctrl+] 앞으로', 'Ctrl+[ 뒤로', 'Alt+끌기 상자만', '화살표 1px 옮기기', 'Shift+화살표 10px']],
-  ['보기·내보내기', ['Ctrl+F 찾기', 'Ctrl+C 그림 복사 (선택 없을 때)', 'Ctrl+Shift+C PowerPoint 도형']],
+  ['보기·내보내기', ['Space+끌기 화면 이동', '끌기 영역 선택', 'Ctrl+F 찾기', 'Ctrl+C 그림 복사 (선택 없을 때)', 'Ctrl+Shift+C PowerPoint 도형']],
 ];
 
 // "Ctrl+Shift+T 닫은 탭 열기" → [Ctrl+Shift+T] 닫은 탭 열기

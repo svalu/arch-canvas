@@ -165,10 +165,13 @@ export function graphToScene(graph, catalog, include = null, { textScale = 1 } =
     const r = rects.get(n.id);
     const key = useMedia(n.icon);
     if (!key) continue;
+    // 아이콘 뒤 바탕(연결선이 아이콘을 가르지 않게). 화면과 같은 반투명
+    const haloFill = dark ? '#0B1416' : '#FFFFFF';
+    shapes.push({ t: 'rect', id: n.id + '#halo', name: '바탕', x: E(r.x - 3), y: E(r.y - 3), w: E(ICON_SIZE + 6), h: E(ICON_SIZE + 6), prst: 'roundRect', fill: haloFill, fillAlpha: 86, line: null });
     shapes.push({ t: 'pic', id: n.id, name: n.label || catalog.icons.get(n.icon).name, x: E(r.x), y: E(r.y), w: E(ICON_SIZE), h: E(ICON_SIZE), media: key });
     if (n.label) {
       shapes.push({
-        t: 'text', id: n.id + '#label', name: n.label,
+        t: 'text', id: n.id + '#label', name: n.label, fill: haloFill, fillAlpha: 86,
         x: E(r.x + ICON_SIZE / 2 - LABEL_WIDTH / 2), y: E(r.y + ICON_SIZE + ICON_LABEL_GAP), w: E(LABEL_WIDTH), h: E(ICON_LABEL_H),
         text: { value: n.label, sz: sz(LABEL_PT * 100), color: inkColor, bold: false, align: 'ctr', anchor: 't', wrap: 'square', l: 0, t: 0, r: 0, b: 0 },
       });

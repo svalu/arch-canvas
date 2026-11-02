@@ -49,8 +49,8 @@ export function wrapText(text, width, px, maxLines = 2) {
  * @param background 'transparent' | 'white'
  */
 export const THEME = {
-  light: { bg: '#ffffff', ink: INK, cardBg: '#ffffff', cardBorder: '#cfd6df', cardBody: '#5b6472', edge: INK, labelBg: '#fafbfc' },
-  dark: { bg: '#0b1416', ink: '#e6f6f3', cardBg: '#101d20', cardBorder: '#1f3a3a', cardBody: '#8fb3ad', edge: '#7fe3d6', labelBg: '#101d20' },
+  light: { bg: '#ffffff', ink: INK, cardBg: '#ffffff', cardBorder: '#cfd6df', cardBody: '#5b6472', edge: INK, labelBg: '#fafbfc', halo: '#fafbfc' },
+  dark: { bg: '#0b1416', ink: '#e6f6f3', cardBg: '#101d20', cardBorder: '#1f3a3a', cardBody: '#8fb3ad', edge: '#7fe3d6', labelBg: '#101d20', halo: '#0b1416' },
 };
 
 export function graphToSvg(graph, catalog, include = null, { background = 'transparent', padding = 24, textScale = 1 } = {}) {
@@ -153,10 +153,14 @@ export function graphToSvg(graph, catalog, include = null, { background = 'trans
   // 아이콘 + 라벨
   for (const n of nodes) {
     const r = rects.get(n.id);
+    // 아이콘·이름표 뒤 바탕: 지나가는 선이 아이콘·글자를 가르지 않게 (캔버스와 같은 반투명)
+    const halo = background === 'white' && graph.theme !== 'dark' ? '#ffffff' : T.halo;
+    out.push(`<rect x="${X(r.x - 3)}" y="${Y(r.y - 3)}" width="${ICON_SIZE + 6}" height="${ICON_SIZE + 6}" rx="9" fill="${halo}" fill-opacity="0.86"/>`);
     out.push(`<image x="${X(r.x)}" y="${Y(r.y)}" width="${ICON_SIZE}" height="${ICON_SIZE}" href="${catalog.icons.get(n.icon).src}"/>`);
     if (n.label) {
       const lines = wrapText(n.label, LABEL_WIDTH, LABEL_PX_S);
       const cx = X(r.x + ICON_SIZE / 2), top = Y(r.y + ICON_SIZE + ICON_LABEL_GAP);
+      lines.forEach((ln, i) => { const w = measure(ln, LABEL_PX_S) + 8; out.push(`<rect x="${+(cx - w / 2).toFixed(1)}" y="${+(top + i * LABEL_LINE_H_S - 1).toFixed(1)}" width="${w.toFixed(1)}" height="${LABEL_LINE_H_S.toFixed(1)}" rx="4" fill="${halo}" fill-opacity="0.86"/>`); });
       lines.forEach((ln, i) => out.push(`<text x="${cx}" y="${+(top + i * LABEL_LINE_H_S).toFixed(1)}" text-anchor="middle" dominant-baseline="hanging" font-size="${LABEL_PX_S}" fill="${T.ink}">${esc(ln)}</text>`));
     }
   }

@@ -142,7 +142,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.20';
+export const APP_VERSION = '0.9.21';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -428,6 +428,15 @@ function Editor() {
   // 웹 버전 첫 안내: 작업은 이 브라우저에 저장된다
   const [webNote, setWebNote] = useState(() => { try { return !window.desktop && localStorage.getItem('arch-canvas:web-note') !== '1'; } catch { return false; } });
   const closeWebNote = () => { setWebNote(false); try { localStorage.setItem('arch-canvas:web-note', '1'); } catch { /* */ } };
+  // Space 를 누르고 있는 동안 손 모양 커서 (화면 이동 자체는 React Flow 의 panActivationKeyCode 가 한다)
+  useEffect(() => {
+    const typing = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+    const down = (e) => { if (e.code === 'Space' && !typing(e.target)) document.body.classList.add('space-pan'); };
+    const up = (e) => { if (e.code === 'Space') document.body.classList.remove('space-pan'); };
+    const blur = () => document.body.classList.remove('space-pan');
+    window.addEventListener('keydown', down); window.addEventListener('keyup', up); window.addEventListener('blur', blur);
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', blur); };
+  }, []);
   // 맥: 화면의 단축키 표기를 ⌘/⌥ 로 (Ctrl+Tab 은 맥에서도 Ctrl)
   useEffect(() => {
     if (!IS_MAC) return undefined;
@@ -1790,6 +1799,7 @@ function Editor() {
       exportSvg: (selectedOnly = false) => renderSvg(selectedOnly),
       exportPng: async (selectedOnly = false, scale = 2) => { const r = renderSvg(selectedOnly); const b = await svgToPng(r.svg, r.width, r.height, scale); return new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(b); }); },
       copyAll: () => copyPpt(false),
+      scene: () => graphToScene(currentGraph(), catalog, null, { textScale: viewRef.current?.textScale ?? 1 }),   // 테스트: PowerPoint 로 보낼 장면 그대로
       copySelected: () => copyPpt(true),
     };
     return () => { delete window.__arch; };
@@ -1947,7 +1957,9 @@ function Editor() {
           connectionMode={ConnectionMode.Loose}
           connectionRadius={36}
           selectionMode={SelectionMode.Partial}
-          selectionOnDrag={false}
+          panOnDrag={[1]}
+          panActivationKeyCode="Space"
+          selectionOnDrag
           selectionKeyCode="Shift"
           multiSelectionKeyCode={['Shift', 'Control', 'Meta']}
           deleteKeyCode={['Delete', 'Backspace']}
@@ -2240,7 +2252,7 @@ function Inspector({ nodes, edges, onChange, onChangeMany, onWrap, onGroup, onUn
               : stats.groups + stats.icons > 0 && <p className="ok">규칙 위반 없음</p>}
             {stats.groups + stats.icons > 0 && <button className="al wide" title="같은 구조 반복은 하나로 합치고 보조 요소는 빼서, 슬라이드 한 칸에 들어가는 그림을 새 탭에 만듭니다. 원본은 그대로입니다." onClick={onCompact}><Icon name="arrow" size={14} /> 개요도 새 탭에 만들기</button>}
             <p className="hint">왼쪽에서 아이콘을 끌어다 놓고, 노드 가장자리 점을 끌어 다른 노드에 놓으면 연결됩니다. 그룹 안에 놓으면 그 그룹에 들어가고, 그룹을 끌면 안의 것이 같이 움직입니다.</p>
-            <p className="hint">Shift+드래그: 영역 선택 · Shift+클릭: 여러 개 선택(선도 가능) · 그룹 선택 후 모서리로 크기 조절</p>
+            <p className="hint">빈 곳 드래그: 영역 선택 · Space+드래그(또는 휠 버튼): 화면 이동 · Shift+클릭: 여러 개 선택(선도 가능) · 그룹 선택 후 모서리로 크기 조절</p>
           </>
         )}
       </div>

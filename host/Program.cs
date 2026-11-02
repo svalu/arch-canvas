@@ -30,8 +30,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: System.Reflection.AssemblyCompany("heerang")]
 [assembly: System.Reflection.AssemblyProduct("Arch Canvas")]
 [assembly: System.Reflection.AssemblyCopyright("2026 heerang")]
-[assembly: System.Reflection.AssemblyVersion("0.9.20.0")]
-[assembly: System.Reflection.AssemblyFileVersion("0.9.20.0")]
+[assembly: System.Reflection.AssemblyVersion("0.9.21.0")]
+[assembly: System.Reflection.AssemblyFileVersion("0.9.21.0")]
 
 static class Program
 {
@@ -88,7 +88,7 @@ static class Program
 /// <summary>EXE에 내장된 리소스(app/..., bin/...)를 data 폴더에 풀고, bin의 DLL을 로드한다.</summary>
 static class Bootstrap
 {
-    public const string AppVersion = "0.9.20";
+    public const string AppVersion = "0.9.21";
     public static readonly string ExePath = Assembly.GetExecutingAssembly().Location;
     public static readonly string BaseDir = Path.GetDirectoryName(ExePath);
     public static string DataDir;    // EXE 옆 data\ (쓰기 불가하면 %LocalAppData%\ArchCanvas\data)
@@ -1133,8 +1133,10 @@ static class PptClipboard
         string prst = S(s, "prst") ?? "rect";
         if (prst != "rect" && prst != "roundRect" && prst != "ellipse") prst = "rect";   // 장면 JSON 값이 XML 에 그대로 들어가므로 허용 목록만
         x.Append("<a:spPr>" + Xfrm(s, 0, false, false) + "<a:prstGeom prst=\"" + prst + "\">" + (prst == "roundRect" ? "<a:avLst><a:gd name=\"adj\" fmla=\"val 12000\"/></a:avLst>" : "<a:avLst/>") + "</a:prstGeom>");
-        var fill = textBox ? null : S(s, "fill");
-        x.Append(fill != null ? "<a:solidFill><a:srgbClr val=\"" + Hex(fill) + "\"/></a:solidFill>" : "<a:noFill/>");
+        // 글상자도 fill 이 있으면 채운다(아이콘 이름표 바탕). fillAlpha(0~100)가 있으면 반투명
+        var fill = S(s, "fill");
+        string alpha = s.ContainsKey("fillAlpha") && s["fillAlpha"] != null ? "<a:alpha val=\"" + (Convert.ToInt32(s["fillAlpha"]) * 1000) + "\"/>" : null;
+        x.Append(fill != null ? "<a:solidFill><a:srgbClr val=\"" + Hex(fill) + "\">" + (alpha ?? "") + "</a:srgbClr></a:solidFill>" : "<a:noFill/>");
         var line = textBox ? null : s.ContainsKey("line") ? s["line"] as Dictionary<string, object> : null;
         x.Append(line != null ? Ln(line, null, null) : "<a:ln><a:noFill/></a:ln>");
         x.Append("</a:spPr>");

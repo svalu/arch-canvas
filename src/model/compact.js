@@ -14,7 +14,7 @@ const AUX_ENV = /(^|[^A-Za-z])DR([^A-Za-z]|$)|재해|복구|백업|backup|standb
 const MGMT_ICON = /CloudWatch|CloudTrail|Identity-and-Access|IAM|Identity-Center|Config|GuardDuty|Security-Hub|Key-Management|Systems-Manager|Organizations|Inspector|Macie|Audit-Manager|Control-Tower/i;
 const shortName = (s) => String(s || '').replace(/\s*\(.*?\)\s*/g, ' ').replace(/^[①-⑳\s]+/, '').trim();
 const OVERLAY_TAG = { 'auto-scaling': 'Auto Scaling', 'auto-scaling-group': 'Auto Scaling', 'security-group': '', 'spot-fleet': 'Spot' };
-const GAP = 12;
+const GAP = 24;
 
 const clone = (g) => JSON.parse(JSON.stringify(g));
 const byPos = (a, b) => a.y - b.y || a.x - b.x;
@@ -138,7 +138,7 @@ function rowify(g, changed) {
     if (siblings.length) {
       const col = kidsH >= siblings.length * 96;
       siblings.forEach((n, i) => { n.x = Math.round(x0 + (col ? 0 : i * 120)); n.y = Math.round(col ? y + i * 96 : y + Math.max(kidsH, 82) / 2 - 24); });
-      x = x0 + (col ? 120 : siblings.length * 120) + 40;   // 이름표(120)와 옆 상자 사이 숨 쉴 틈
+      x = x0 + (col ? 120 : siblings.length * 120) + 56;   // 이름표(120)와 옆 상자 사이 숨 쉴 틈
       if (!col) kidsH = Math.max(kidsH, 82);
     }
     for (const k of kids) k.x += Math.round(x);

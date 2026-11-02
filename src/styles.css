@@ -1120,3 +1120,12 @@ button.x, .tpl-x, .doctab-x { display: inline-flex; align-items: center; justify
 /* 물어보기 답변 다음 행동 */
 .ask-next { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
 .ask-next button { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; }
+
+/* ----- 아이콘·이름표 바탕: 뒤로 지나가는 선이 아이콘·글자를 가르지 않게 (반투명이라 상자 색 위에서도 어색하지 않다) ----- */
+.react-flow { --halo: rgba(250, 251, 252, .86); }
+.app.theme-dark .react-flow { --halo: rgba(11, 20, 22, .86); }
+.ico img { background: var(--halo); border-radius: 9px; box-shadow: 0 0 0 3px var(--halo); }
+.ico-label > span { background: var(--halo); border-radius: 5px; padding: 0 4px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+/* Space 를 누른 채 끌면 화면 이동 (일러스트처럼) */
+.space-pan .react-flow__pane { cursor: grab !important; }
+.space-pan .react-flow__pane:active { cursor: grabbing !important; }
