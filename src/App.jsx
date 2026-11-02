@@ -142,7 +142,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.25';
+export const APP_VERSION = '0.9.26';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -428,7 +428,8 @@ function Editor() {
   // 웹 버전 첫 안내: 작업은 이 브라우저에 저장된다
   const [webNote, setWebNote] = useState(() => { try { return !window.desktop && localStorage.getItem('arch-canvas:web-note') !== '1'; } catch { return false; } });
   const closeWebNote = () => { setWebNote(false); try { localStorage.setItem('arch-canvas:web-note', '1'); } catch { /* */ } };
-  // Space 를 누르고 있는 동안 손 모양 커서 (화면 이동 자체는 React Flow 의 panActivationKeyCode 가 한다)
+  // Space 를 누르고 있는 동안 손 모양 커서. 화면 이동 자체는 React Flow 의 panActivationKeyCode 가 하고,
+  // body.space-pan 이 노드·선의 마우스를 꺼서 무엇을 잡든 이동만 된다(일러스트의 손 도구처럼)
   useEffect(() => {
     const typing = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
     const down = (e) => { if (e.code === 'Space' && !typing(e.target)) document.body.classList.add('space-pan'); };

@@ -1129,6 +1129,9 @@ button.x, .tpl-x, .doctab-x { display: inline-flex; align-items: center; justify
 /* Space 를 누른 채 끌면 화면 이동 (일러스트처럼) */
 .space-pan .react-flow__pane { cursor: grab !important; }
 .space-pan .react-flow__pane:active { cursor: grabbing !important; }
+/* Space 를 누른 동안은 무엇을 잡든 화면 이동만: 노드·선·손잡이가 마우스를 안 받아 빈 곳(pane)으로 넘어간다 */
+.space-pan .react-flow__nodes, .space-pan .react-flow__edges, .space-pan .react-flow__edgelabel-renderer, .space-pan .react-flow__nodesselection, .space-pan .react-flow__edge-interaction { pointer-events: none !important; }
+.space-pan .react-flow__node, .space-pan .react-flow__handle { pointer-events: none !important; }
 
 /* ---- AI 패널 (채팅형): 적는 칸 하나 + 대화 ---- */
 .composer { border: 1px solid #2E73B8; box-shadow: 0 0 0 3px rgba(46,115,184,.12); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
