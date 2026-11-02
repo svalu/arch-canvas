@@ -257,7 +257,7 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
   const told = (draft.requirements || '').split('\n').filter((l) => /^- \[확인\]/.test(l));
   const forget = (line) => { const requirements = (draft.requirements || '').split('\n').filter((l) => l !== line).join('\n'); setDraft({ ...draft, requirements }); onContext({ requirements }); };
   const log = context.log || [];
-  const KIND = { draw: '그림', ask: '질문', review: '검수' };
+  const KIND = { draw: '그림', ask: '질문', review: '검수', arrange: '정렬' };
 
   // 보내기: 버튼이 의도를 정한다. 글이 비어 있으면 물어보기·그리기는 안 보낸다
   const send = (how) => {
@@ -398,6 +398,7 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
               <div className="turn-ai">
                 <h4>AI 정렬</h4>
                 {r.summary && <p className="summary">{r.summary}</p>}
+                {r.ops?.length > 0 && <ol className="ops">{describeOps(r.ops, nameOf).map((t, i) => <li key={i}>{t}</li>)}</ol>}
                 <p className={r.blocked ? 'hint' : 'ok'}>{r.blocked ? '규칙 검사에서 막혀 적용하지 않았습니다.' : `AI 가 정한 순서(${r.placed}개)대로 배치했습니다 · Ctrl+Z 로 되돌릴 수 있습니다`}</p>
                 <Raw res={r} />
                 <Foot res={r} />

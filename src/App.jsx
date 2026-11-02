@@ -93,7 +93,7 @@ import { edgeTypes } from './canvas/edges.jsx';
 import { graphToFlow, flowToGraph } from './model/convert.js';
 import { normalizeGraph, emptyGraph, uid, allIds, ICON_SIZE, LINES, SHAPES, ARROWS, EDGE_DEFAULTS, setEdgeDefaults, sortGroups, CARD_DEFAULT, LABEL_DROP } from './model/schema.js';
 import { absoluteRects, innermostGroupAt, descendants, autoArrange } from './model/geometry.js';
-import { applyPatch, PATCH_OPS } from './model/patch.js';
+import { applyPatch, PATCH_OPS, alignParentsToPlan } from './model/patch.js';
 import { graphToScene, selectionIds, sceneStats } from './export/scene.js';
 import { lint, diffViolations, mergeRuleAnnotations, RULES } from './model/rules.js';
 import { graphToSvg, svgToPng, svgToBlob, copyPngToClipboard, saveBlob } from './export/image.js';
@@ -142,7 +142,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.29';
+export const APP_VERSION = '0.9.30';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -1046,14 +1046,23 @@ function Editor() {
         let placed = 0;
         for (const k of Object.keys(plan)) { if (k !== 'root' && !known.has(k)) { delete plan[k]; continue; } for (const col of plan[k] || []) for (const id of (Array.isArray(col) ? col : [])) if (known.has(String(id))) placed++; }
         if (docsRef.current.active !== docId) { setAi({ busy: null, error: null, result: null }); toastMsg(`AI 정렬은 요청한 "${docTitle}" 탭에서만 적용됩니다. 그 탭에서 다시 누르십시오.`, 5000); return; }
-        const cur = currentGraph();
+        // 구도 재해석(ops: 상자로 묶기·옮기기·이름 바꾸기·빈 상자 빼기)이 있으면 먼저 적용하고, 그 결과에 배치안을 입힌다
+        const ARR_OPS = new Set(['add_group', 'move_into', 'update', 'remove', 'ungroup']);
+        const ops = (Array.isArray(j.ops) ? j.ops : []).filter((o) => o && ARR_OPS.has(o.op) && !(o.op === 'remove' && g.nodes.some((n) => n.id === o.id)));   // 노드는 지우지 않는다
+        let cur = currentGraph(), patched = null;
+        if (ops.length) {
+          const had = new Set(cur.groups.map((x) => x.id));
+          patched = applyPatch(cur, ops, catalog.check); cur = patched.graph;
+          alignParentsToPlan(cur, plan, new Set(cur.groups.map((x) => x.id).filter((id) => !had.has(id))));   // 새 상자의 부모를 배치안대로
+        }
         const all = [...cur.groups, ...cur.nodes];
         autoArrange(cur, all.map((x) => x.id), isOverlay, new Set(all.filter((x) => x.locked).map((x) => x.id)), { plan });
+        const summary = String(j.summary || '');
+        // 기록은 같은 커밋에 넣는다. 따로 logAi 를 부르면(바로든 다음 틱이든) 아직 화면에 안 올라간 옛 그래프를 다시 커밋해 정렬이 되돌아간다
+        cur.context = { ...cur.context, log: [...(cur.context?.log || []), { k: 'arrange', q: 'AI 정렬', a: summary.slice(0, 400), t: Date.now() }].slice(-20) };
         const ok = tryCommit(cur);
         if (ok) setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 30);
-        const summary = String(j.summary || '');
-        setAi({ busy: null, error: null, result: { mode: 'arrange', docId, docTitle, raw, at: Date.now(), ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary, placed, blocked: !ok } });
-        logAi({ k: 'arrange', q: 'AI 정렬', a: summary.slice(0, 400) }, docId);
+        setAi({ busy: null, error: null, result: { mode: 'arrange', docId, docTitle, raw, at: Date.now(), ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary, placed, ops, applied: patched ? { applied: patched.applied, errors: patched.errors } : null, blocked: !ok } });
         return;
       }
       const base = { mode, docId, docTitle, raw, at: Date.now(), ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary: String(j.summary || ''), ...intent };

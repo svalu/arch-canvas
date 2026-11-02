@@ -74,7 +74,7 @@ export function normalizeGraph(input) {
   const out = emptyGraph(toText(g.title) || '새 다이어그램');
   const c = g.context && typeof g.context === 'object' ? g.context : {};
   const doc = c.doc && typeof c.doc === 'object' && typeof c.doc.text === 'string' && c.doc.text.trim() ? { name: toText(c.doc.name).slice(0, 120) || '문서.md', text: c.doc.text.slice(0, DOC_MAX) } : null;
-  const KINDS = new Set(['draw', 'ask', 'review']);
+  const KINDS = new Set(['draw', 'ask', 'review', 'arrange']);
   const log = (Array.isArray(c.log) ? c.log : []).filter((x) => x && KINDS.has(x.k) && typeof x.q === 'string').slice(-LOG_MAX)
     .map((x) => ({ k: x.k, q: x.q.slice(0, 1500), a: toText(x.a).slice(0, 800), t: Number.isFinite(+x.t) ? +x.t : 0 }));
   out.context = { title: toText(c.title), requirements: toText(c.requirements), constraints: toText(c.constraints), ...(doc ? { doc } : {}), ...(log.length ? { log } : {}) };

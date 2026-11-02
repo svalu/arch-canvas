@@ -223,6 +223,32 @@ const OPS = {
 
 export const PATCH_OPS = Object.keys(OPS);
 
+/**
+ * AI 정렬 배치안(columns)의 부모 키와 실제 포함 관계가 어긋난 "새로 만든 상자"를 배치안대로 옮긴다.
+ * (AI 가 add_group 에 parent 를 빠뜨리면 상자가 최상위에 떨어지는데, columns 에는 어느 상자 안인지 적혀 있다.)
+ * created: 이번 ops 로 생긴 그룹 id 집합. 그 밖의 것은 건드리지 않는다. 반환: 옮긴 개수.
+ */
+export function alignParentsToPlan(g, plan, created) {
+  if (!plan || !created?.size) return 0;
+  const byId = new Map(g.groups.map((x) => [x.id, x]));
+  let n = 0;
+  for (const [key, cols] of Object.entries(plan)) {
+    const pid = key === 'root' ? null : key;
+    if (pid && !byId.has(pid)) continue;
+    for (const col of Array.isArray(cols) ? cols : []) for (const id of (Array.isArray(col) ? col : [col]).map(String)) {
+      const grp = byId.get(id);
+      if (!grp || !created.has(id) || (grp.parent ?? null) === pid) continue;
+      if (pid && [...descendantsOf(g, id)].includes(pid)) continue;   // 자기 자손 안으로는 못 들어간다
+      grp.parent = pid; grp.x = 0; grp.y = 0; n++;
+    }
+  }
+  return n;
+}
+function* descendantsOf(g, id) {
+  const stack = [id];
+  while (stack.length) { const cur = stack.pop(); for (const x of g.groups) if (x.parent === cur) { yield x.id; stack.push(x.id); } }
+}
+
 // 겹치는 상자를 멤버(아이콘)를 감싸는 크기로 맞춘다. 부모는 화면 위치로 다시 정해지므로(contain.js) 절대 좌표 기준으로 둔다.
 function hugOverlays(g, overlays) {
   if (!overlays?.size) return;

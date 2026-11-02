@@ -190,6 +190,7 @@ async function askMock({ user }) {
       drawRequest: '(mock) CloudFront 와 S3 를 추가하고 사용자와 연결' });
   }
   if (/# 배치 요청/.test(user)) {
+    try { const canned = localStorage.getItem('arch-canvas:ai-mock-reply'); if (canned) return canned; } catch { /* */ }   // 테스트: 실제 모델 답을 넣어 두고 재현
     const ids = [...user.matchAll(/^\s*- (?:group|node|card) ([\w-]+):/gm)].map((m) => m[1]);
     return JSON.stringify({ summary: '(mock) 목록 순서대로 둘씩 한 단에 두었습니다.', columns: { root: ids.filter((_, i) => i % 2 === 0).map((id, i) => [id, ids[i * 2 + 1]].filter(Boolean)) } });
   }

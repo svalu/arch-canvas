@@ -592,7 +592,7 @@ function flowSiblings(g, pid, groupIds, nodeIds, isOverlay, GAP = 24, plan = nul
   let size = columns.map((col, c) => sizeOf(col, sideBy[c]));
   // 낮은 단 합치기: 높은 단(VPC 등) 옆에 아이콘 한둘짜리 단이 줄줄이 서면 빈 공간만 커진다.
   // 이어지는 낮은 단들을 세로로 쌓아 한 단으로 (위에서 아래가 흐름 순서). 가장 높은 단과 AZ 줄은 그대로
-  if (!stack && !given && columns.length > 2) {
+  if (!stack && columns.length > 2) {   // AI 배치안에도 적용: 단 순서는 지키고 낮은 단만 위아래로 포갠다
     const tallest = Math.max(...size.map((z) => z.cross));
     const cols2 = [], side2 = [];
     for (let c = 0; c < columns.length; c++) {
@@ -611,7 +611,7 @@ function flowSiblings(g, pid, groupIds, nodeIds, isOverlay, GAP = 24, plan = nul
   }
   const TARGET = 2.2;
   let best = null;
-  for (let k = stack ? columns.length : 1; k <= columns.length; k++) {   // 서브넷은 줄을 바꾸지 않고 한 줄로 쌓는다
+  for (let k = stack || given ? columns.length : 1; k <= columns.length; k++) {   // 서브넷은 줄을 바꾸지 않고 한 줄로 쌓는다. AI 배치안도 단을 그대로 한 줄로
     let M = 0, C = 0, rows = 0;
     for (let i = 0; i < columns.length; i += k) { const row = size.slice(i, i + k); M = Math.max(M, row.reduce((t, s) => t + s.main, 0) + GAP * (row.length - 1)); C += Math.max(...row.map((s) => s.cross)); rows++; }
     C += GAP * (rows - 1);
