@@ -86,7 +86,7 @@ button.ask:hover:not(:disabled) { background: #dff0e3; }
 .has-warn { border-color: #ed7100; color: #6b3d00; }
 .ok { color: #2e7d32; font-size: 12px; }
 .explain { margin: 4px 0 0; color: #4b5563; font-size: 11.5px; line-height: 1.5; }
-.pin-row.card { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+.pin-row.card { display: block; width: auto; height: auto; overflow: visible; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer; }   /* 카드 모드 노드의 .card(flex·100%) 와 이름이 겹친다 */
 .pin-row.card:hover { background: #f8fafc; }
 .pin-row.card.error { border-left: 3px solid #dd344c; } .pin-row.card.warn { border-left: 3px solid #ed7100; } .pin-row.card.info { border-left: 3px solid #2e73b8; }
 

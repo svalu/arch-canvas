@@ -447,9 +447,29 @@ function flowSiblings(g, pid, groupIds, nodeIds, isOverlay, GAP = 24) {
   const SIDE = /^(az|vpc|region|aws-cloud|aws-cloud-dark|aws-cloud-logo|aws-cloud-logo-dark|aws-account|corporate-dc)$/;
   const sideBy = columns.map((col) => col.length > 1 && col.every((i) => items[i].grp && SIDE.test(items[i].o.kind || '')));
   // 단 크기와 줄 바꾸기: 가로:세로가 2.2 에 가장 가까운 줄당 단 수
-  const size = columns.map((col, c) => sideBy[c]
+  const sizeOf = (col, side) => side
     ? { main: col.reduce((s, i) => s + items[i][len], 0) + GAP * (col.length - 1), cross: Math.max(...col.map((i) => items[i][clen])) }
-    : { main: Math.max(...col.map((i) => mo[i] + items[i][len])), cross: Math.max(...col.map((i) => at[i] + items[i][clen])) });
+    : { main: Math.max(...col.map((i) => mo[i] + items[i][len])), cross: Math.max(...col.map((i) => at[i] + items[i][clen])) };
+  let size = columns.map((col, c) => sizeOf(col, sideBy[c]));
+  // 낮은 단 합치기: 높은 단(VPC 등) 옆에 아이콘 한둘짜리 단이 줄줄이 서면 빈 공간만 커진다.
+  // 이어지는 낮은 단들을 세로로 쌓아 한 단으로 (위에서 아래가 흐름 순서). 가장 높은 단과 AZ 줄은 그대로
+  if (!stack && columns.length > 2) {
+    const tallest = Math.max(...size.map((z) => z.cross));
+    const cols2 = [], side2 = [];
+    for (let c = 0; c < columns.length; c++) {
+      let col = columns[c], cross = size[c].cross;
+      if (!sideBy[c] && cross < tallest * 0.9) {
+        while (c + 1 < columns.length && !sideBy[c + 1] && cross + GAP + size[c + 1].cross <= tallest * 0.9) {
+          const off = cross + GAP;
+          for (const i of columns[c + 1]) at[i] += off;
+          col = col.concat(columns[c + 1]); cross += GAP + size[c + 1].cross; c++;
+        }
+      }
+      cols2.push(col); side2.push(sideBy[c] && col === columns[c]);
+    }
+    columns = cols2; sideBy.length = 0; sideBy.push(...side2);
+    size = columns.map((col, c) => sizeOf(col, sideBy[c]));
+  }
   const TARGET = 2.2;
   let best = null;
   for (let k = stack ? columns.length : 1; k <= columns.length; k++) {   // 서브넷은 줄을 바꾸지 않고 한 줄로 쌓는다
