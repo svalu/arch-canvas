@@ -270,18 +270,18 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
     setText('');
   };
   const onKey = (e) => {
-    if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey)) return;
+    if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey) || !verified || e.nativeEvent?.isComposing) return;
     e.preventDefault();
     send(e.shiftKey ? 'ask' : 'draw');
   };
 
   // 지금 결과가 기록에도 들어 있으면 기록 쪽은 숨긴다 (같은 것이 두 번 보이지 않게)
-  const dupOf = (x) => !!r && ((r.mode === 'ask' && x.k === 'ask' && x.q === r.question) || (r.mode === 'review' && x.k === 'review') || (r.mode === 'draw' && x.k === 'draw' && x.q === r.request));
+  const dupOf = (x) => !!r && (!r.docId || !activeDocId || r.docId === activeDocId) && ((r.mode === 'ask' && x.k === 'ask' && x.q === r.question) || (r.mode === 'review' && x.k === 'review') || (r.mode === 'draw' && x.k === 'draw' && x.q === r.request));
   const lastDup = log.map(dupOf).lastIndexOf(true);
   const history = log.filter((x, i) => i !== lastDup);
-  const key = r ? String(r.ms || r.question || r.mode) : '';
-  const rate = (up) => { if (!r || rated[key]) return; setRated({ ...rated, [key]: up ? 'up' : 'down' }); if (up) onRate?.(r, true, ''); else setNote({ key }); };
-  const sendNote = () => { onRate?.(r, false, noteText.trim()); setNote(null); setNoteText(''); };
+  const key = r ? String(r.at || r.question || r.mode) : '';
+  const rate = (up) => { if (!r || rated[key]) return; setRated({ ...rated, [key]: up ? 'up' : 'down' }); onRate?.(r, up, ''); if (!up) setNote({ key }); };
+  const sendNote = () => { if (noteText.trim()) onRate?.(r, false, noteText.trim()); setNote(null); setNoteText(''); };
 
   const Intent = ({ res }) => (res.understood || res.assumptions?.length ? (
     <div className="intent">
@@ -303,13 +303,14 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
         <span className="rate" title="평가는 만든 사람에게 전달됩니다 (질문·답 일부 포함)">
           <button className={'x' + (rated[key] === 'up' ? ' on' : '')} disabled={!!rated[key]} onClick={() => rate(true)} aria-label="도움이 됐어요"><Icon name="thumbUp" size={14} /></button>
           <button className={'x' + (rated[key] === 'down' ? ' on' : '')} disabled={!!rated[key]} onClick={() => rate(false)} aria-label="아쉬워요"><Icon name="thumbDown" size={14} /></button>
-          {rated[key] && !note && <small className="hint">{rated[key] === 'up' ? '고맙습니다' : '전달했습니다'}</small>}
+          {rated[key] && !(note && note.key === key) && <small className="hint">{rated[key] === 'up' ? '고맙습니다' : '전달했습니다'}</small>}
         </span>
       )}
       {note && note.key === key && (
         <div className="rate-note">
-          <input value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="어떤 점이 아쉬웠나요? (선택)" onKeyDown={(e) => { if (e.key === 'Enter') sendNote(); }} autoFocus />
-          <button className="small" onClick={sendNote}>보내기</button>
+          <small className="hint">전달했습니다.</small>
+          <input value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="어떤 점이 아쉬웠나요? (선택, 덧붙여 보냄)" onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent?.isComposing) sendNote(); }} autoFocus />
+          <button className="small" onClick={sendNote}>{noteText.trim() ? '덧붙이기' : '닫기'}</button>
         </div>
       )}
     </div>
@@ -329,6 +330,7 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
           <span className={'chip target' + (selCount ? ' sel' : '')} title={selCount ? '물어보기는 선택한 것에 대해 답합니다. 그리기·검수는 그림 전체를 봅니다' : '그림 전체를 봅니다'}>
             <Icon name={selCount ? 'cursor' : 'panel'} size={13} /> {selCount ? `선택한 ${selCount}개` : '전체 그림'}
           </span>
+          {selCount > 0 && <small className="hint">물어보기만 · 검수·그리기는 전체</small>}
           <DocAttach doc={context.doc} onAttach={onAttachDoc} onError={onToast} onCopied={onToast} compact />
           <button className={'chip' + (ctxFilled ? ' on' : '') + (ctxOpen ? ' open' : '')} onClick={() => setCtxOpen(!ctxOpen)} title="무엇을 만드는지·꼭 되어야 하는 것·지켜야 할 조건. AI 가 늘 같이 봅니다">
             <Icon name="info" size={13} /> 상황{ctxFilled ? ' ✓' : ''}{told.length ? ` · 알려준 것 ${told.length}` : ''}
@@ -381,11 +383,11 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
         <div className="thread">
           <div className="more-head">대화 <small className="hint">이 그림에서 주고받은 것 · AI 가 다음에도 같이 봅니다</small>{history.length > 0 && <button className="link" onClick={() => onContext({ log: [] })}>기록 지우기</button>}</div>
           {history.map((x, i) => (
-            <div key={i} className={'turn past' + (openLog === i ? ' open' : '')} onClick={() => setOpenLog(openLog === i ? null : i)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') setOpenLog(openLog === i ? null : i); }}>
+            <div key={x.t || i} className={'turn past' + (openLog === (x.t || i) ? ' open' : '')} onClick={() => setOpenLog(openLog === (x.t || i) ? null : (x.t || i))} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') setOpenLog(openLog === (x.t || i) ? null : (x.t || i)); }}>
               <span className={'log-k ' + x.k}>{KIND[x.k] || x.k}</span>
               <div className="turn-body">
-                <div className="log-q">{openLog === i || x.q.length <= 120 ? x.q : x.q.slice(0, 120) + '…'}</div>
-                {x.a && <div className="hint">→ {openLog === i || x.a.length <= 120 ? x.a : x.a.slice(0, 120) + '…'}</div>}
+                <div className="log-q">{openLog === (x.t || i) || x.q.length <= 120 ? x.q : x.q.slice(0, 120) + '…'}</div>
+                {x.a && <div className="hint">→ {openLog === (x.t || i) || x.a.length <= 120 ? x.a : x.a.slice(0, 120) + '…'}</div>}
               </div>
             </div>
           ))}

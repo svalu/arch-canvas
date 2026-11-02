@@ -142,7 +142,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.24';
+export const APP_VERSION = '0.9.25';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -1032,12 +1032,12 @@ function Editor() {
         const prevHist = docsRef.current.active === docId ? askHistory.current : (tabAi.current.get(docId) || []);
         const thread = [...prevHist, { role: 'user', text: request }, { role: 'ai', text: answer }].slice(-6);
         if (docsRef.current.active === docId) askHistory.current = thread; else tabAi.current.set(docId, thread);
-        setAi((s) => ({ busy: null, error: null, question: request, result: { mode: 'ask', docId, docTitle, raw, ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, question: request, answer, thread, ...intent } }));
+        setAi((s) => ({ busy: null, error: null, question: request, result: { mode: 'ask', docId, docTitle, raw, at: Date.now(), ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, question: request, answer, thread, ...intent } }));
         logAi({ k: 'ask', q: request, a: answer.slice(0, 800) }, docId);
         return;
       }
       if (!j) j = parseJsonReply(raw);   // 검수·그리기는 JSON 이어야 한다 (못 읽으면 여기서 오류)
-      const base = { mode, docId, docTitle, raw, ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary: String(j.summary || ''), ...intent };
+      const base = { mode, docId, docTitle, raw, at: Date.now(), ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary: String(j.summary || ''), ...intent };
       if (mode === 'review') {
         const { annotations, dropped } = findingsToAnnotations(j.findings, g);
         if (docsRef.current.active === docId) {

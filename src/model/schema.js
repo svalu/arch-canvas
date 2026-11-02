@@ -241,3 +241,14 @@ export function uid(prefix, taken) {
 export function allIds(g) {
   return new Set([...g.groups, ...g.nodes, ...g.edges, ...(g.annotations || [])].map((x) => x.id));
 }
+
+/**
+ * 테마에 맞는 짝 아이콘 키. AWS 일반 리소스 아이콘은 _Light(검은 선) · _Dark(흰 선) 쌍이라,
+ * 다크 테마에서 _Light 를 쓰면 바탕에 묻혀 안 보인다. 다크에서만 _Light → _Dark 로 바꾼다.
+ * 라이트에서 일부러 고른 _Dark(어두운 채움 상자 안 등)는 그대로 둔다. 짝이 없으면 그대로.
+ */
+export function themedIcon(icons, key, dark) {
+  if (!dark || !key || !key.endsWith('_Light')) return key;
+  const twin = key.slice(0, -'_Light'.length) + '_Dark';
+  return icons.has(twin) ? twin : key;
+}

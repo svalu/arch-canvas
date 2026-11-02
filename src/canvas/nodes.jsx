@@ -4,7 +4,7 @@ import { Icon } from '../Icons.jsx';
 import { isOverlay } from '../model/contain.js';
 import { useExit } from '../useExit.js';
 import { Handle, Position, NodeResizer } from '@xyflow/react';
-import { useCatalog } from '../catalog.js';
+import { useCatalog, themedIcon } from '../catalog.js';
 import { GROUP_ICON_SIZE, LABEL_WIDTH, ICON_LABEL_GAP } from '../model/schema.js';
 import { GROUP_LABEL_PAD, LABEL_PX, INK, readable } from '../export/scene.js';
 
@@ -89,7 +89,7 @@ export const AwsGroup = memo(function AwsGroup({ data, selected }) {
   const base = kinds.get(data.kind) || kinds.get('generic');
   // 섹션 덮어쓰기(색/선/채움)가 있으면 그걸 쓴다
   const kind = { ...base, color: data.color || base.color, text: data.color || base.text, line: data.line || base.line, fill: 'fill' in data ? data.fill : base.fill };
-  const icon = base.icon ? icons.get(base.icon) : null;
+  const icon = base.icon ? icons.get(themedIcon(icons, base.icon, data.dark)) : null;
   return (
     <>
       <NodeResizer isVisible={selected && !data.locked} minWidth={80} minHeight={60} color={kind.color} handleClassName="rsz" lineClassName="rszline" />
@@ -126,7 +126,7 @@ export const AwsGroup = memo(function AwsGroup({ data, selected }) {
 
 export const AwsIcon = memo(function AwsIcon({ data, selected }) {
   const { icons } = useCatalog();
-  const icon = icons.get(data.icon);
+  const icon = icons.get(themedIcon(icons, data.icon, data.dark));
   return (
     <div className={'ico' + (selected ? ' sel' : '')} title={icon?.name}>
       {icon ? <img src={icon.src} draggable={false} alt="" /> : <div className="ico-missing">?</div>}
@@ -145,7 +145,7 @@ export const AwsIcon = memo(function AwsIcon({ data, selected }) {
 // 카드: 아이콘(선택) + 제목 + 설명. 솔루션 구성도용. 크기 조절 가능.
 export const AwsCard = memo(function AwsCard({ data, selected }) {
   const { icons } = useCatalog();
-  const icon = data.icon ? icons.get(data.icon) : null;
+  const icon = data.icon ? icons.get(themedIcon(icons, data.icon, data.dark)) : null;
   return (
     <>
       <NodeResizer isVisible={selected && !data.locked} minWidth={120} minHeight={48} handleClassName="rsz" lineClassName="rszline" />

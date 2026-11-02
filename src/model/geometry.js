@@ -374,7 +374,7 @@ function tidySiblings(groups, nodes = [], GAP = 24) {
 function flowSiblings(g, pid, groupIds, nodeIds, isOverlay, GAP = 24) {
   const half = Math.max(0, (LABEL_WIDTH - ICON_SIZE) / 2);
   const kids = g.groups.filter((c) => (c.parent ?? null) === pid && !isOverlay(c) && groupIds.has(c.id));
-  const ns = pid == null ? [] : g.nodes.filter((n) => (n.parent ?? null) === pid && nodeIds.has(n.id));   // 맨 바깥 아이콘은 뒤에서 상자 옆에 따로 놓는다
+  const ns = pid == null ? [] : g.nodes.filter((n) => (n.parent ?? null) === pid && nodeIds.has(n.id) && n.type !== 'badge');   // 맨 바깥 아이콘은 뒤에서 상자 옆에 따로 놓고, 번호 배지는 붙여 둔 자리 그대로
   const items = [
     ...kids.map((o) => ({ o, grp: true, x: o.x, y: o.y, w: o.w, h: o.h })),
     ...ns.map((o) => (isBox(o) ? { o, x: o.x, y: o.y, w: o.w, h: o.h } : { o, icon: true, x: o.x - half, y: o.y, w: ICON_SIZE + half * 2, h: ICON_SIZE + LABEL_SPACE })),
@@ -600,11 +600,21 @@ function hugMembers(g, list) {
 
 export function autoArrange(g, ids, isOverlay = () => false, skip = new Set()) {
   // 흐름 배치 뒤의 줄 맞춤(평균 자리)은 한 번에 자리를 잡지 못할 수 있어, 자리가 더 안 바뀔 때까지(최대 3번) 되풀이한다
+  // 3번 안에 안 멈추면(어지럽힌 큰 그림) 그중 가장 작게 나온 결과를 택한다 — 되풀이할수록 커지지 않게
   const snap = () => JSON.stringify([...g.groups.map((x) => [x.x, x.y, x.w, x.h]), ...g.nodes.map((n) => [n.x, n.y])]);
+  const area = () => { const rs = [...absoluteRects(g).values()]; if (!rs.length) return 0; const x0 = Math.min(...rs.map((r) => r.x)), y0 = Math.min(...rs.map((r) => r.y)), x1 = Math.max(...rs.map((r) => r.x + r.w)), y1 = Math.max(...rs.map((r) => r.y + r.h)); return (x1 - x0) * (y1 - y0); };
+  const tries = [];
   for (let pass = 0; pass < 3; pass++) {
     const before = snap();
     arrangeOnce(g, ids, isOverlay, skip);
-    if (snap() === before) break;
+    const after = snap();
+    tries.push({ area: area(), groups: g.groups.map((x) => [x.x, x.y, x.w, x.h]), nodes: g.nodes.map((n) => [n.x, n.y]) });
+    if (after === before) return g;
+  }
+  const best = tries.reduce((a, b) => (b.area < a.area ? b : a));
+  if (best !== tries[tries.length - 1]) {
+    g.groups.forEach((x, i) => { [x.x, x.y, x.w, x.h] = best.groups[i]; });
+    g.nodes.forEach((n, i) => { [n.x, n.y] = best.nodes[i]; });
   }
   return g;
 }

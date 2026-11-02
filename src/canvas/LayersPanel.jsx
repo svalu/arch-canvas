@@ -2,7 +2,7 @@
 // 소속은 화면 위치로 정해지므로 여기서는 바꾸지 않고, 회색 꼬리표로만 보여 준다. 줄을 끌어 다른 줄 위에 놓으면 그 앞으로.
 import React, { useMemo, useState } from 'react';
 import { Icon } from '../Icons.jsx';
-import { useCatalog } from '../catalog.js';
+import { useCatalog, themedIcon } from '../catalog.js';
 import { layerList } from '../model/layers.js';
 import { isOverlay } from '../model/contain.js';
 
@@ -44,7 +44,7 @@ export function LayersPanel({ graph, selected, onSelect, onMove, onOrder, onLock
         {rows.map((row) => {
           const x = row.item, isG = row.kind === 'group';
           const kind = isG ? catalog.kinds.get(x.kind) : null;
-          const icon = !isG && x.icon ? catalog.icons.get(x.icon) : null;
+          const icon = !isG && x.icon ? catalog.icons.get(themedIcon(catalog.icons, x.icon, graph.theme === 'dark')) : null;
           const band = bandOf(row), head = band !== lastBand; lastBand = band;
           const tag = tagOf(x);
           return (

@@ -1,5 +1,6 @@
 // 아이콘/그룹 종류 카탈로그. 빌드본은 <script id="icons"> 에서, 개발 서버는 data/icons.json 을 읽는다.
 import { createContext, useContext } from 'react';
+export { themedIcon } from './model/schema.js';
 
 export const CatalogContext = createContext(null);
 export const useCatalog = () => useContext(CatalogContext);

@@ -7,6 +7,7 @@ export const Z_EDGE = 9000;
 export const Z_ICON = 10000;
 
 export function graphToFlow(input) {
+  const dark = input.theme === 'dark';   // 아이콘 짝(_Light/_Dark) 고르기용. 그래프로 되돌릴 때는 버린다
   const g = normalizeGraph(input);
   const pins = new Map();
   for (const a of g.annotations) (pins.get(a.target) || pins.set(a.target, []).get(a.target)).push(a);
@@ -22,7 +23,7 @@ export function graphToFlow(input) {
       // 띠: 담는 상자(1~) < 겹치는 상자(3000~) < 연결선(9000) < 아이콘(10000~) < 번호(15000~)
       zIndex: (isOverlay(x) ? 3000 : 0) + i + 1,
       ...(x.locked ? { draggable: false, className: 'is-locked' } : {}),
-      data: { locked: !!x.locked, ...(x.set ? { set: x.set } : {}), ...(typeof x.overlay === 'boolean' ? { overlay: x.overlay } : {}), kind: x.kind, label: x.label, pins: pins.get(x.id) || [], ...(x.color ? { color: x.color } : {}), ...('fill' in x ? { fill: x.fill } : {}), ...(x.line ? { line: x.line } : {}) },
+      data: { locked: !!x.locked, dark, ...(x.set ? { set: x.set } : {}), ...(typeof x.overlay === 'boolean' ? { overlay: x.overlay } : {}), kind: x.kind, label: x.label, pins: pins.get(x.id) || [], ...(x.color ? { color: x.color } : {}), ...('fill' in x ? { fill: x.fill } : {}), ...(x.line ? { line: x.line } : {}) },
     });
   });
   g.nodes.forEach((n, ni) => {
@@ -37,7 +38,7 @@ export function graphToFlow(input) {
       // 아이콘끼리는 배열 순서가 곧 앞뒤 순서(뒤가 앞). 번호 배지는 늘 맨 위
       zIndex: (badge ? Z_ICON + 5000 : Z_ICON) + ni,
       ...(n.locked ? { draggable: false, className: 'is-locked' } : {}),
-      data: { locked: !!n.locked, ...(n.set ? { set: n.set } : {}), icon: n.icon, label: n.label, pins: pins.get(n.id) || [], ...(card ? { body: n.body, accent: n.accent } : {}), ...(text ? { size: n.size, bold: n.bold, accent: n.accent } : {}), ...(badge ? { accent: n.accent } : {}) },
+      data: { locked: !!n.locked, dark, ...(n.set ? { set: n.set } : {}), icon: n.icon, label: n.label, pins: pins.get(n.id) || [], ...(card ? { body: n.body, accent: n.accent } : {}), ...(text ? { size: n.size, bold: n.bold, accent: n.accent } : {}), ...(badge ? { accent: n.accent } : {}) },
     });
   });
   const edges = g.edges.map((e) => edgeToFlow(e, pins.get(e.id), g.theme));

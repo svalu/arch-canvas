@@ -11,6 +11,7 @@
 //   text = { value, sz(1/100pt), color, bold, align:'l'|'ctr', anchor:'t'|'ctr', wrap:'square'|'none', l, t, r, b(EMU) }
 
 import { ICON_SIZE, GROUP_ICON_SIZE, LABEL_WIDTH, ICON_LABEL_GAP, ICON_LABEL_H, LABEL_DROP, sortGroups } from '../model/schema.js';
+import { themedIcon } from '../model/schema.js';
 import { isOverlay } from '../model/contain.js';
 import { absoluteRects, descendants, edgeGeometry, edgePath, bendOf, endRect, SIDE_IDX } from '../model/geometry.js';
 export { ICON_LABEL_GAP, ICON_LABEL_H };
@@ -80,7 +81,8 @@ export function graphToScene(graph, catalog, include = null, { textScale = 1 } =
   const has = (id) => !include || include.has(id);
   const shapes = [];
   const media = {};
-  const useMedia = (key) => {
+  const useMedia = (key0) => {
+    const key = themedIcon(catalog.icons, key0, graph.theme === 'dark');
     const ic = catalog.icons.get(key);
     if (!ic) return null;
     if (!media[key]) media[key] = ic.src.slice(ic.src.indexOf(',') + 1);

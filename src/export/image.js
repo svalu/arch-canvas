@@ -1,6 +1,7 @@
 // 그래프 -> SVG 문자열 -> PNG. 캔버스 DOM 을 캡처하지 않고 그래프에서 직접 그리므로 선택 영역/투명 배경/2배 해상도가 정확하다.
 // 아이콘은 SVG 원본(data URI)을 <image> 로 넣어서 래스터화해도 선명하다. 좌표 계산은 캔버스/PPT 와 같은 geometry.js.
 import { ICON_SIZE, GROUP_ICON_SIZE, LABEL_WIDTH, ICON_LABEL_GAP, LABEL_DROP, sortGroups } from '../model/schema.js';
+import { themedIcon } from '../model/schema.js';
 import { absoluteRects, edgeGeometry, edgePath, endRect } from '../model/geometry.js';
 import { LABEL_PX, INK, GROUP_LABEL_PAD, groupPaint, drawnIds } from './scene.js';
 import { isOverlay } from '../model/contain.js';
@@ -101,7 +102,7 @@ export function graphToSvg(graph, catalog, include = null, { background = 'trans
     const base = catalog.kinds.get(g.kind) || catalog.kinds.get('generic');
     const kind = { ...base, color: g.color || base.color, text: g.color || base.text, line: g.line || base.line, fill: 'fill' in g ? g.fill : base.fill };
     const r = rects.get(g.id);
-    const icon = base.icon ? catalog.icons.get(base.icon) : null;
+    const icon = base.icon ? catalog.icons.get(themedIcon(catalog.icons, base.icon, graph.theme === 'dark')) : null;
     const paint = groupPaint(kind, graph.theme === 'dark', g.kind === 'section');
     const stroke = kind.line === 'none' ? 'none' : paint.stroke;   // 다크는 화면과 같은 섞은 색, 채움 없는 그룹은 투명
     const fill = paint.fill || 'none';
@@ -121,7 +122,7 @@ export function graphToSvg(graph, catalog, include = null, { background = 'trans
   // 카드: 둥근 사각형 + (아이콘) + 제목 + 설명
   for (const c of cards) {
     const r = rects.get(c.id);
-    const icon = c.icon ? catalog.icons.get(c.icon) : null;
+    const icon = c.icon ? catalog.icons.get(themedIcon(catalog.icons, c.icon, graph.theme === 'dark')) : null;
     out.push(`<rect x="${X(r.x)}" y="${Y(r.y)}" width="${r.w}" height="${r.h}" rx="10" fill="${T.cardBg}" stroke="${c.accent || T.cardBorder}" stroke-width="${LINE_W}"/>`);
     const padL = 12, padT = 10, iconW = icon ? 42 : 0;
     if (icon) out.push(`<image x="${X(r.x + padL)}" y="${Y(r.y + padT)}" width="32" height="32" href="${icon.src}"/>`);
@@ -156,7 +157,7 @@ export function graphToSvg(graph, catalog, include = null, { background = 'trans
     // 아이콘·이름표 뒤 바탕: 지나가는 선이 아이콘·글자를 가르지 않게 (캔버스와 같은 반투명)
     const halo = background === 'white' && graph.theme !== 'dark' ? '#ffffff' : T.halo;
     out.push(`<rect x="${X(r.x - 3)}" y="${Y(r.y - 3)}" width="${ICON_SIZE + 6}" height="${ICON_SIZE + 6}" rx="9" fill="${halo}" fill-opacity="0.86"/>`);
-    out.push(`<image x="${X(r.x)}" y="${Y(r.y)}" width="${ICON_SIZE}" height="${ICON_SIZE}" href="${catalog.icons.get(n.icon).src}"/>`);
+    out.push(`<image x="${X(r.x)}" y="${Y(r.y)}" width="${ICON_SIZE}" height="${ICON_SIZE}" href="${catalog.icons.get(themedIcon(catalog.icons, n.icon, graph.theme === 'dark')).src}"/>`);
     if (n.label) {
       const lines = wrapText(n.label, LABEL_WIDTH, LABEL_PX_S);
       const cx = X(r.x + ICON_SIZE / 2), top = Y(r.y + ICON_SIZE + ICON_LABEL_GAP);
