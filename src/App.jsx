@@ -142,7 +142,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.22';
+export const APP_VERSION = '0.9.23';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -1062,6 +1062,18 @@ function Editor() {
   }, [aiSettings, catalog, commit, currentGraph, toastMsg, logAi]);
 
   const runAiRef = useRef(runAi);
+  // AI 결과 평가(👍👎): 만든 사람의 피드백 시트로 한 줄. 질문·답은 앞부분만
+  const rateAi = useCallback(async (res, up, note) => {
+    const q = (res.question || res.request || (res.mode === 'review' ? '검수' : '')).slice(0, 200);
+    const a = (res.answer || res.summary || '').slice(0, 300);
+    const text = [`${up ? '👍' : '👎'} ${res.mode}${res.provider ? ' · ' + res.provider : ''}`, q, `→ ${a}`, note ? `아쉬운 점: ${note}` : ''].filter(Boolean).join('\n');
+    try {
+      const r = await fetch(FEEDBACK_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ kind: 'AI 평가', text, name: '', version: APP_VERSION, app: isDesktop ? 'EXE' : '브라우저', env: '', hp: '' }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j.ok !== true) throw new Error(j.error || 'HTTP ' + r.status);
+      toastMsg(up ? '고맙습니다. 평가를 전달했습니다.' : '전달했습니다. 다음 버전에 참고하겠습니다.', 3000);
+    } catch { toastMsg('평가를 보내지 못했습니다. 인터넷 연결을 확인해 주세요.', 4000); }
+  }, [isDesktop, toastMsg]);
   runAiRef.current = runAi;
 
   // ----- 말로 그리기: 막 적은 글 → 상황 정리 + 쉬운 질문 (그리기는 runAi('draw') 로 이어진다) -----
@@ -2039,6 +2051,7 @@ function Editor() {
             onApplyOps={applyAiOps} onCancel={() => aiAbort.current?.abort()} onPick={selectById} nameOf={labelOf} activeDocId={docs.active}
             onWizard={(text) => setWizard({ open: true, text })}
             onAttachDoc={(d) => updateContext({ doc: d || undefined })} onToast={toastMsg}
+            selection={{ count: selectedNodes.length + selectedEdges.length }} onAskSelection={(q) => askSelRef.current?.(q)} onRate={rateAi}
           />
         ) : panel === 'layers' ? (
           <LayersPanel graph={currentGraph()} selected={[...selectedNodes.map((n) => n.id)]}

@@ -236,32 +236,57 @@ export function ConnectModal({ open, pending, settings, onSettings, onClose, onR
 }
 
 // ---------------------------------------------------------------------------------------------
-export function AiPanel({ context, onContext, settings, verified, onOpenConnect, state, onReview, onDraw, onAsk, onFixFromAnswer, onApplyOps, onCancel, onPick, nameOf, activeDocId, onWizard, onAttachDoc, onToast }) {
-  const [talk, setTalk] = useState('');
+export function AiPanel({ context, onContext, settings, verified, onOpenConnect, state, onReview, onAsk, onAskSelection, selection, onFixFromAnswer, onApplyOps, onCancel, onPick, nameOf, activeDocId, onWizard, onAttachDoc, onToast, onRate }) {
+  const [text, setText] = useState('');
   const [draft, setDraft] = useState(context);
-  const [req, setReq] = useState('');
-  const [q, setQ] = useState('');
+  const [ctxOpen, setCtxOpen] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
+  const [rated, setRated] = useState({});     // 결과별 평가 (key → 'up' | 'down')
+  const [note, setNote] = useState(null);     // 👎 뒤에 적는 한 줄 { key }
+  const [noteText, setNoteText] = useState('');
+  const [openLog, setOpenLog] = useState(null);   // 지난 기록 중 펼친 것
   useEffect(() => setDraft(context), [context]);
   const p = providerById(settings.provider);
   const busy = state.busy;
   const r = state.result;
+  const selCount = selection?.count || 0;
   // 직접 적는 칸만 보낸다 (첨부 문서·기록은 따로 관리되므로 덮지 않게)
   const flush = () => { const pick = (c) => ({ title: c.title || '', requirements: c.requirements || '', constraints: c.constraints || '' }); if (JSON.stringify(pick(draft)) !== JSON.stringify(pick(context))) onContext(pick(draft)); };
-
-  const drawResult = r && r.mode === 'draw' ? r : null;
-  const reviewResult = r && r.mode === 'review' ? r : null;
-  const askResult = r && r.mode === 'ask' ? r : null;
   const ctxFilled = !!(draft.title?.trim() || draft.requirements?.trim() || draft.constraints?.trim());
   // AI 에게 알려준 것 (되물음에 답한 것) — 요건 안의 "- [확인]" 줄. 틀렸으면 지운다
   const told = (draft.requirements || '').split('\n').filter((l) => /^- \[확인\]/.test(l));
   const forget = (line) => { const requirements = (draft.requirements || '').split('\n').filter((l) => l !== line).join('\n'); setDraft({ ...draft, requirements }); onContext({ requirements }); };
   const log = context.log || [];
   const KIND = { draw: '그림', ask: '질문', review: '검수' };
+
+  // 보내기: 버튼이 의도를 정한다. 글이 비어 있으면 물어보기·그리기는 안 보낸다
+  const send = (how) => {
+    const t = text.trim();
+    flush();
+    if (how === 'review') { onReview(); return; }
+    if (!t) return;
+    if (how === 'ask') { if (selCount && onAskSelection) onAskSelection(t); else onAsk(t); }
+    else onWizard(t);
+    setText('');
+  };
+  const onKey = (e) => {
+    if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    send(e.shiftKey ? 'ask' : 'draw');
+  };
+
+  // 지금 결과가 기록에도 들어 있으면 기록 쪽은 숨긴다 (같은 것이 두 번 보이지 않게)
+  const dupOf = (x) => !!r && ((r.mode === 'ask' && x.k === 'ask' && x.q === r.question) || (r.mode === 'review' && x.k === 'review') || (r.mode === 'draw' && x.k === 'draw' && x.q === r.request));
+  const lastDup = log.map(dupOf).lastIndexOf(true);
+  const history = log.filter((x, i) => i !== lastDup);
+  const key = r ? String(r.ms || r.question || r.mode) : '';
+  const rate = (up) => { if (!r || rated[key]) return; setRated({ ...rated, [key]: up ? 'up' : 'down' }); if (up) onRate?.(r, true, ''); else setNote({ key }); };
+  const sendNote = () => { onRate?.(r, false, noteText.trim()); setNote(null); setNoteText(''); };
+
   const Intent = ({ res }) => (res.understood || res.assumptions?.length ? (
     <div className="intent">
       {res.understood && <p><b>이렇게 이해했어요</b> {res.understood}</p>}
-      {res.assumptions?.length > 0 && <p className="hint">가정한 것: {res.assumptions.join(' · ')} — 틀리면 아래 물어보기에 "사실은 …" 이라고 적어 주세요.</p>}
+      {res.assumptions?.length > 0 && <p className="hint">가정한 것: {res.assumptions.join(' · ')} — 틀리면 위 칸에 "사실은 …" 이라고 적어 [물어보기].</p>}
     </div>
   ) : null);
   const Raw = ({ res }) => (
@@ -270,22 +295,77 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
       {showRaw && <pre className="result">{res.raw}</pre>}
     </>
   );
+  // 결과 아래 줄: 어디서 왔는지 · 얼마나 걸렸는지 · 👍👎
+  const Foot = ({ res }) => (
+    <div className="turn-foot">
+      <small className="hint">{res.provider}{res.ms ? ` · ${(res.ms / 1000).toFixed(1)}s` : ''}{res.docId && activeDocId && res.docId !== activeDocId ? ` · "${res.docTitle}" 탭에서 요청` : ''}</small>
+      {onRate && (
+        <span className="rate" title="평가는 만든 사람에게 전달됩니다 (질문·답 일부 포함)">
+          <button className={'x' + (rated[key] === 'up' ? ' on' : '')} disabled={!!rated[key]} onClick={() => rate(true)} aria-label="도움이 됐어요"><Icon name="thumbUp" size={14} /></button>
+          <button className={'x' + (rated[key] === 'down' ? ' on' : '')} disabled={!!rated[key]} onClick={() => rate(false)} aria-label="아쉬워요"><Icon name="thumbDown" size={14} /></button>
+          {rated[key] && !note && <small className="hint">{rated[key] === 'up' ? '고맙습니다' : '전달했습니다'}</small>}
+        </span>
+      )}
+      {note && note.key === key && (
+        <div className="rate-note">
+          <input value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="어떤 점이 아쉬웠나요? (선택)" onKeyDown={(e) => { if (e.key === 'Enter') sendNote(); }} autoFocus />
+          <button className="small" onClick={sendNote}>보내기</button>
+        </div>
+      )}
+    </div>
+  );
 
   return (
-    <div className="insp ai">
+    <div className="insp ai chat">
       <h3>AI</h3>
       <div className="conn-row">
         {verified ? <span className="ok"><i className="dot" /> {p?.name}{settings.model ? ' · ' + settings.model : ''}</span> : <span className="hint">연결 안 됨</span>}
         <button className="small" onClick={() => onOpenConnect(null)}>{verified ? '연결 변경' : '연결하기'}</button>
       </div>
 
-      {/* 추천: 말로 그리기 — 막 적으면 팝업에서 필요한 것만 묻고 그려 준다 */}
-      <div className="ai-step now">
-        <div className="step-head"><Icon name="sparkle" size={15} /> 말로 그리기 <small className="hint">추천</small></div>
-        <p className="hint">만들고 싶은 걸 막 적으세요. 부족한 건 AI 가 쉬운 질문으로 한두 개 묻고, 그림을 먼저 보여 준 뒤 그립니다. 그린 그림을 고칠 때도 여기에 적으면 됩니다.</p>
-        <DocAttach doc={context.doc} onAttach={onAttachDoc} onError={onToast} onCopied={onToast} />
-        <textarea className="short" value={talk} onChange={(e) => setTalk(e.target.value)} placeholder="예: 내 PC 에서 도는 AI 를 밖에서도 휴대폰으로 쓰고 싶어" onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { flush(); onWizard(talk.trim()); setTalk(''); } }} />
-        <button className="primary big" disabled={!!busy} onClick={() => { flush(); onWizard(talk.trim()); setTalk(''); }}>시작하기</button>
+      {/* 적는 칸 하나. 윗줄은 "무엇에 대해" (대상·첨부 문서·상황), 아랫줄 버튼이 "무엇을" (검수·질문·그리기) */}
+      <div className={'composer' + (busy ? ' busy' : '')}>
+        <div className="scope">
+          <span className={'chip target' + (selCount ? ' sel' : '')} title={selCount ? '물어보기는 선택한 것에 대해 답합니다. 그리기·검수는 그림 전체를 봅니다' : '그림 전체를 봅니다'}>
+            <Icon name={selCount ? 'cursor' : 'panel'} size={13} /> {selCount ? `선택한 ${selCount}개` : '전체 그림'}
+          </span>
+          <DocAttach doc={context.doc} onAttach={onAttachDoc} onError={onToast} onCopied={onToast} compact />
+          <button className={'chip' + (ctxFilled ? ' on' : '') + (ctxOpen ? ' open' : '')} onClick={() => setCtxOpen(!ctxOpen)} title="무엇을 만드는지·꼭 되어야 하는 것·지켜야 할 조건. AI 가 늘 같이 봅니다">
+            <Icon name="info" size={13} /> 상황{ctxFilled ? ' ✓' : ''}{told.length ? ` · 알려준 것 ${told.length}` : ''}
+          </button>
+        </div>
+        {ctxOpen && (
+          <div className="ctx-box">
+            <label>무엇을 만드나요<input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} onBlur={flush} placeholder="예: OO사 차세대 커머스 플랫폼 구축" /></label>
+            <label>꼭 되어야 하는 것<textarea value={draft.requirements} onChange={(e) => setDraft({ ...draft, requirements: e.target.value })} onBlur={flush} placeholder={'- 동시 접속 1만, 피크 3배\n- 서울 리전, DR 요구'} /></label>
+            <label>지켜야 할 조건 (예산·보안 등)<textarea className="short" value={draft.constraints} onChange={(e) => setDraft({ ...draft, constraints: e.target.value })} onBlur={flush} placeholder="예: 월 예산 상한, 기존 DB 유지" /></label>
+            {told.length > 0 && (
+              <div className="told">
+                <div className="more-head">AI 에게 알려준 것 <small className="hint">다음 답과 검수에 반영됩니다</small></div>
+                {told.map((l) => <div key={l} className="told-row"><span>{l.replace(/^- \[확인\]\s*/, '')}</span><button className="x" title="잊게 하기" onClick={() => forget(l)}><Icon name="close" size={14} /></button></div>)}
+              </div>
+            )}
+            <p className="hint">말로 그리기 때 AI 가 물어본 답도 여기 "알려준 것"으로 쌓입니다.</p>
+          </div>
+        )}
+        <textarea value={text} onChange={(e) => setText(e.target.value)} onKeyDown={onKey} disabled={!!busy}
+          placeholder={busy ? '' : selCount ? '선택한 것에 대해 묻거나, 그림을 어떻게 바꿀지 적으세요' : '무엇이든 적으세요. 예: 내 PC 의 AI 를 휴대폰에서도 쓰고 싶어 / NAT 를 하나만 두면? / 줄 좀 맞춰 줘'} />
+        <div className="send-row">
+          {busy ? (
+            <>
+              <Busy label={busy === 'review' ? '검수 중' : busy === 'ask' ? '생각 중' : '그릴 내용 만드는 중 · 1~2분'} />
+              <button onClick={onCancel}>취소</button>
+            </>
+          ) : (
+            <>
+              <button disabled={!verified} onClick={() => send('review')} title="그림 전체를 요건과 비교해 빈틈을 요소 위에 표시합니다. 글은 안 적어도 됩니다"><Icon name="shield" size={14} /> 검수 받기</button>
+              <span className="grow" />
+              <button disabled={!verified || !text.trim()} onClick={() => send('ask')} title="그림을 보고 답만 합니다. 그림은 안 바뀝니다 (Ctrl+Shift+Enter)">물어보기</button>
+              <button className="primary" disabled={!verified || !text.trim()} onClick={() => send('draw')} title="부족한 건 쉬운 질문으로 묻고, 그릴 내용을 먼저 보여 준 뒤 그립니다 (Ctrl+Enter)"><Icon name="sparkle" size={14} /> 그리기·고치기</button>
+            </>
+          )}
+        </div>
+        {!verified && <p className="hint">먼저 위의 [연결하기]로 AI 를 연결하세요.</p>}
       </div>
 
       {state.error && (
@@ -296,101 +376,82 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
         </div>
       )}
 
-      {/* 마지막으로 만든 그림 (말로 그리기·직접 그리기 모두 여기 남는다) */}
-      {drawResult && (
-        <div className="ai-result" ref={(el) => { if (el && el.dataset.k !== String(drawResult.ms)) { el.dataset.k = String(drawResult.ms); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }}>
-          <h4>{drawResult.applied ? '그린 내용' : '그릴 내용 (아직 캔버스에 안 그려짐)'} <small className="hint">{drawResult.provider}{drawResult.ms ? ` · ${(drawResult.ms / 1000).toFixed(1)}s` : ''}</small></h4>
-          {drawResult.docId && activeDocId && drawResult.docId !== activeDocId && <p className="hint">"{drawResult.docTitle}" 탭에서 요청한 결과입니다.</p>}
-          <Intent res={drawResult} />
-          {drawResult.summary && <p className="summary">{drawResult.summary}</p>}
-          <ol className="ops">{describeOps(drawResult.ops || [], nameOf).map((t, i) => <li key={i}>{t}</li>)}</ol>
-          {!drawResult.ops?.length && <p className="hint">바꿀 내용이 없습니다.</p>}
-          {drawResult.applied ? (
-            <p className="ok">{drawResult.applied.blocked ? '규칙 검사에서 막혀 그리지 않았습니다.' : `캔버스에 그렸습니다 · ${drawResult.applied.applied}개`}{drawResult.applied.errors?.length ? ` · 실패 ${drawResult.applied.errors.length}개: ${drawResult.applied.errors.map((e) => e.message).join('; ')}` : ''}</p>
-          ) : drawResult.ops?.length > 0 && (
-            <button className="primary big" onClick={() => onApplyOps(drawResult.ops)}>캔버스에 그리기 (되돌리기 가능)</button>
-          )}
-          <Raw res={drawResult} />
-        </div>
-      )}
-
-      {/* 그린 다음에 — 검수와 질문 */}
-      <div className="ai-more">
-        <div className="more-head">그린 다음에 (선택)</div>
-        <div className="ai-sub">
-          <b>검수 받기</b> <span className="hint">요건 대비 빠진 것·과한 것, 가용성·보안·비용의 빈틈을 요소 위에 표시합니다.</span>
-          <button className={busy === 'review' ? 'waiting' : ''} disabled={!!busy} onClick={() => { flush(); onReview(); }}>{busy === 'review' ? <Busy label="검수 중" /> : '검수 받기'}</button>
-          {reviewResult && (
-            <div className="ai-result">
-              <Intent res={reviewResult} />
-              {reviewResult.summary && <p className="summary">{reviewResult.summary}</p>}
-              {!reviewResult.findings?.length && <p className="ok">지적 사항이 없습니다.</p>}
-              {reviewResult.findings?.map((f) => (
-                <div key={f.id} className={'pin-row card ' + f.level} onClick={() => onPick(f.target)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(f.target); } }} role="button" tabIndex={0}>
-                  <b>{f.level === 'error' ? '심각' : f.level === 'warn' ? '경고' : '참고'}</b> {f.message}
-                  <div className="hint">{nameOf?.(f.target) || ''}</div>
-                  <p className="explain">{f.explain}</p>
-                </div>
-              ))}
-              {reviewResult.dropped?.length > 0 && <p className="hint">다이어그램에 없는 요소를 가리킨 지적 {reviewResult.dropped.length}건은 제외했습니다.</p>}
-              <Raw res={reviewResult} />
-            </div>
-          )}
-        </div>
-        <div className="ai-sub">
-          <b>물어보기</b> <span className="hint">그림과 요건을 보고 답합니다. 경고 표시의 [AI에게 물어보기]도 여기로 옵니다.</span>
-          <textarea className="short" value={q} onChange={(e) => setQ(e.target.value)} placeholder={askResult ? '이어서 질문…' : '예: NAT 게이트웨이를 하나만 두면 어떤 문제가 있습니까?'} onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && q.trim()) { flush(); onAsk(q.trim()); setQ(''); } }} />
-          <button className={busy === 'ask' ? 'waiting' : ''} disabled={!!busy || !q.trim()} onClick={() => { flush(); onAsk(q.trim()); setQ(''); }}>{busy === 'ask' ? <Busy label="생각 중" /> : '물어보기 (Ctrl+Enter)'}</button>
-          {askResult && (
-            <div className="ai-result ask" ref={(el) => { if (el && el.dataset.q !== askResult.question) { el.dataset.q = askResult.question; el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }}>
-              <h4>답변 <small className="hint">{askResult.provider}{askResult.ms ? ` · ${(askResult.ms / 1000).toFixed(1)}s` : ''}</small></h4>
-              <div className="ask-q">{askResult.question}</div>
-              <Intent res={askResult} />
-              <div className="ask-a">{boldText(askResult.answer)}</div>
-              {onFixFromAnswer && (
-                <div className="ask-next">
-                  <button className="primary" disabled={!!busy} onClick={() => { flush(); onFixFromAnswer(askResult.question, askResult.answer); }}>
-                    {busy === 'draw' ? <Busy label="고칠 내용 만드는 중" /> : <><Icon name="sparkle" size={14} /> 이 답변대로 그림 고치기</>}
-                  </button>
-                  <small className="hint">고칠 내용을 먼저 보여 줍니다. [적용]을 눌러야 바뀌고, 적용하면 자동 정렬까지 합니다. Ctrl+Z 로 되돌릴 수 있어요.</small>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        {busy && <button onClick={onCancel}>취소</button>}
-      </div>
-
-      {told.length > 0 && (
-        <div className="told">
-          <div className="more-head">AI 에게 알려준 것 <small className="hint">다음 답과 검수에 반영됩니다</small></div>
-          {told.map((l) => <div key={l} className="told-row"><span>{l.replace(/^- \[확인\]\s*/, '')}</span><button className="x" title="잊게 하기" onClick={() => forget(l)}><Icon name="close" size={14} /></button></div>)}
-        </div>
-      )}
-
-      {log.length > 0 && (
-        <details className="told ai-log">
-          <summary className="more-head">이 그림의 AI 기록 {log.length}개 <small className="hint">AI 가 다음 질문·검수 때 같이 봅니다</small></summary>
-          {[...log].reverse().map((x, i) => (
-            <div key={i} className="log-row">
+      {/* 대화: 지난 기록(접힌 줄) → 지금 결과(펼친 카드). 아래가 최근 */}
+      {(history.length > 0 || r) && (
+        <div className="thread">
+          <div className="more-head">대화 <small className="hint">이 그림에서 주고받은 것 · AI 가 다음에도 같이 봅니다</small>{history.length > 0 && <button className="link" onClick={() => onContext({ log: [] })}>기록 지우기</button>}</div>
+          {history.map((x, i) => (
+            <div key={i} className={'turn past' + (openLog === i ? ' open' : '')} onClick={() => setOpenLog(openLog === i ? null : i)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') setOpenLog(openLog === i ? null : i); }}>
               <span className={'log-k ' + x.k}>{KIND[x.k] || x.k}</span>
-              <div><div className="log-q">{x.q.length > 160 ? x.q.slice(0, 160) + '…' : x.q}</div>{x.a && <div className="hint">→ {x.a.length > 160 ? x.a.slice(0, 160) + '…' : x.a}</div>}</div>
+              <div className="turn-body">
+                <div className="log-q">{openLog === i || x.q.length <= 120 ? x.q : x.q.slice(0, 120) + '…'}</div>
+                {x.a && <div className="hint">→ {openLog === i || x.a.length <= 120 ? x.a : x.a.slice(0, 120) + '…'}</div>}
+              </div>
             </div>
           ))}
-          <button className="small" onClick={() => onContext({ log: [] })}>기록 지우기</button>
-        </details>
-      )}
 
-      {/* 직접 하기 — 상황과 요청을 직접 적어서 (익숙한 사람용) */}
-      <details className="ai-step">
-        <summary>직접 적어서 그리기 <small className="hint">{ctxFilled ? '상황 적혀 있음' : '익숙한 분용'}</small></summary>
-        <label>무엇을 만드나요<input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} onBlur={flush} placeholder="예: OO사 차세대 커머스 플랫폼 구축" /></label>
-        <label>꼭 되어야 하는 것<textarea value={draft.requirements} onChange={(e) => setDraft({ ...draft, requirements: e.target.value })} onBlur={flush} placeholder={'- 동시 접속 1만, 피크 3배\n- 서울 리전, DR 요구'} /></label>
-        <label>지켜야 할 조건 (예산·보안 등)<textarea className="short" value={draft.constraints} onChange={(e) => setDraft({ ...draft, constraints: e.target.value })} onBlur={flush} placeholder="예: 월 예산 상한, 기존 DB 유지" /></label>
-        <label>그릴 내용<textarea className="short" value={req} onChange={(e) => setReq(e.target.value)} placeholder="예: VPC 안에 AZ 2개, ALB 뒤에 EC2 2대, RDS 멀티 AZ" /></label>
-        <button className={'primary' + (busy === 'draw' ? ' waiting' : '')} disabled={!!busy || !req.trim()} onClick={() => { flush(); onDraw(req.trim()); }}>{busy === 'draw' ? <Busy label="만드는 중 · 1~2분" /> : '그릴 내용 만들기'}</button>
-        <p className="hint">만든 내용은 위에 [그릴 내용]으로 나오고, [캔버스에 그리기]를 눌러야 그려집니다.</p>
-      </details>
+          {r && r.mode === 'draw' && (
+            <div className="turn now" ref={(el) => { if (el && el.dataset.k !== key) { el.dataset.k = key; el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } }}>
+              {r.request && <div className="turn-user"><span className="log-k draw">그림</span><div className="log-q">{r.request}</div></div>}
+              <div className="turn-ai">
+                <h4>{r.applied ? '그린 내용' : '그릴 내용 (아직 캔버스에 안 그려짐)'}</h4>
+                <Intent res={r} />
+                {r.summary && <p className="summary">{r.summary}</p>}
+                <ol className="ops">{describeOps(r.ops || [], nameOf).map((t, i) => <li key={i}>{t}</li>)}</ol>
+                {!r.ops?.length && <p className="hint">바꿀 내용이 없습니다.</p>}
+                {r.applied ? (
+                  <p className="ok">{r.applied.blocked ? '규칙 검사에서 막혀 그리지 않았습니다.' : `캔버스에 그렸습니다 · ${r.applied.applied}개 · Ctrl+Z 로 되돌릴 수 있어요`}{r.applied.errors?.length ? ` · 실패 ${r.applied.errors.length}개: ${r.applied.errors.map((e) => e.message).join('; ')}` : ''}</p>
+                ) : r.ops?.length > 0 && (
+                  <button className="primary big" onClick={() => onApplyOps(r.ops)}>캔버스에 그리기 (되돌리기 가능)</button>
+                )}
+                <Raw res={r} />
+                <Foot res={r} />
+              </div>
+            </div>
+          )}
+
+          {r && r.mode === 'review' && (
+            <div className="turn now">
+              <div className="turn-user"><span className="log-k review">검수</span><div className="log-q">그림 전체 검수</div></div>
+              <div className="turn-ai">
+                <Intent res={r} />
+                {r.summary && <p className="summary">{r.summary}</p>}
+                {!r.findings?.length && <p className="ok">지적 사항이 없습니다.</p>}
+                {r.findings?.length > 0 && <p className="hint">지적 {r.findings.length}건 — 누르면 그 요소로 갑니다. 요소 위에도 표시해 두었습니다.</p>}
+                {r.findings?.map((f) => (
+                  <div key={f.id} className={'pin-row card ' + f.level} onClick={() => onPick(f.target)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(f.target); } }} role="button" tabIndex={0}>
+                    <b>{f.level === 'error' ? '심각' : f.level === 'warn' ? '경고' : '참고'}</b> {f.message}
+                    <div className="hint">{nameOf?.(f.target) || ''}</div>
+                    <p className="explain">{f.explain}</p>
+                  </div>
+                ))}
+                {r.dropped?.length > 0 && <p className="hint">다이어그램에 없는 요소를 가리킨 지적 {r.dropped.length}건은 제외했습니다.</p>}
+                <Raw res={r} />
+                <Foot res={r} />
+              </div>
+            </div>
+          )}
+
+          {r && r.mode === 'ask' && (
+            <div className="turn now" ref={(el) => { if (el && el.dataset.q !== r.question) { el.dataset.q = r.question; el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } }}>
+              <div className="turn-user"><span className="log-k ask">질문</span><div className="log-q">{r.question}</div></div>
+              <div className="turn-ai">
+                <Intent res={r} />
+                <div className="ask-a">{boldText(r.answer)}</div>
+                {onFixFromAnswer && (
+                  <div className="ask-next">
+                    <button className="primary" disabled={!!busy} onClick={() => { flush(); onFixFromAnswer(r.question, r.answer); }}>
+                      {busy === 'draw' ? <Busy label="고칠 내용 만드는 중" /> : <><Icon name="sparkle" size={14} /> 이 답변대로 그림 고치기</>}
+                    </button>
+                    <small className="hint">고칠 내용을 먼저 보여 줍니다. [캔버스에 그리기]를 눌러야 바뀌고, 자동 정렬까지 합니다.</small>
+                  </div>
+                )}
+                <Foot res={r} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

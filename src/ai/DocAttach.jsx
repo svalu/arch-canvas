@@ -24,7 +24,7 @@ export async function readDocFile(file, onError) {
   return { name: file.name, text };
 }
 
-export function DocAttach({ doc, onAttach, onError, onCopied }) {
+export function DocAttach({ doc, onAttach, onError, onCopied, compact = false }) {
   const ref = useRef(null);
   const [how, setHow] = useState(false);
   const copy = async () => {
@@ -32,15 +32,15 @@ export function DocAttach({ doc, onAttach, onError, onCopied }) {
     catch { onError?.('복사하지 못했습니다. 글을 직접 선택해 복사해 주세요.'); }
   };
   return (
-    <div className="doc-attach">
+    <div className={"doc-attach" + (compact ? " compact" : "")}>
       <div className="doc-row">
         {doc ? (
           <span className="doc-chip" title={doc.text.slice(0, 300)}><Icon name="file" size={14} /> {doc.name} <small>{doc.text.length < 1000 ? `${doc.text.length}자` : `${Math.round(doc.text.length / 1000)}천 자`}</small>
             <button className="x" onClick={() => onAttach(null)} aria-label="첨부 빼기"><Icon name="close" size={14} /></button></span>
         ) : (
-          <button className="doc-btn" onClick={() => ref.current?.click()}><Icon name="attach" size={15} /> 시스템 구조 문서(MD) 넣기</button>
+          <button className={compact ? "chip" : "doc-btn"} onClick={() => ref.current?.click()} title={compact ? "시스템 구조 문서(MD)를 넣으면 AI 가 그 내용대로 그리고 답합니다" : undefined}><Icon name="attach" size={compact ? 13 : 15} /> {compact ? "문서 넣기" : "시스템 구조 문서(MD) 넣기"}</button>
         )}
-        <button className="link" onClick={() => setHow(!how)}>{how ? '안내 닫기' : 'MD 는 어떻게 만들어요?'}</button>
+        <button className="link" onClick={() => setHow(!how)}>{how ? '안내 닫기' : compact ? 'MD?' : 'MD 는 어떻게 만들어요?'}</button>
       </div>
       {how && (
         <div className="doc-how">
