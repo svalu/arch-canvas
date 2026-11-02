@@ -366,6 +366,123 @@ function tidySiblings(groups, nodes = [], GAP = 24) {
 }
 
 /**
+ * 형제 흐름 배치: 한 상자 안의 자식 상자·아이콘을 선이 가는 방향(출발 → 도착)대로 단을 나눠 놓는다.
+ * 같은 단에 든 것은 옆으로 쌓고, 단은 흐름 축(가로. 서브넷끼리는 AWS 관례대로 세로)으로 나란히 둔다.
+ * 단이 많아 너무 길쭉해지면 줄을 바꾼다(가로:세로 2.2 근처). 양방향·순환은 지금 그림의 읽는 순서(왼쪽 위가 먼저)를 따른다.
+ * 형제 사이에 선이 하나도 없으면 자리를 건드리지 않는다.
+ */
+function flowSiblings(g, pid, groupIds, nodeIds, isOverlay, GAP = 24) {
+  const half = Math.max(0, (LABEL_WIDTH - ICON_SIZE) / 2);
+  const kids = g.groups.filter((c) => (c.parent ?? null) === pid && !isOverlay(c) && groupIds.has(c.id));
+  const ns = pid == null ? [] : g.nodes.filter((n) => (n.parent ?? null) === pid && nodeIds.has(n.id));   // 맨 바깥 아이콘은 뒤에서 상자 옆에 따로 놓는다
+  const items = [
+    ...kids.map((o) => ({ o, grp: true, x: o.x, y: o.y, w: o.w, h: o.h })),
+    ...ns.map((o) => (isBox(o) ? { o, x: o.x, y: o.y, w: o.w, h: o.h } : { o, icon: true, x: o.x - half, y: o.y, w: ICON_SIZE + half * 2, h: ICON_SIZE + LABEL_SPACE })),
+  ];
+  if (items.length < 2) return false;
+  // 어느 형제 밑에 있는지: 자손 → 형제
+  const parentOf = new Map(g.groups.map((x) => [x.id, x.parent ?? null]));
+  for (const n of g.nodes) parentOf.set(n.id, n.parent ?? null);
+  const idx = new Map(items.map((k, i) => [k.o.id, i]));
+  const owner = (id) => { let guard = 0; while (id != null && guard++ < 512) { if (idx.has(id)) return idx.get(id); id = parentOf.get(id); } return -1; };
+  const n = items.length;
+  const W = items.map(() => items.map(() => 0));
+  let any = false;
+  for (const e of g.edges) {
+    const a = owner(e.source), b = owner(e.target);
+    if (a < 0 || b < 0 || a === b) continue;
+    if (e.arrow === 'both') { W[a][b] += 0.01; W[b][a] += 0.01; }   // 양방향은 이어졌다는 것만, 방향은 아니다
+    else W[a][b] += 1;
+    any = true;
+  }
+  if (!any) return false;
+  const stack = kids.length && kids.every((k) => /subnet$/.test(k.kind || ''));
+  const P = pid == null ? null : g.groups.find((q) => q.id === pid);
+  // 서브넷끼리는 세로로 쌓고, 서브넷 안의 아이콘은 가로로 늘어놓는다(띠 모양). 나머지는 왼쪽 → 오른쪽 흐름
+  const ax = stack || (!kids.length && P && /subnet$/.test(P.kind || '')) ? 'y' : 'x';
+  const pos = ax, cross = ax === 'y' ? 'x' : 'y', len = ax === 'y' ? 'h' : 'w', clen = ax === 'y' ? 'w' : 'h';
+  // 읽는 순서: 흐름 축이 먼저. 순환을 풀 때 이 순서를 따른다
+  const order = items.map((_, i) => i).sort((i, j) => items[i][pos] - items[j][pos] || items[i][cross] - items[j][cross]);
+  const rankOf = order.map(() => 0); order.forEach((i, r) => { rankOf[i] = r; });
+  // Public 서브넷은 들어오는 선이 있어도 맨 앞(인터넷에서 들어오는 문)
+  const isPub = (i) => items[i].grp && /public/.test(items[i].o.kind || '');
+  const adj = items.map(() => []);
+  for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) {
+    if (W[a][b] < 1 || isPub(b)) continue;   // 양방향뿐인 쌍은 단을 가르지 않는다
+    // 지금 읽는 순서를 지킨다: 거꾸로 가는 선뿐일 때만 순서를 바꾼다 (서로 오가는 둘은 그린 사람이 둔 대로)
+    if (rankOf[b] < rankOf[a] && (W[b][a] >= 1 || W[a][b] < 1)) continue;
+    if (rankOf[a] < rankOf[b] && W[a][b] < 1 && W[b][a] >= 1) continue;
+    adj[a].push(b);
+  }
+  // 남은 순환은 읽는 순서로 DFS 해서 되돌아가는 선을 버린다
+  const color = items.map(() => 0);
+  const dfs = (u) => { color[u] = 1; adj[u] = adj[u].filter((v) => { if (color[v] === 1) return false; if (!color[v]) dfs(v); return true; }); color[u] = 2; };
+  for (const i of order) if (!color[i]) dfs(i);
+  // 단: 가장 긴 경로
+  const indeg = items.map(() => 0); for (const u of adj.keys()) for (const v of adj[u]) indeg[v]++;
+  const rank = items.map(() => 0), q = order.filter((i) => !indeg[i]);
+  const seen = new Set(q);
+  while (q.length) { const u = q.shift(); for (const v of adj[u]) { rank[v] = Math.max(rank[v], rank[u] + 1); if (--indeg[v] === 0 && !seen.has(v)) { seen.add(v); q.push(v); } } }
+  // 선이 없는 것은 읽는 순서로 바로 앞의 것과 같은 단
+  const linked = items.map((_, i) => W[i].some(Boolean) || W.some((row) => row[i]));
+  let prev = 0; for (const i of order) { if (linked[i]) prev = rank[i]; else rank[i] = prev; }
+  const cols = [];
+  for (let i = 0; i < n; i++) (cols[rank[i]] ||= []).push(i);
+  let columns = cols.filter(Boolean);
+  if (stack) columns = columns.flat().map((i) => [i]);   // 서브넷은 단마다 하나씩, 한 줄로 쌓는다
+  // 단 안의 순서: 앞 단에서 이어진 것의 평균 자리(가까운 것끼리 붙게), 없으면 지금 자리
+  const at = items.map((k) => k[cross]), mo = items.map(() => 0);
+  for (let c = 0; c < columns.length; c++) {
+    const key = (i) => { const src = c ? columns[c - 1].filter((u) => W[u][i] || W[i][u]) : []; return src.length ? src.reduce((s, u) => s + at[u], 0) / src.length : null; };
+    columns[c].sort((i, j) => (key(i) ?? Infinity) - (key(j) ?? Infinity) || rankOf[i] - rankOf[j]);   // 이어진 것이 먼저, 그다음 읽는 순서
+    // 아이콘만 넷 이상 한 단에 몰리면 길게 늘어놓지 않고 3개씩 접어 격자로
+    const col = columns[c], per = col.every((i) => items[i].icon) && col.length > 3 ? Math.ceil(col.length / Math.ceil(col.length / 3)) : col.length;
+    let v = 0, m = 0, k = 0;
+    for (const i of col) {
+      if (k === per) { k = 0; v = 0; m += items[col[0]][len] + GAP; }
+      at[i] = v; mo[i] = m; v += items[i][clen] + GAP; k++;
+    }
+  }
+  // AZ·VPC·리전끼리 같은 단이면 쌓지 않고 흐름 축으로 나란히 (AWS 관례: AZ 는 옆으로)
+  const SIDE = /^(az|vpc|region|aws-cloud|aws-cloud-dark|aws-cloud-logo|aws-cloud-logo-dark|aws-account|corporate-dc)$/;
+  const sideBy = columns.map((col) => col.length > 1 && col.every((i) => items[i].grp && SIDE.test(items[i].o.kind || '')));
+  // 단 크기와 줄 바꾸기: 가로:세로가 2.2 에 가장 가까운 줄당 단 수
+  const size = columns.map((col, c) => sideBy[c]
+    ? { main: col.reduce((s, i) => s + items[i][len], 0) + GAP * (col.length - 1), cross: Math.max(...col.map((i) => items[i][clen])) }
+    : { main: Math.max(...col.map((i) => mo[i] + items[i][len])), cross: Math.max(...col.map((i) => at[i] + items[i][clen])) });
+  const TARGET = 2.2;
+  let best = null;
+  for (let k = stack ? columns.length : 1; k <= columns.length; k++) {   // 서브넷은 줄을 바꾸지 않고 한 줄로 쌓는다
+    let M = 0, C = 0, rows = 0;
+    for (let i = 0; i < columns.length; i += k) { const row = size.slice(i, i + k); M = Math.max(M, row.reduce((t, s) => t + s.main, 0) + GAP * (row.length - 1)); C += Math.max(...row.map((s) => s.cross)); rows++; }
+    C += GAP * (rows - 1);
+    const [w, h] = ax === 'x' ? [M, C] : [C, M];
+    const score = Math.abs(Math.log((w / h) / TARGET));
+    if (!best || score < best.score - 1e-9) best = { k, score };
+  }
+  const x0 = Math.min(...items.map((k) => k.x)), y0 = Math.min(...items.map((k) => k.y));
+  const start = { x: x0, y: y0 };
+  let c0 = start[cross];
+  for (let i = 0; i < columns.length; i += best.k) {
+    const row = columns.slice(i, i + best.k), rs = size.slice(i, i + best.k);
+    const rowCross = Math.max(...rs.map((s) => s.cross));
+    let m = start[pos];
+    row.forEach((col, j) => {
+      const off = ax === 'x' ? Math.round((rowCross - rs[j].cross) / 2) : 0;   // 가로 흐름은 단을 위아래 가운데에, 세로 쌓기는 왼쪽 맞춤
+      if (sideBy[i + j]) { let mm = m; for (const t of col) { items[t][pos] = mm; items[t][cross] = c0 + off; mm += items[t][len] + GAP; } }
+      else for (const t of col) { items[t][pos] = m + mo[t]; items[t][cross] = c0 + off + at[t]; }
+      m += rs[j].main + GAP;
+    });
+    c0 += rowCross + GAP;
+  }
+  for (const k of items) {
+    if (k.grp) { k.o.x = Math.round(k.x); k.o.y = Math.round(k.y); }
+    else { k.o.x = Math.round(k.icon ? k.x + half : k.x); k.o.y = Math.round(k.y); }
+  }
+  return true;
+}
+
+/**
  * 자동으로 놓인 아이콘을 줄 맞춤: 같은 상자 안에서 거의 같은 높이(±28px)면 한 줄로, 거의 같은 가로 위치면 한 세로줄로.
  * 맞춘 뒤 다른 것과 겹치게 되는 이동은 하지 않는다.
  */
@@ -462,6 +579,17 @@ function hugMembers(g, list) {
 }
 
 export function autoArrange(g, ids, isOverlay = () => false, skip = new Set()) {
+  // 흐름 배치 뒤의 줄 맞춤(평균 자리)은 한 번에 자리를 잡지 못할 수 있어, 자리가 더 안 바뀔 때까지(최대 3번) 되풀이한다
+  const snap = () => JSON.stringify([...g.groups.map((x) => [x.x, x.y, x.w, x.h]), ...g.nodes.map((n) => [n.x, n.y])]);
+  for (let pass = 0; pass < 3; pass++) {
+    const before = snap();
+    arrangeOnce(g, ids, isOverlay, skip);
+    if (snap() === before) break;
+  }
+  return g;
+}
+
+function arrangeOnce(g, ids, isOverlay, skip) {
   const groups = new Set(), nodes = new Set();
   for (const id of ids) {
     if (skip.has(id)) continue;
@@ -480,8 +608,16 @@ export function autoArrange(g, ids, isOverlay = () => false, skip = new Set()) {
   const C0 = corner(before);
   // 겹치는 상자(ASG 등)는 멤버를 기억해 두었다가 정리 뒤 멤버에 다시 맞춘다
   const inside = (r, q) => q.x + q.w / 2 >= r.x && q.x + q.w / 2 <= r.x + r.w && q.y + q.h / 2 >= r.y && q.y + q.h / 2 <= r.y + r.h;
-  const overlayMembers = g.groups.filter((x) => isOverlay(x) && groups.has(x.id)).map((ov) => [ov, g.nodes.filter((n) => inside(before.get(ov.id), before.get(n.id))).map((n) => n.id)]);
+  // 멤버는 그 겹치는 상자가 든 상자 안의 것만 (밖의 아이콘을 안고 늘어나지 않게)
+  const within = (n, pid) => { if (pid == null) return true; let p = n.parent; let guard = 0; while (p && guard++ < 512) { if (p === pid) return true; p = g.groups.find((q) => q.id === p)?.parent; } return false; };
+  const overlayMembers = g.groups.filter((x) => isOverlay(x) && groups.has(x.id)).map((ov) => [ov, g.nodes.filter((n) => within(n, ov.parent ?? null) && inside(before.get(ov.id), before.get(n.id))).map((n) => n.id)]);
   tightenGroups(g, groups, isOverlay);
+  // 흐름대로 단 나누기: 안쪽 상자부터(자식 자리가 정해져야 그 상자 크기가 정해진다). 맨 바깥은 고른 상자끼리만
+  const depth = depthMap(g);
+  for (const grp of g.groups.filter((x) => groups.has(x.id) && !isOverlay(x)).sort((a, b) => depth.get(b.id) - depth.get(a.id))) {
+    if (flowSiblings(g, grp.id, groups, nodes, isOverlay)) tightenGroups(g, new Set([grp.id]), isOverlay);
+  }
+  flowSiblings(g, null, groups, nodes, isOverlay);
   // 맨 바깥 상자·아이콘끼리도 겹치거나 동떨어지지 않게 (선택에 든 것만)
   tidySiblings(g.groups.filter((x) => !x.parent && !isOverlay(x) && groups.has(x.id)), g.nodes.filter((n) => !n.parent && nodes.has(n.id)));
   alignNodes(g, nodes);
