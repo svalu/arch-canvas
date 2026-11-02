@@ -125,6 +125,7 @@ const TOPICS = [
   ], spot: ['.settings'] },
   { id: 'update', group: 'more', title: '업데이트', desktop: true, action: 'update', lines: [
     '하루 한 번 새 버전을 확인해 상단에 [업데이트] 표시가 뜹니다. 누르면 바뀐 내용을 보고 바로 바꿀 수 있습니다.',
+    '회사 백신이 "머신러닝" 판정으로 EXE 를 격리하면: 서명 없는 새 파일에 흔한 추정 판정입니다. 백신 창에서 복원하고 IT 에 허용을 요청하세요. 확인용 SHA-256 은 GitHub Releases 의 버전 설명에 있습니다.',
   ] },
   { id: 'feedback', group: 'more', title: '피드백 보내기', action: 'feedback', lines: [
     '불편한 점이나 바라는 것을 적어 주세요. 계정 없이 바로 만든 사람에게 전달됩니다.',
