@@ -2,6 +2,7 @@
 // 그리는 순서: 그룹은 groups 배열 순서대로 zIndex 를 주고, 엣지는 그룹 위, 아이콘은 맨 위.
 import { normalizeGraph, sortGroups, SCHEMA, ICON_SIZE } from './schema.js';
 import { isOverlay } from './contain.js';
+import { absoluteRects, portOffsets } from './geometry.js';
 
 export const Z_EDGE = 9000;
 export const Z_ICON = 10000;
@@ -41,13 +42,14 @@ export function graphToFlow(input) {
       data: { locked: !!n.locked, dark, ...(n.set ? { set: n.set } : {}), icon: n.icon, label: n.label, pins: pins.get(n.id) || [], ...(card ? { body: n.body, accent: n.accent } : {}), ...(text ? { size: n.size, bold: n.bold, accent: n.accent } : {}), ...(badge ? { accent: n.accent } : {}) },
     });
   });
-  const edges = g.edges.map((e) => edgeToFlow(e, pins.get(e.id), g.theme));
+  const ports = portOffsets(g.edges, absoluteRects(g));
+  const edges = g.edges.map((e) => edgeToFlow(e, pins.get(e.id), g.theme, ports.get(e.id)));
   return { nodes, edges, title: g.title, annotations: g.annotations, context: g.context, mode: g.mode, theme: g.theme };
 }
 
 const ARROW = (theme) => ({ type: 'arrowclosed', color: theme === 'dark' ? '#7FE3D6' : '#232F3E', width: 12, height: 12 });
 
-export function edgeToFlow(e, pins = [], theme = 'light') {
+export function edgeToFlow(e, pins = [], theme = 'light', po = null) {
   return {
     id: e.id,
     source: e.source ?? e.target,
@@ -56,7 +58,7 @@ export function edgeToFlow(e, pins = [], theme = 'light') {
     zIndex: Z_EDGE,
     ...(e.arrow !== 'none' ? { markerEnd: ARROW(theme) } : {}),
     ...(e.arrow === 'both' ? { markerStart: ARROW(theme) } : {}),
-    data: { label: e.label, line: e.line, shape: e.shape, arrow: e.arrow, pins, ...(typeof e.bend === 'number' ? { bend: e.bend } : {}), ...(e.sp ? { sp: e.sp } : {}), ...(e.tp ? { tp: e.tp } : {}) },
+    data: { label: e.label, line: e.line, shape: e.shape, arrow: e.arrow, pins, ...(typeof e.bend === 'number' ? { bend: e.bend } : {}), ...(e.sp ? { sp: e.sp } : {}), ...(e.tp ? { tp: e.tp } : {}), ...(po && (po.s || po.t) ? { po } : {}) },
   };
 }
 

@@ -13,7 +13,7 @@
 import { ICON_SIZE, GROUP_ICON_SIZE, LABEL_WIDTH, ICON_LABEL_GAP, ICON_LABEL_H, LABEL_DROP, sortGroups } from '../model/schema.js';
 import { themedIcon } from '../model/schema.js';
 import { isOverlay } from '../model/contain.js';
-import { absoluteRects, descendants, edgeGeometry, edgePath, bendOf, endRect, SIDE_IDX } from '../model/geometry.js';
+import { absoluteRects, descendants, edgeGeometry, edgePath, bendOf, endRect, SIDE_IDX, portOffsets } from '../model/geometry.js';
 export { ICON_LABEL_GAP, ICON_LABEL_H };
 
 export const EMU_PER_PX = 11250;
@@ -135,18 +135,30 @@ export function graphToScene(graph, catalog, include = null, { textScale = 1 } =
   const labeled = new Map(graph.nodes.filter((n) => n.type !== 'card' && n.label && catalog.icons.has(n.icon)).map((n) => [n.id, true]));
   const edgeLabels = [];
   const drawn = drawnIds(graph, catalog);
+  const ports = portOffsets(graph.edges, rects);
+  const sites = new Map();   // 도형 id → 쓰인 연결점 [{ side, off }] (면 중앙 말고 다른 곳에 붙는 도형만 custom geometry 로)
   for (const e of graph.edges) {
     const okEnd = (id, pt) => (id ? has(id) && drawn.has(id) : !!pt);
     if (!has(e.id) || !okEnd(e.source, e.sp) || !okEnd(e.target, e.tp)) continue;
     const a = endRect(rects, e.source, e.sp), b = endRect(rects, e.target, e.tp);
     if (!a || !b) continue;
-    const geo = edgeGeometry(a, b, labeled.has(e.source) ? LABEL_DROP : 0, labeled.has(e.target) ? LABEL_DROP : 0);
-    const anchor = (id, side) => ({ id: side === 'b' && labeled.has(id) ? id + '#label' : id, idx: SIDE_IDX[side] });
+    const po = ports.get(e.id) || {};
+    const geo = edgeGeometry(a, b, labeled.has(e.source) ? LABEL_DROP : 0, labeled.has(e.target) ? LABEL_DROP : 0, po.s || 0, po.t || 0);
+    // 연결점: 면 중앙이면 사각형의 기본 연결점(0~3), 비켜 붙으면 그 도형의 연결점 목록(sites)에 넣고 그 번호. 번호는 attachPorts 가 확정한다
+    const anchor = (id, side, off) => {
+      const sid = side === 'b' && labeled.has(id) ? id + '#label' : id;
+      if (off) {
+        if (!sites.has(sid)) sites.set(sid, []);
+        const l = sites.get(sid);
+        if (!l.some((x) => x.side === side && x.off === off)) l.push({ side, off });
+      }
+      return { id: sid, idx: SIDE_IDX[side], side, off };
+    };
     shapes.push({
       t: 'cxn', id: e.id, name: e.label ? `연결: ${e.label}` : '연결선',
       ...connectorXfrm(geo, e.shape, e.bend),
-      ...(e.source ? { st: anchor(e.source, geo.s) } : {}),   // 빈 끝은 도형에 붙이지 않는다
-      ...(e.target ? { end: anchor(e.target, geo.t) } : {}),
+      ...(e.source ? { st: anchor(e.source, geo.s, po.s || 0) } : {}),   // 빈 끝은 도형에 붙이지 않는다
+      ...(e.target ? { end: anchor(e.target, geo.t, po.t || 0) } : {}),
       line: { color: edgeColor, w: LINE_EMU, dash: e.line === 'dashed' ? 'dash' : null },
       head: e.arrow === 'both' ? 'triangle' : 'none',
       tail: e.arrow === 'none' ? 'none' : 'triangle',
@@ -195,6 +207,7 @@ export function graphToScene(graph, catalog, include = null, { textScale = 1 } =
     }
   }
   shapes.push(...edgeLabels);
+  attachPorts(shapes, sites);
 
   // 왼쪽 위를 0,0 으로
   if (!shapes.length) return { version: 1, emuPerPx: EMU_PER_PX, width: 0, height: 0, media, shapes };
@@ -238,6 +251,43 @@ export function connectorXfrm(geo, shape, bendV) {
     x: Math.round(cx - box.h / 2), y: Math.round(cy - box.w / 2), w: box.h, h: box.w,
     rot: 5400000, flipH: dy < 0, flipV: dx > 0, prst, ...adj,
   };
+}
+
+// 연결점 각도(PowerPoint cxnLst 의 ang, 1/60000 도): 위 270°, 왼쪽 180°, 아래 90°, 오른쪽 0°
+const SITE_ANG = { t: 16200000, l: 10800000, b: 5400000, r: 0 };
+/**
+ * 면 중앙이 아닌 곳에 선이 붙는 도형에 연결점 목록(cxn)을 달고, 그 도형에 붙는 연결선의 idx 를 목록 번호로 바꾼다.
+ * 목록은 기본 4개(위·왼·아래·오른 중앙)를 먼저 두어 중앙에 붙는 선은 번호가 그대로다.
+ * 호스트는 cxn 이 있으면 prstGeom 대신 같은 모양의 custGeom + cxnLst 를 쓴다(그래야 PowerPoint 에서 옮겨도 붙은 자리가 유지됨).
+ */
+function attachPorts(shapes, sites) {
+  const byId = new Map(shapes.map((s) => [s.id, s]));
+  const posOf = (s, side, off) => {
+    const o = E(off);
+    switch (side) {
+      case 't': return { x: Math.round(s.w / 2 + o), y: 0, ang: SITE_ANG.t };
+      case 'b': return { x: Math.round(s.w / 2 + o), y: s.h, ang: SITE_ANG.b };
+      case 'l': return { x: 0, y: Math.round(s.h / 2 + o), ang: SITE_ANG.l };
+      default: return { x: s.w, y: Math.round(s.h / 2 + o), ang: SITE_ANG.r };
+    }
+  };
+  const idxOf = new Map();   // "id|side|off" → idx
+  for (const [sid, list] of sites) {
+    const s = byId.get(sid);
+    if (!s || (s.t === 'rect' && s.prst && s.prst !== 'rect')) continue;   // 둥근 사각형·원은 모양이 바뀌니 그대로(중앙에 붙는다)
+    const all = [...['t', 'l', 'b', 'r'].map((side) => ({ side, off: 0 })), ...list];
+    s.cxn = all.map((x) => posOf(s, x.side, x.off));
+    all.forEach((x, i) => idxOf.set(sid + '|' + x.side + '|' + x.off, i));
+  }
+  for (const s of shapes) {
+    if (s.t !== 'cxn') continue;
+    for (const k of ['st', 'end']) {
+      const a = s[k];
+      if (!a) continue;
+      const i = idxOf.get(a.id + '|' + a.side + '|' + a.off);
+      s[k] = { id: a.id, idx: i != null ? i : SIDE_IDX[a.side] };
+    }
+  }
 }
 
 /** 장면 요약(검증용): 종류별 개수. */

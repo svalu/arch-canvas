@@ -95,7 +95,8 @@ export const ArchEdge = memo(function ArchEdge({ id, source, target, data = {}, 
     return pt ? [{ x: pt.x, y: pt.y, w: 0, h: 0 }, 0] : [rectOfInternal(n), dropOf(n)];
   };
   const [ra, da] = rectOf('source', a, data.sp), [rb, db] = rectOf('target', b, data.tp);
-  const geo = edgeGeometry(ra, rb, da, db);
+  const po = data.po || {};   // 포트: 같은 면에 선이 여럿이면 비켜 붙는다(convert.js 가 계산). 끌고 있는 끝·빈 끝은 중앙
+  const geo = edgeGeometry(ra, rb, da, db, drag?.end === 'source' || data.sp ? 0 : po.s || 0, drag?.end === 'target' || data.tp ? 0 : po.t || 0);
   const bend = bd.bend ?? bendOf(data.bend);
   const { d, mid } = edgePath(geo, data.shape, bend);
   const bent = isBent(geo, data.shape);

@@ -53,13 +53,51 @@ export function sidePoint(r, side) {
  * 엣지 한 개의 양 끝점/면. shape=elbow 는 가운데에서 한 번 꺾는 3구간 선(PowerPoint bentConnector3 와 같은 모양).
  * dropA/dropB: 아이콘 아래 라벨 높이. 아래쪽(b) 면으로 나갈 때는 라벨을 관통하지 않게 그만큼 내려서 시작한다.
  */
-export function edgeGeometry(a, b, dropA = 0, dropB = 0) {
+export function edgeGeometry(a, b, dropA = 0, dropB = 0, offA = 0, offB = 0) {
   const [s, t] = pickSides(a, b);
   const p1 = sidePoint(a, s);
   const p2 = sidePoint(b, t);
   if (s === 'b') p1.y += dropA;
   if (t === 'b') p2.y += dropB;
+  // 포트: 같은 면에 선이 여럿이면 면 중앙에서 비켜 붙는다(portOffsets)
+  if (s === 'l' || s === 'r') p1.y += offA; else p1.x += offA;
+  if (t === 'l' || t === 'r') p2.y += offB; else p2.x += offB;
   return { s, t, p1, p2, horizontal: s === 'l' || s === 'r' };
+}
+
+export const PORT_GAP_MAX = 28;   // 포트 사이 최대 간격(px). 아이콘(48)은 2개면 16, 3개면 12 간격
+
+/**
+ * 포트 배정: 같은 요소의 같은 면으로 모이는 선들을 면을 따라 펼친다(한 점에 겹치지 않게).
+ * 반대쪽 끝이 있는 방향 순서로 배정해서 포트 앞에서 서로 꼬이지 않는다.
+ * 반환: Map edgeId → { s, t } = 면 중앙에서의 px 오프셋(위·아래 면은 x, 왼쪽·오른쪽 면은 y). 캔버스·PNG·PowerPoint 가 같이 쓴다.
+ */
+export function portOffsets(edges, rects) {
+  const bySide = new Map();   // "id:side" → [{ e, end, far, len }]
+  for (const e of edges) {
+    const a = endRect(rects, e.source, e.sp), b = endRect(rects, e.target, e.tp);
+    if (!a || !b || (e.source && e.source === e.target)) continue;
+    const [s, t] = pickSides(a, b);
+    const put = (id, side, r, other) => {
+      if (!id) return;
+      const vert = side === 'l' || side === 'r';
+      const far = vert ? other.y + other.h / 2 : other.x + other.w / 2;
+      const k = id + ':' + side;
+      if (!bySide.has(k)) bySide.set(k, []);
+      bySide.get(k).push({ e, end: id === e.source && side === s ? 's' : 't', far, len: vert ? r.h : r.w });
+    };
+    put(e.source, s, a, b);
+    put(e.target, t, b, a);
+  }
+  const out = new Map();
+  const get = (id) => { if (!out.has(id)) out.set(id, { s: 0, t: 0 }); return out.get(id); };
+  for (const list of bySide.values()) {
+    if (list.length < 2) continue;
+    list.sort((p, q) => p.far - q.far || (p.e.id < q.e.id ? -1 : 1));
+    const gap = Math.min(PORT_GAP_MAX, list[0].len / (list.length + 1));
+    list.forEach((p, i) => { get(p.e.id)[p.end] = Math.round((i - (list.length - 1) / 2) * gap * 10) / 10; });
+  }
+  return out;
 }
 
 /** 선 한쪽 끝의 사각형: 요소면 그 사각형, 빈 곳이면 크기 0 인 점 */

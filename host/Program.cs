@@ -30,8 +30,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: System.Reflection.AssemblyCompany("heerang")]
 [assembly: System.Reflection.AssemblyProduct("Arch Canvas")]
 [assembly: System.Reflection.AssemblyCopyright("2026 heerang")]
-[assembly: System.Reflection.AssemblyVersion("0.9.26.0")]
-[assembly: System.Reflection.AssemblyFileVersion("0.9.26.0")]
+[assembly: System.Reflection.AssemblyVersion("0.9.27.0")]
+[assembly: System.Reflection.AssemblyFileVersion("0.9.27.0")]
 
 static class Program
 {
@@ -88,7 +88,7 @@ static class Program
 /// <summary>EXE에 내장된 리소스(app/..., bin/...)를 data 폴더에 풀고, bin의 DLL을 로드한다.</summary>
 static class Bootstrap
 {
-    public const string AppVersion = "0.9.26";
+    public const string AppVersion = "0.9.27";
     public static readonly string ExePath = Assembly.GetExecutingAssembly().Location;
     public static readonly string BaseDir = Path.GetDirectoryName(ExePath);
     public static string DataDir;    // EXE 옆 data\ (쓰기 불가하면 %LocalAppData%\ArchCanvas\data)
@@ -1132,7 +1132,7 @@ static class PptClipboard
         x.Append("<a:sp><a:nvSpPr><a:cNvPr id=\"" + id + "\" name=\"" + name + "\"/><a:cNvSpPr" + (textBox ? " txBox=\"1\"" : "") + "/></a:nvSpPr>");
         string prst = S(s, "prst") ?? "rect";
         if (prst != "rect" && prst != "roundRect" && prst != "ellipse") prst = "rect";   // 장면 JSON 값이 XML 에 그대로 들어가므로 허용 목록만
-        x.Append("<a:spPr>" + Xfrm(s, 0, false, false) + "<a:prstGeom prst=\"" + prst + "\">" + (prst == "roundRect" ? "<a:avLst><a:gd name=\"adj\" fmla=\"val 12000\"/></a:avLst>" : "<a:avLst/>") + "</a:prstGeom>");
+        x.Append("<a:spPr>" + Xfrm(s, 0, false, false) + Geom(s, prst));
         // 글상자도 fill 이 있으면 채운다(아이콘 이름표 바탕). fillAlpha(0~100)가 있으면 반투명
         var fill = S(s, "fill");
         string alpha = s.ContainsKey("fillAlpha") && s["fillAlpha"] != null ? "<a:alpha val=\"" + (Convert.ToInt32(s["fillAlpha"]) * 1000) + "\"/>" : null;
@@ -1182,7 +1182,7 @@ static class PptClipboard
         if (!mediaRel.TryGetValue(S(s, "media") ?? "", out rel)) return;
         x.Append("<a:pic><a:nvPicPr><a:cNvPr id=\"" + id + "\" name=\"" + name + "\"/><a:cNvPicPr><a:picLocks noChangeAspect=\"1\"/></a:cNvPicPr></a:nvPicPr>");
         x.Append("<a:blipFill><a:blip><a:extLst><a:ext uri=\"{96DAC541-7B7A-43D3-8B79-37D633B846F1}\"><asvg:svgBlip xmlns:asvg=\"" + NsSvg + "\" r:embed=\"" + rel + "\"/></a:ext></a:extLst></a:blip><a:stretch><a:fillRect/></a:stretch></a:blipFill>");
-        x.Append("<a:spPr>" + Xfrm(s, 0, false, false) + "<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></a:spPr></a:pic>");
+        x.Append("<a:spPr>" + Xfrm(s, 0, false, false) + Geom(s, "rect") + "</a:spPr></a:pic>");
     }
 
     // 연결선. st/end 가 가리키는 도형이 패키지에 있으면 stCxn/endCxn 으로 붙인다.
@@ -1200,6 +1200,27 @@ static class PptClipboard
         var line = s.ContainsKey("line") ? s["line"] as Dictionary<string, object> : new Dictionary<string, object>();
         x.Append(Ln(line, S(s, "head") ?? "none", S(s, "tail") ?? "triangle"));
         x.Append("</a:spPr></a:cxnSp>");
+    }
+
+    // 도형 모양. cxn(연결점 목록 [{x,y,ang}], 도형 안 EMU)이 있는 사각형은 같은 모양의 custGeom 으로 쓰고 연결점을 그 목록대로 둔다:
+    // 한 면에 선이 여럿 붙을 때 면 중앙이 아닌 자리에 붙인 것이 PowerPoint 에서 도형을 옮겨도 유지되게. 그 외는 prstGeom.
+    static string Geom(Dictionary<string, object> s, string prst)
+    {
+        var cxn = s.ContainsKey("cxn") ? s["cxn"] as object[] : null;
+        if (cxn == null || cxn.Length == 0 || prst != "rect")
+            return "<a:prstGeom prst=\"" + prst + "\">" + (prst == "roundRect" ? "<a:avLst><a:gd name=\"adj\" fmla=\"val 12000\"/></a:avLst>" : "<a:avLst/>") + "</a:prstGeom>";
+        long w = Math.Max(1, L(s, "w")), h = Math.Max(1, L(s, "h"));
+        var g = new StringBuilder("<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst>");
+        foreach (var o in cxn)
+        {
+            var c = o as Dictionary<string, object>; if (c == null) continue;
+            long cx = Math.Max(0, Math.Min(w, L(c, "x"))), cy = Math.Max(0, Math.Min(h, L(c, "y")));
+            g.Append("<a:cxn ang=\"" + L(c, "ang") + "\"><a:pos x=\"" + cx + "\" y=\"" + cy + "\"/></a:cxn>");
+        }
+        g.Append("</a:cxnLst><a:rect l=\"0\" t=\"0\" r=\"r\" b=\"b\"/><a:pathLst><a:path w=\"" + w + "\" h=\"" + h + "\">");
+        g.Append("<a:moveTo><a:pt x=\"0\" y=\"0\"/></a:moveTo><a:lnTo><a:pt x=\"" + w + "\" y=\"0\"/></a:lnTo><a:lnTo><a:pt x=\"" + w + "\" y=\"" + h + "\"/></a:lnTo><a:lnTo><a:pt x=\"0\" y=\"" + h + "\"/></a:lnTo><a:close/>");
+        g.Append("</a:path></a:pathLst></a:custGeom>");
+        return g.ToString();
     }
 
     static string Xfrm(Dictionary<string, object> s, long rot, bool flipH, bool flipV)

@@ -117,6 +117,7 @@ const TOPICS = [
   ], keys: ['Ctrl+C 그림 복사'], spot: ['.tour-export'] },
   { id: 'ppt', group: 'export', title: 'PowerPoint 편집 도형', desktop: true, lines: [
     '아이콘은 1.5cm SVG 그림, 상자는 사각형, 선은 도형에 붙은 연결선으로 들어갑니다. PowerPoint 에서 그대로 고칠 수 있습니다.',
+    '같은 면에 선이 여럿 붙은 도형은 연결점을 더 가진 도형으로 들어가서, 옮겨도 선이 한 점으로 모이지 않습니다.',
   ], keys: ['Ctrl+Shift+C 도형 복사'], spot: ['.tour-export'] },
 
   { id: 'view', group: 'more', title: '보기 설정', lines: [
