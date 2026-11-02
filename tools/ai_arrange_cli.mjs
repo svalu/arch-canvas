@@ -38,7 +38,7 @@ else {
 }
 const j = parseJsonReply(text);
 console.log('summary:', j.summary);
-const plan = j.columns && typeof j.columns === 'object' ? j.columns : {};
+const plan = j.rows && typeof j.rows === 'object' ? Object.fromEntries(Object.entries(j.rows).map(([k, v]) => [k, { rows: v }])) : j.columns && typeof j.columns === 'object' ? j.columns : {};
 let g2 = g;
 if (Array.isArray(j.ops) && j.ops.length) { const had = new Set(g.groups.map((x) => x.id)); const r = applyPatch(g, j.ops, null); g2 = r.graph; const fixed = alignParentsToPlan(g2, plan, new Set(g2.groups.map((x) => x.id).filter((id) => !had.has(id)))); console.log(`ops ${j.ops.length}: applied ${r.applied}${r.errors.length ? ' · errors ' + JSON.stringify(r.errors).slice(0, 300) : ''} · 부모 보정 ${fixed}`); }
 const known = new Set([...g2.groups.map((x) => x.id), ...g2.nodes.map((x) => x.id)]);
@@ -47,9 +47,10 @@ for (const k of Object.keys(plan)) {
   const pid = k === 'root' ? null : k;
   const ok = k === 'root' || known.has(k);
   const kids = new Set(childrenOf(pid));
-  const ids = (plan[k] || []).flat().map(String);
+  const lists = Array.isArray(plan[k]) ? plan[k] : plan[k]?.rows || [];
+  const ids = lists.flat().map(String);
   const hit = ids.filter((id) => kids.has(id)), miss = ids.filter((id) => !kids.has(id));
-  console.log(`${ok ? '✓' : '✗'} ${k}: 단 ${(plan[k] || []).length} · 자식 ${kids.size} 중 ${hit.length} 맞음${miss.length ? ' · 자식 아님: ' + miss.join(',') : ''}${kids.size - hit.length ? ' · 빠짐: ' + [...kids].filter((id) => !hit.includes(id)).join(',') : ''}`);
+  console.log(`${ok ? '✓' : '✗'} ${k}: ${plan[k]?.rows ? '행' : '단'} ${lists.length} · 자식 ${kids.size} 중 ${hit.length} 맞음${miss.length ? ' · 자식 아님: ' + miss.join(',') : ''}${kids.size - hit.length ? ' · 빠짐: ' + [...kids].filter((id) => !hit.includes(id)).join(',') : ''}`);
 }
 const before = absoluteRects(g2);
 const ids = [...g2.groups.map((x) => x.id), ...g2.nodes.map((x) => x.id)];
@@ -58,5 +59,6 @@ const after = absoluteRects(g2);
 let moved = 0;
 for (const [id, r] of after) { const b = before.get(id); if (b && (Math.abs(b.x - r.x) > 1 || Math.abs(b.y - r.y) > 1)) moved++; }
 console.log(`moved ${moved} / ${after.size}`);
+{ const rs = [...after.values()]; const x0 = Math.min(...rs.map((r) => r.x)), y0 = Math.min(...rs.map((r) => r.y)), x1 = Math.max(...rs.map((r) => r.x + r.w)), y1 = Math.max(...rs.map((r) => r.y + r.h)); console.log(`bbox ${Math.round(x1 - x0)}×${Math.round(y1 - y0)} aspect ${((x1 - x0) / (y1 - y0)).toFixed(2)}`); }
 console.log('top-level order:', g2.groups.filter((x) => !x.parent && !isOverlay(x)).sort((a, b) => a.x - b.x).map((x) => `${x.id}@${x.x}`).join(' '));
 if (outFile) fs.writeFileSync(outFile, JSON.stringify(g2, null, 1));

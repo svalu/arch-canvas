@@ -498,8 +498,49 @@ const planFor = (plan, pid) => {
   if (!plan) return null;
   const k = pid == null ? 'root' : pid;
   const v = plan instanceof Map ? plan.get(k) : plan[k];
-  return Array.isArray(v) && v.length ? v : null;
+  if (Array.isArray(v)) return v.length ? { columns: v } : null;
+  if (v && typeof v === 'object') {
+    if (Array.isArray(v.rows) && v.rows.length) return { rows: v.rows };
+    if (Array.isArray(v.columns) && v.columns.length) return { columns: v.columns };
+  }
+  return null;
 };
+
+/**
+ * 격자 배치(AI 배치안 rows): 행은 위→아래, 행 안은 왼쪽→오른쪽. 같은 열 번호끼리 폭을 맞춰 세로줄이 서 보이게 한다.
+ * 배치안에 없는 자식은 마지막에 한 행으로. 시작 모서리는 지금 자리의 왼쪽 위.
+ */
+function layoutGrid(items, idx, rows, GAP) {
+  // 칸: 행마다 id 를 왼쪽부터. 같은 id 가 아래 행의 같은 열에 또 나오면 세로로 걸친다(rowspan). 다른 열에 또 나오면 무시
+  const cell = new Map();   // item idx → { r0, r1, c }
+  const grid = [];
+  for (const row of rows) {
+    const r = grid.length, line = [];
+    (Array.isArray(row) ? row : [row]).forEach((id, c) => {
+      const i = idx.get(String(id));
+      if (i == null) return;
+      const have = cell.get(i);
+      if (!have) { cell.set(i, { r0: r, r1: r, c }); line.push(i); }
+      else if (have.c === c && have.r1 === r - 1) { have.r1 = r; line.push(i); }
+    });
+    if (line.length) grid.push(line);
+  }
+  const rest = items.map((_, i) => i).filter((i) => !cell.has(i));
+  if (rest.length) { const r = grid.length; rest.forEach((i, c) => cell.set(i, { r0: r, r1: r, c })); grid.push(rest); }
+  const nrow = grid.length, ncol = Math.max(...[...cell.values()].map((s) => s.c)) + 1;
+  const colW = Array.from({ length: ncol }, () => 0), rowH = Array.from({ length: nrow }, () => 0);
+  for (const [i, s] of cell) { colW[s.c] = Math.max(colW[s.c], items[i].w); if (s.r0 === s.r1) rowH[s.r0] = Math.max(rowH[s.r0], items[i].h); }
+  for (const [i, s] of cell) {   // 걸친 것: 걸친 행들의 합이 모자라면 마지막 행을 늘린다
+    if (s.r0 === s.r1) continue;
+    let sum = 0; for (let r = s.r0; r <= s.r1; r++) sum += rowH[r]; sum += GAP * (s.r1 - s.r0);
+    if (sum < items[i].h) rowH[s.r1] += items[i].h - sum;
+  }
+  const x0 = Math.min(...items.map((k) => k.x)), y0 = Math.min(...items.map((k) => k.y));
+  const xs = [x0], ys = [y0];
+  for (let c = 1; c < ncol; c++) xs[c] = xs[c - 1] + colW[c - 1] + GAP;
+  for (let r = 1; r < nrow; r++) ys[r] = ys[r - 1] + rowH[r - 1] + GAP;
+  for (const [i, s] of cell) { items[i].x = xs[s.c]; items[i].y = ys[s.r0]; }
+}
 
 function flowSiblings(g, pid, groupIds, nodeIds, isOverlay, GAP = 24, plan = null) {
   const half = Math.max(0, (LABEL_WIDTH - ICON_SIZE) / 2);
@@ -525,7 +566,17 @@ function flowSiblings(g, pid, groupIds, nodeIds, isOverlay, GAP = 24, plan = nul
     else W[a][b] += 1;
     any = true;
   }
-  const given = planFor(plan, pid);
+  const spec = planFor(plan, pid);
+  const given = spec?.columns || null;
+  const half2 = half;
+  if (spec?.rows) {
+    layoutGrid(items, idx, spec.rows, GAP);
+    for (const k of items) {
+      if (k.grp) { k.o.x = Math.round(k.x); k.o.y = Math.round(k.y); }
+      else { k.o.x = Math.round(k.icon ? k.x + half2 : k.x); k.o.y = Math.round(k.y); }
+    }
+    return true;
+  }
   if (!any && !given) return false;
   const stack = kids.length && kids.every((k) => /subnet$/.test(k.kind || ''));
   const P = pid == null ? null : g.groups.find((q) => q.id === pid);

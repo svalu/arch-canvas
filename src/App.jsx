@@ -102,7 +102,7 @@ import { useExit as useExit2 } from './useExit.js';
 import { ConnectModal, AiPanel, AiChip, Busy, describeOps } from './ai/ui.jsx';
 import { useExit } from './useExit.js';
 import { loadSettings, saveSettings, isVerified, run as aiRun } from './ai/connection.js';
-import { buildReviewMessages, buildDrawMessages, buildAskMessages, buildClarifyMessages, buildArrangeMessages, parseJsonReply, findingsToAnnotations, confirmedLines, fixFromAnswer } from './ai/prompts.js';
+import { buildReviewMessages, buildDrawMessages, buildAskMessages, buildClarifyMessages, buildArrangeMessages, buildArrangeRetryMessages, parseJsonReply, findingsToAnnotations, confirmedLines, fixFromAnswer } from './ai/prompts.js';
 import { AiWizard, AskBackModal } from './ai/Wizard.jsx';
 import { MakerMark } from './MakerMark.jsx';
 import { CanvasStart } from './CanvasStart.jsx';
@@ -142,7 +142,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.30';
+export const APP_VERSION = '0.9.31';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -1041,10 +1041,20 @@ function Editor() {
       if (!j) j = parseJsonReply(raw);   // 검수·그리기는 JSON 이어야 한다 (못 읽으면 여기서 오류)
       if (mode === 'arrange') {
         // AI 정렬: AI 가 준 단·순서(columns)대로 기본 정렬이 자리를 잡는다. 바로 적용(Ctrl+Z 로 되돌림)
-        const plan = j.columns && typeof j.columns === 'object' ? j.columns : {};
+        // 배치안: rows(격자, 0.9.31~) 또는 columns(단, 0.9.29~). 부모 키가 없는 id 는 버린다
+        const planOf = (jj, knownIds) => {
+          const src = jj.rows && typeof jj.rows === 'object' ? jj.rows : jj.columns && typeof jj.columns === 'object' ? jj.columns : {};
+          const out = {}; let n = 0;
+          for (const k of Object.keys(src)) {
+            if (k !== 'root' && !knownIds.has(k)) continue;
+            const lists = Array.isArray(src[k]) ? src[k] : [];
+            out[k] = jj.rows ? { rows: lists } : lists;
+            for (const l of lists) for (const id of (Array.isArray(l) ? l : [l])) if (knownIds.has(String(id))) n++;
+          }
+          return { plan: out, n };
+        };
         const known = new Set([...g.groups.map((x) => x.id), ...g.nodes.map((x) => x.id)]);
-        let placed = 0;
-        for (const k of Object.keys(plan)) { if (k !== 'root' && !known.has(k)) { delete plan[k]; continue; } for (const col of plan[k] || []) for (const id of (Array.isArray(col) ? col : [])) if (known.has(String(id))) placed++; }
+        let { plan, n: placed } = planOf(j, known);
         if (docsRef.current.active !== docId) { setAi({ busy: null, error: null, result: null }); toastMsg(`AI 정렬은 요청한 "${docTitle}" 탭에서만 적용됩니다. 그 탭에서 다시 누르십시오.`, 5000); return; }
         // 구도 재해석(ops: 상자로 묶기·옮기기·이름 바꾸기·빈 상자 빼기)이 있으면 먼저 적용하고, 그 결과에 배치안을 입힌다
         const ARR_OPS = new Set(['add_group', 'move_into', 'update', 'remove', 'ungroup']);
@@ -1056,13 +1066,36 @@ function Editor() {
           alignParentsToPlan(cur, plan, new Set(cur.groups.map((x) => x.id).filter((id) => !had.has(id))));   // 새 상자의 부모를 배치안대로
         }
         const all = [...cur.groups, ...cur.nodes];
-        autoArrange(cur, all.map((x) => x.id), isOverlay, new Set(all.filter((x) => x.locked).map((x) => x.id)), { plan });
-        const summary = String(j.summary || '');
+        const known2 = new Set(all.map((x) => x.id));
+        ({ plan, n: placed } = planOf(j, known2));   // ops 로 생긴 상자 id 까지 포함해서 다시
+        const locked = new Set(all.filter((x) => x.locked).map((x) => x.id));
+        autoArrange(cur, all.map((x) => x.id), isOverlay, locked, { plan });
+        let summary = String(j.summary || '');
+        // 결과가 틀(16:9)에서 많이 벗어나면 크기를 알려 주고 행만 다시 받는다 (한 번)
+        const measure = (gg) => { const rs = [...absoluteRects(gg).values()]; const x0 = Math.min(...rs.map((r) => r.x)), y0 = Math.min(...rs.map((r) => r.y)), x1 = Math.max(...rs.map((r) => r.x + r.w)), y1 = Math.max(...rs.map((r) => r.y + r.h)); return { w: x1 - x0, h: y1 - y0 }; };
+        let m = measure(cur), retried = null;
+        if (all.length > 3 && (m.w / m.h > 2.4 || m.w / m.h < 1.3)) {
+          try {
+            const raw2 = await aiRun(aiSettings, { ...buildArrangeRetryMessages(cur, catalog, m), signal: ac.signal, maxTokens: 16000 });
+            if (ac.signal.aborted) return;
+            const j2 = parseJsonReply(raw2);
+            const p2 = planOf(j2, known2);
+            if (p2.n) {
+              const snap = structuredClone({ groups: cur.groups, nodes: cur.nodes });
+              autoArrange(cur, all.map((x) => x.id), isOverlay, locked, { plan: p2.plan });
+              const m2 = measure(cur);
+              const closer = Math.abs(Math.log((m2.w / m2.h) / 1.9)) < Math.abs(Math.log((m.w / m.h) / 1.9));
+              if (closer) { plan = p2.plan; placed = p2.n; m = m2; retried = { ok: true, summary: String(j2.summary || '') }; }
+              else { cur.groups = snap.groups; cur.nodes = snap.nodes; retried = { ok: false }; }
+            }
+          } catch (e) { if (ac.signal.aborted) return; retried = { ok: false, error: e.message }; }
+        }
+        if (retried?.ok && retried.summary) summary += '\n(틀에 맞춰 다시 나눔) ' + retried.summary;
         // 기록은 같은 커밋에 넣는다. 따로 logAi 를 부르면(바로든 다음 틱이든) 아직 화면에 안 올라간 옛 그래프를 다시 커밋해 정렬이 되돌아간다
         cur.context = { ...cur.context, log: [...(cur.context?.log || []), { k: 'arrange', q: 'AI 정렬', a: summary.slice(0, 400), t: Date.now() }].slice(-20) };
         const ok = tryCommit(cur);
         if (ok) setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 30);
-        setAi({ busy: null, error: null, result: { mode: 'arrange', docId, docTitle, raw, at: Date.now(), ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary, placed, ops, applied: patched ? { applied: patched.applied, errors: patched.errors } : null, blocked: !ok } });
+        setAi({ busy: null, error: null, result: { mode: 'arrange', docId, docTitle, raw, at: Date.now(), ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary, placed, ops, applied: patched ? { applied: patched.applied, errors: patched.errors } : null, size: { w: Math.round(m.w), h: Math.round(m.h) }, retried, blocked: !ok } });
         return;
       }
       const base = { mode, docId, docTitle, raw, at: Date.now(), ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary: String(j.summary || ''), ...intent };

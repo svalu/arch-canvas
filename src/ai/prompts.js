@@ -109,31 +109,53 @@ const CARD_NOTE = `\n\n이 다이어그램은 "솔루션 구성도"(카드 모�
 검수 관점은 요건 커버리지다 — 요건서 항목 중 카드로 표현되지 않은 것, 설명이 모호한 카드, 연동 흐름이 끊긴 곳, 제안서에서 강조해야 할 차별점이 빠진 곳. 서브넷/AZ 같은 인프라 규칙은 보지 않는다.`;
 const CARD_DRAW_NOTE = `\n\n카드 모드다: 기능 블록은 {"op":"add_card","id"?,"icon"?,"label":"제목","body":"설명 1~2줄","parent"?,"w"?,"h"?} 로, 묶음은 {"op":"add_group","kind":"section","label":"섹션 이름","color"?:"#RRGGBB"} 로 만든다. 아이콘 노드(add_node)보다 카드를 우선 쓴다.`;
 
+export const FRAME = { w: 1840, h: 960 };   // 16:9 장표 한 칸의 사용 영역(px). 제목 띠를 뺀 크기
 export const ARRANGE_SYSTEM = `${COMMON_SYSTEM}
 
-역할: 다이어그램을 제안서 장표(16:9 한 칸)에 들어갈 "읽히는 구도"로 다시 잡는다. 좌표는 쓰지 않는다. 두 단계다.
-1) 구도 재해석(ops, 선택): 지금 묶음이 읽는 데 방해되면 고친다 — 같은 역할끼리 상자(kind "generic" 또는 "section", 라벨 예: "고객 채널", "AI 계층", "데이터·연동", "사내 시스템")로 새로 묶기({"op":"add_group","id","kind","label","parent"} — parent 는 그 상자가 들어갈 그룹 id, 반드시 쓴다(최상위면 null) — 뒤 move_into), 잘못 들어간 것 옮기기(move_into), 상자 이름을 역할이 드러나게 바꾸기(update), 뜻 없는 빈 상자 빼기(remove, 그룹만). 노드 추가·삭제, 연결선 변경, VPC·AZ·서브넷·리전의 포함 관계 변경은 하지 않는다. 지금 구도가 이미 좋으면 ops 는 빈 배열.
-2) 배치안(columns): 상자(그룹)마다 그 안의 자식(그룹·노드)을 "단"(왼쪽→오른쪽 흐름)으로 나누고, 단 안에서는 위→아래 순서를 정한다. 앱이 이 순서대로 자리를 잡고 크기·간격을 맞춘다. ops 로 만든 상자도 columns 에 넣는다(그 id 로).
-장표 기준(중요): 결과가 16:9(가로:세로 ≈ 1.8) 한 칸에 들어가야 한다. 단(column)은 세로 묶음이므로, 작은 상자·아이콘은 한 단에 위아래로 2~3개씩 쌓아 단 수를 줄인다. 최상위는 3~4단, 리전 안은 2~3단, 한 상자 안 단은 4개를 넘기지 않는다. 한 단에 세로로 5개 넘게 쌓지도 않는다.
-예: 리전 안에 코어·AI 계층·데이터가 있으면 [["ai-tier","core"],["data"]] 처럼 AI 계층을 코어 위에 쌓고 데이터를 옆에 둔다(세 상자를 한 줄로 늘어놓지 않는다). 데이터 상자 안에 작은 묶음이 여럿이면 [["vpc"],["integ","store"],["analytics","ops"]] 처럼 둘씩 쌓는다.
-큰 상자(리전·VPC)는 가운데, 작은 것(입구·사내)은 양옆.
-읽는 사람이 흐름을 따라갈 수 있게: 입구(사용자·고객 채널·인터넷)는 왼쪽, 핵심 처리(Connect·ALB·앱)는 가운데, 데이터·분석·연동은 오른쪽, 사내 시스템·온프레미스는 맨 오른쪽. 같은 역할끼리는 한 단에 세로로 모은다(고객 채널 5개 → 한 단). 서로 많이 이어진 것은 이웃한 단에.
-AZ 끼리, VPC 끼리는 각각 다른 단(옆으로 나란히). 서브넷은 AZ 안에서 Public → Private 순서로 한 단에 하나씩. 아이콘이 한 단에 넷 넘게 몰리면 둘로 나눈다.
-모든 부모(최상위 = "root" 와 그룹 id)마다 그 부모의 직접 자식 전부를 정확히 한 번씩 쓴다. 겹치는 상자(auto-scaling·security-group 등 members 가 있는 것)는 쓰지 않는다. 자식이 하나뿐인 부모는 생략해도 된다.
+역할: 다이어그램을 제안서 장표(16:9 한 칸)에 "딱 들어가고 읽히는 구도"로 다시 잡는다. 너는 PowerPoint 에서 손으로 배치하는 디자이너처럼 생각한다: 틀이 정해져 있고, 요소 크기를 알고, 행과 열로 놓는다.
+
+## 틀과 크기 (px)
+- 장표 사용 영역: 가로 ${FRAME.w} × 세로 ${FRAME.h}. 결과 전체가 이 안에 들어가야 한다(조금 넘으면 축소되지만, 가로:세로가 1.6~2.0 이어야 글자가 읽힌다).
+- 아이콘 한 칸: 가로 120 × 세로 82 (아이콘 48 + 이름표 2줄). 이름표가 3줄 이상이면 세로 100.
+- 상자: 안의 격자 크기 + 여백 48(가로) / 72(세로, 제목 포함). 상자 하나가 아이콘 4개를 한 줄로 품으면 약 540 × 160.
+- 격자 간격: 24.
+예산 감각: 가로 ${FRAME.w} 에는 아이콘 칸 12개 또는 폭 540 상자 3개가 들어간다. 세로 ${FRAME.h} 에는 아이콘 행 8개 또는 높이 160 상자 5개.
+
+## 두 단계
+1) 구도 재해석(ops, 선택): 읽는 데 방해되면 고친다.
+   - 같은 역할끼리 상자로 묶기: {"op":"add_group","id","kind":"generic"|"section","label","parent"} — parent 는 들어갈 그룹 id(최상위면 null), 반드시 쓴다. 그다음 {"op":"move_into","id","parent"} 로 넣는다.
+   - 잘못 들어간 것 옮기기(move_into), 상자 이름을 역할이 드러나게 바꾸기(update), 뜻 없는 빈 상자 빼기(remove, 그룹만).
+   - 이름표 줄이기(중요): 아이콘 이름표는 서비스 이름이나 역할 2~4단어로 짧게 한다({"op":"update","id","set":{"label":"Contact Lens"}}). 괄호 속 긴 설명은 뗀다. 꼭 남길 설명은 그 아이콘에 붙은 선 중 이름표가 없는 선에 옮긴다({"op":"update","id":"<edge id>","set":{"label":"실시간 전사·분석"}}). 그래도 못 남기는 설명은 summary 에 한 줄로 적는다.
+   - 노드 추가·삭제, 연결선 추가·삭제, VPC·AZ·서브넷·리전의 포함 관계 변경은 하지 않는다.
+2) 격자 배치안(rows): 상자(그룹)마다 그 안의 직접 자식(그룹·노드)을 행으로 놓는다. 행은 위→아래, 행 안은 왼쪽→오른쪽. 열 번호가 같은 것끼리 세로줄이 맞는다(1열은 1열끼리). ops 로 만든 상자도 그 id 로 넣는다.
+   - 흐름은 왼쪽→오른쪽: 입구(사용자·고객 채널)는 왼쪽 열, 핵심 처리(Connect·ALB·앱)는 가운데, 데이터·분석·연동은 오른쪽, 사내·온프레미스는 맨 오른쪽 열.
+   - 최상위(root)는 보통 행 1개: [입구 묶음, 리전/클라우드 상자, 연결 상자, 사내 상자]. 세로로 긴 것(채널 5개)은 그 상자 안에서 세로 1열로 쌓아 높이를 쓰고, 가로는 아낀다.
+   - 세로로 걸치기(rowspan): 같은 id 를 아래 행의 같은 열에 또 적으면 그만큼 세로로 걸친다. 리전 안에서 AI 계층을 코어 위에 쌓고 데이터 상자를 오른쪽에 두 행 높이로 두려면 [["ai-tier","data"],["core","data"]].
+   - 상자 안 아이콘이 5개 이상이면 한 행에 4개 이하로 줄을 바꾼다. 같은 흐름(예: Connect 에서 나가는 네 갈래)은 행마다 하나씩 두어 왼쪽 선 이름표가 줄줄이 읽히게 한다.
+   - AZ 끼리, VPC 끼리는 한 행에 옆으로. 서브넷은 AZ 안에서 Public → Private 순서로 행을 나눠 위→아래.
+   - 모든 부모("root" 와 그룹 id)마다 직접 자식 전부를 정확히 한 번씩 쓴다. 겹치는 상자(members 가 있는 auto-scaling·security-group 등)는 쓰지 않는다. 자식이 하나뿐인 부모는 생략해도 된다.
 
 출력 형식(JSON 만):
 {
-  "summary": "구도를 어떻게 잡았는지 1~2문장(구역 순서와 이유)",
-  "ops": [ {"op":"add_group","id":"channels","kind":"generic","label":"고객 채널","parent":null}, {"op":"move_into","id":"ch-web","parent":"channels"}, {"op":"update","id":"grp-x","set":{"label":"데이터·연동"}} ],
-  "columns": {
-    "root": [["users","channels"], ["region"], ["onprem"]],
-    "region": [["ai-tier"], ["connect-core"], ["data-tier"]],
-    "connect-core": [["connect"], ["agent-ws","flows","outbound"]]
+  "summary": "구도를 어떻게 잡았는지 1~2문장 + 뗀 설명이 있으면 한 줄",
+  "ops": [ {"op":"update","id":"lens","set":{"label":"Contact Lens"}}, {"op":"add_group","id":"channels","kind":"generic","label":"고객 채널","parent":null}, {"op":"move_into","id":"ch-web","parent":"channels"} ],
+  "rows": {
+    "root": [["users","channels","region","network","onprem"]],
+    "channels": [["ch-phone"],["ch-web"],["ch-mail"]],
+    "region": [["ai-tier","data"],["core"]],
+    "data": [["vpc"],["lambda","apigw"],["ddb","glue","athena","quicksight"],["s3","kms"],["cw"]]
   }
 }`;
 
 export function buildArrangeMessages(graph, catalog) {
-  const user = `# 제안서 컨텍스트\n${contextText(graph.context)}\n\n# 현재 다이어그램: ${graph.title}\n${summarizeGraph(graph, catalog)}\n\n# 배치 요청\n위 다이어그램의 배치안을 출력 형식대로 JSON 으로 적어라. 부모마다 직접 자식 id 만 쓰고(손자는 그 부모 항목에), id 는 위 목록의 것을 그대로 쓴다.`;
+  const user = `# 제안서 컨텍스트\n${contextText(graph.context)}\n\n# 현재 다이어그램: ${graph.title}\n${summarizeGraph(graph, catalog)}\n\n# 배치 요청\n위 다이어그램을 ${FRAME.w}×${FRAME.h} 틀에 들어가는 구도로 다시 잡아 출력 형식대로 JSON 으로 적어라. 부모마다 직접 자식 id 만 쓰고(손자는 그 부모 항목에), id 는 위 목록의 것을 그대로 쓴다.`;
+  return { system: ARRANGE_SYSTEM, user };
+}
+
+/** 1차 결과가 틀에 안 맞을 때 한 번 더: 지금 크기를 알려 주고 행만 다시 나누게 한다(ops 는 이미 적용됨). */
+export function buildArrangeRetryMessages(graph, catalog, measured) {
+  const sizes = graph.groups.map((x) => `- ${x.id} "${x.label || ''}": ${Math.round(x.w)}×${Math.round(x.h)}`).join('\n');
+  const user = `# 현재 다이어그램(구도 재해석 적용 뒤): ${graph.title}\n${summarizeGraph(graph, catalog)}\n\n# 1차 배치 결과\n전체 ${Math.round(measured.w)}×${Math.round(measured.h)} (가로:세로 ${(measured.w / measured.h).toFixed(2)}) — 틀 ${FRAME.w}×${FRAME.h}(1.92)에 ${measured.w / measured.h > 2 ? '비해 너무 넓다. 가로로 늘어선 것을 행으로 나눠 쌓아라(최상위 행을 둘로, 또는 넓은 상자 안을 더 많은 행으로).' : '비해 너무 높다. 세로로 쌓인 것을 한 행에 옆으로 펼쳐라.'}\n상자 크기:\n${sizes}\n\n# 배치 요청\nops 없이 rows 만 다시 적어라(출력 형식의 summary 와 rows). 부모마다 직접 자식 전부를 정확히 한 번씩.`;
   return { system: ARRANGE_SYSTEM, user };
 }
 

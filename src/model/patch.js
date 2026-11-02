@@ -232,10 +232,11 @@ export function alignParentsToPlan(g, plan, created) {
   if (!plan || !created?.size) return 0;
   const byId = new Map(g.groups.map((x) => [x.id, x]));
   let n = 0;
-  for (const [key, cols] of Object.entries(plan)) {
+  for (const [key, spec] of Object.entries(plan)) {
     const pid = key === 'root' ? null : key;
     if (pid && !byId.has(pid)) continue;
-    for (const col of Array.isArray(cols) ? cols : []) for (const id of (Array.isArray(col) ? col : [col]).map(String)) {
+    const lists = Array.isArray(spec) ? spec : Array.isArray(spec?.rows) ? spec.rows : Array.isArray(spec?.columns) ? spec.columns : [];
+    for (const col of lists) for (const id of (Array.isArray(col) ? col : [col]).map(String)) {
       const grp = byId.get(id);
       if (!grp || !created.has(id) || (grp.parent ?? null) === pid) continue;
       if (pid && [...descendantsOf(g, id)].includes(pid)) continue;   // 자기 자손 안으로는 못 들어간다
