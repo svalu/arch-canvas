@@ -246,7 +246,7 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
   const [note, setNote] = useState(null);     // 👎 뒤에 적는 한 줄 { key }
   const [noteText, setNoteText] = useState('');
   const [openLog, setOpenLog] = useState(null);   // 지난 기록 중 펼친 것
-  const [showLog, setShowLog] = useState(false);   // 지난 기록 목록을 펼쳤는지 (기본은 접힘: 한 줄만)
+  const threadRef = useRef(null);                  // 대화 스크롤 상자 — 새 말풍선이 생기면 맨 아래로
   const [sent, setSent] = useState(null);        // 방금 보낸 것 { text, intent, forced } — 다른 뜻이었으면 바꿔 보낼 수 있게
   const [images, setImages] = useState([]);      // 붙인 그림 [{ name, dataUrl, w, h }] — 다음 요청에 같이 간다
   const fileRef = useRef(null);
@@ -314,6 +314,7 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
   const lastDup = log.map(dupOf).lastIndexOf(true);
   const history = log.filter((x, i) => i !== lastDup);
   const key = r ? String(r.at || r.question || r.mode) : '';
+  useEffect(() => { const el = threadRef.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }); }, [history.length, key, busy, !!state.error]);   // eslint-disable-line react-hooks/exhaustive-deps
   const rate = (up) => { if (!r || rated[key]) return; setRated({ ...rated, [key]: up ? 'up' : 'down' }); onRate?.(r, up, ''); if (!up) setNote({ key }); };
   const sendNote = () => { if (noteText.trim()) onRate?.(r, false, noteText.trim()); setNote(null); setNoteText(''); };
 
@@ -402,7 +403,7 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
         <div className={'send-row' + (busy ? ' wait' : '')}>
           {busy ? (
             <>
-              <Busy label={busy === 'review' ? '검수 중' : busy === 'ask' ? '생각 중' : busy === 'arrange' ? '배치안 정하는 중 · 그림이 크면 몇 분' : '그릴 내용 만드는 중 · 1~2분'} />
+              <small className="hint">AI 가 답하는 중 · 위 대화에서 볼 수 있어요</small>
               <button onClick={onCancel}>취소</button>
             </>
           ) : (
@@ -426,42 +427,31 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
         {!verified && <p className="hint">먼저 위의 [연결하기]로 AI 를 연결하세요.</p>}
       </div>
 
-      {state.error && (
-        <div className="pin-row card error">
-          <b>실패</b> {state.error.message}
-          {state.error.detail && <details><summary>상세 보기</summary><pre className="result">{String(state.error.detail).slice(0, 1500)}</pre></details>}
-          {state.error.kind === 'auth' || state.error.kind === 'config' ? <button className="small" onClick={() => onOpenConnect(null)}>연결 다시 하기</button> : null}
-        </div>
-      )}
 
-      {/* 대화: 지난 기록(접힌 줄) → 지금 결과(펼친 카드). 아래가 최근 */}
-      {(history.length > 0 || r) && (
-        <div className="thread">
-          {history.length > 0 && (
-            <button type="button" className={'more-head log-toggle' + (showLog ? ' open' : '')} onClick={() => setShowLog(!showLog)} aria-expanded={showLog} title="이 그림에서 AI 와 주고받은 기록. AI 가 다음 요청 때도 같이 봅니다">
-              <Icon name="chevron" size={14} className="chev" /> 지난 대화 {history.length}개
-              <small className="hint">{showLog ? '누르면 그때 그린·바꾼 요소를 캔버스에서 보여 줍니다' : '펼치기'}</small>
-            </button>
-          )}
-          <div className={'log-list' + (showLog ? ' open' : '')} aria-hidden={!showLog}>
-            <div>
-              {history.map((x, i) => {
-                const k = x.t || i, open = openLog === k, n = (x.ids || []).length;
-                const pick = () => { setOpenLog(open ? null : k); if (n && onPickMany) { const got = onPickMany(x.ids); if (!got) onToast?.('그때 그린 요소가 지금 그림에는 없습니다 (지웠거나 다른 탭)'); } };
-                return (
-                  <div key={k} className={'turn past' + (open ? ' open' : '')} onClick={pick} role="button" tabIndex={showLog ? 0 : -1} onKeyDown={(e) => { if (e.key === 'Enter') pick(); }}>
-                    <span className={'log-k ' + x.k}>{KIND[x.k] || x.k}</span>
-                    <div className="turn-body">
-                      <div className="log-q">{open || x.q.length <= 120 ? x.q : x.q.slice(0, 120) + '…'}</div>
-                      {x.a && <div className="hint">→ {open || x.a.length <= 120 ? x.a : x.a.slice(0, 120) + '…'}</div>}
-                      {n > 0 && <div className="hint log-ids">{x.k === 'review' ? '핀이 붙은' : x.k === 'arrange' ? '새로 만든 상자' : '그리거나 바꾼'} 요소 {n}개 · 누르면 캔버스에서 표시</div>}
-                    </div>
+      {/* 대화: 채팅처럼 위에서 아래로(오래된 것 → 최근). 지난 기록은 말풍선, 지금 결과는 카드, 맨 아래에 답하는 중 */}
+      <div className="thread chat-thread" ref={threadRef} aria-live="polite">
+        {history.length === 0 && !r && !busy && !state.error && (
+          <div className="empty">아직 대화가 없어요.<br />아래 칸에 적고 Enter — 정렬·검수·질문·그리기를 말투로 알아서 고릅니다.<br />스샷은 Ctrl+V 로 붙입니다.</div>
+        )}
+        {history.length > 0 && <div className="log-foot"><small className="hint">지난 대화 · AI 가 다음 요청 때도 같이 봅니다</small><button className="link" onClick={() => onContext({ log: [] })}>기록 지우기</button></div>}
+        {history.map((x, i) => {
+          const k = x.t || i, open = openLog === k, n = (x.ids || []).length;
+          const pick = () => { setOpenLog(open ? null : k); if (n && onPickMany) { const got = onPickMany(x.ids); if (!got) onToast?.('그때 그린 요소가 지금 그림에는 없습니다 (지웠거나 다른 탭)'); } };
+          const cut = (t) => (open || t.length <= 160 ? t : t.slice(0, 160) + '…');
+          return (
+            <div key={k} className={'msg-pair' + (open ? ' open' : '')}>
+              <div className="msg user" onClick={() => setOpenLog(open ? null : k)}><div className="bubble"><span className={'log-k ' + x.k}>{KIND[x.k] || x.k}</span>{cut(x.q)}</div></div>
+              {(x.a || n > 0) && (
+                <div className={'msg ai' + (n > 0 ? ' clickable' : '')} onClick={pick} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') pick(); }} title={n > 0 ? '누르면 그때 그린·바꾼 요소를 캔버스에서 보여 줍니다' : undefined}>
+                  <div className="bubble">
+                    {x.a ? cut(x.a) : null}
+                    {n > 0 && <div className="log-ids">{x.k === 'review' ? '핀이 붙은' : x.k === 'arrange' ? '새로 만든 상자' : '그리거나 바꾼'} 요소 {n}개 · 누르면 캔버스에서 표시</div>}
                   </div>
-                );
-              })}
-              {history.length > 0 && <div className="log-foot"><button className="link" onClick={() => onContext({ log: [] })}>기록 지우기</button></div>}
+                </div>
+              )}
             </div>
-          </div>
+          );
+        })}
 
           {r && r.mode === 'arrange' && (
             <div className="turn now" ref={(el) => { if (el && el.dataset.k !== key) { el.dataset.k = key; el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } }}>
@@ -539,8 +529,18 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
               </div>
             </div>
           )}
-        </div>
-      )}
+
+          {busy && (
+            <div className="msg ai typing"><div className="bubble"><Busy label={busy === 'review' ? '검수 중' : busy === 'ask' ? '생각 중' : busy === 'arrange' ? '배치안 정하는 중 · 그림이 크면 몇 분' : '그릴 내용 만드는 중 · 1~2분'} /></div></div>
+          )}
+          {state.error && (
+            <div className="msg ai"><div className="bubble error">
+              <b>실패</b> {state.error.message}
+              {state.error.detail && <details><summary>상세 보기</summary><pre className="result">{String(state.error.detail).slice(0, 1500)}</pre></details>}
+              {state.error.kind === 'auth' || state.error.kind === 'config' ? <button className="small" onClick={() => onOpenConnect(null)}>연결 다시 하기</button> : null}
+            </div></div>
+          )}
+      </div>
     </div>
   );
 }
