@@ -147,6 +147,13 @@ const OPS = {
       arrow: ARROWS.includes(op.arrow) ? op.arrow : EDGE_DEFAULTS.arrow,
     });
   },
+  // 상자 단위로 묶기: 상자의 아이콘 전부가 같은 상대와 같은 뜻(이름표 없음·같은 선 모양)으로 이어져 있으면, 그 선들을 지우고 상자에서 한 줄로 잇는다.
+  // {"op":"bundle", "group", "with"?}: with 를 주면 그 상대만, 없으면 묶을 수 있는 상대 전부. 아무것도 못 묶으면 오류
+  bundle(g, op) {
+    const grp = g.groups.find((x) => x.id === op.group) || fail(`상자가 없습니다: ${op.group}`);
+    const n = bundleEdges(g, { only: grp.id, with: op.with ? String(op.with) : null });
+    if (!n) fail('묶을 수 있는 선이 없습니다(상자 안 아이콘 전부가 이름표 없이 같은 상대와 이어져 있어야 합니다)');
+  },
   disconnect(g, op) {
     const gone = new Set(g.edges.filter((e) => (op.id ? e.id === op.id : e.source === op.source && e.target === op.target)).map((e) => e.id));
     if (!gone.size) fail('지울 연결선이 없습니다');
@@ -222,6 +229,44 @@ const OPS = {
 };
 
 export const PATCH_OPS = Object.keys(OPS);
+
+/**
+ * 상자 단위 선 묶기. 상자 G 의 직접 자식 아이콘 전부(둘 이상)가 바깥의 같은 상대 T 와 같은 방향·이름표 없음·같은 선·화살표로 이어져 있으면
+ * 그 선들을 하나로: G→T(또는 T→G). 상자가 끝점이 되면 캔버스·PowerPoint 모두 상자 테두리에서 한 줄이 나간다.
+ * opts.only: 이 상자만, opts.with: 이 상대만. 반환: 만든 묶음 선 수.
+ */
+export function bundleEdges(g, opts = {}) {
+  const kids = new Map();   // group id → 직접 자식 아이콘 id 집합
+  for (const n of g.nodes) if (n.parent && n.type !== 'card' && n.type !== 'text' && n.type !== 'badge') (kids.get(n.parent) || kids.set(n.parent, new Set()).get(n.parent)).add(n.id);
+  const inside = (id, gid) => { let p = [...g.groups, ...g.nodes].find((x) => x.id === id)?.parent ?? null; let guard = 0; while (p && guard++ < 64) { if (p === gid) return true; p = g.groups.find((x) => x.id === p)?.parent ?? null; } return false; };
+  let made = 0;
+  for (const grp of g.groups) {
+    if (opts.only && grp.id !== opts.only) continue;
+    const ks = kids.get(grp.id);
+    if (!ks || ks.size < 2) continue;
+    for (const dir of ['out', 'in']) {
+      const byKey = new Map();   // "T|line|arrow|shape" → edges
+      for (const e of g.edges) {
+        const me = dir === 'out' ? e.source : e.target, other = dir === 'out' ? e.target : e.source;
+        if (!me || !other || !ks.has(me) || e.label || inside(other, grp.id) || other === grp.id) continue;
+        if (opts.with && other !== opts.with) continue;
+        const key = `${other}|${e.line}|${e.arrow}|${e.shape}`;
+        (byKey.get(key) || byKey.set(key, []).get(key)).push(e);
+      }
+      for (const [key, list] of byKey) {
+        const covered = new Set(list.map((e) => (dir === 'out' ? e.source : e.target)));
+        if (covered.size < ks.size || list.length < 2) continue;   // 전부가 이어져 있을 때만
+        const other = key.split('|')[0], e0 = list[0];
+        const gone = new Set(list.map((e) => e.id));
+        g.edges = g.edges.filter((e) => !gone.has(e.id));
+        g.annotations = (g.annotations || []).filter((a) => !gone.has(a.target));
+        g.edges.push({ ...EDGE_DEFAULTS, id: newId(g, null, 'e'), source: dir === 'out' ? grp.id : other, target: dir === 'out' ? other : grp.id, label: '', line: e0.line, shape: e0.shape, arrow: e0.arrow });
+        made++;
+      }
+    }
+  }
+  return made;
+}
 
 /**
  * AI 정렬 배치안(columns)의 부모 키와 실제 포함 관계가 어긋난 "새로 만든 상자"를 배치안대로 옮긴다.

@@ -10,7 +10,7 @@ import { buildArrangeMessages, parseJsonReply } from '../src/ai/prompts.js';
 import { autoArrange, absoluteRects, lineCrossings } from '../src/model/geometry.js';
 import { LABEL_DROP } from '../src/model/schema.js';
 import { isOverlay } from '../src/model/contain.js';
-import { applyPatch, alignParentsToPlan } from '../src/model/patch.js';
+import { applyPatch, alignParentsToPlan, bundleEdges } from '../src/model/patch.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -42,6 +42,7 @@ console.log('summary:', j.summary);
 const plan = j.rows && typeof j.rows === 'object' ? Object.fromEntries(Object.entries(j.rows).map(([k, v]) => [k, { rows: v }])) : j.columns && typeof j.columns === 'object' ? j.columns : {};
 let g2 = g;
 if (Array.isArray(j.ops) && j.ops.length) { const had = new Set(g.groups.map((x) => x.id)); const r = applyPatch(g, j.ops, null); g2 = r.graph; const fixed = alignParentsToPlan(g2, plan, new Set(g2.groups.map((x) => x.id).filter((id) => !had.has(id)))); console.log(`ops ${j.ops.length}: applied ${r.applied}${r.errors.length ? ' · errors ' + JSON.stringify(r.errors).slice(0, 300) : ''} · 부모 보정 ${fixed}`); }
+{ const nb = bundleEdges(g2); if (nb) console.log(`bundled ${nb} group-level edges · edges now ${g2.edges.length}`); }
 const known = new Set([...g2.groups.map((x) => x.id), ...g2.nodes.map((x) => x.id)]);
 const childrenOf = (pid) => [...g2.groups.filter((x) => (x.parent ?? null) === pid && !isOverlay(x)), ...g2.nodes.filter((n) => (n.parent ?? null) === pid && n.type !== 'badge')].map((x) => x.id);
 for (const k of Object.keys(plan)) {
