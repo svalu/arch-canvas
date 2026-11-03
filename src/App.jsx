@@ -1673,16 +1673,17 @@ function Editor() {
   exportImageRef.current = exportImage;
 
   // ----- PowerPoint 복사 -----
-  const copyPpt = useCallback(async (selectedOnly) => {
+  // PowerPoint 로 보낼 장면: 선택만/전체, 장표 맞춤 축소까지. 못 만들면 null (이유는 토스트로)
+  const pptScene = useCallback((selectedOnly) => {
     const g = currentGraph();
     let include = null;
     if (selectedOnly) {
       const sel = [...rf.getNodes().filter((n) => n.selected).map((n) => n.id), ...rf.getEdges().filter((e) => e.selected).map((e) => e.id)];
-      if (!sel.length) { toastMsg('선택된 게 없습니다. 먼저 골라 주세요.'); return; }
+      if (!sel.length) { toastMsg('선택된 게 없습니다. 먼저 골라 주세요.'); return null; }
       include = selectionIds(g, new Set(sel));
     }
     const raw = graphToScene(g, catalog, include, { textScale: view.textScale });
-    if (!raw.shapes.length) { toastMsg('복사할 게 없습니다.'); return; }
+    if (!raw.shapes.length) { toastMsg('내보낼 게 없습니다.'); return null; }
     // 장표에 맞춰 줄이기: 장표 사용 영역보다 크면 아이콘·선·글자를 같은 비율로 축소 (그림은 그대로)
     const fit = view.pptFit !== false ? fitScene(raw) : { scene: raw, scale: 1, fontPt: null };
     const scene = fit.scene;
@@ -1691,6 +1692,24 @@ function Editor() {
     const fitNote = fit.scale < 1
       ? ` · 장표에 맞춰 ${Math.round(fit.scale * 100)}% 로 줄임${fit.fontPt != null ? ` (가장 작은 글자 ${fit.fontPt.toFixed(1)}pt)` : ''}${fit.fontPt != null && fit.fontPt < 7 ? ' — 글자가 작아요. 간격을 줄여 정렬하면 더 크게 들어갑니다' : ''}`
       : '';
+    return { scene, fit, desc, fitNote };
+  }, [catalog, currentGraph, rf, toastMsg, view.textScale, view.pptFit]);
+  // .pptx 파일로 저장 (EXE 전용): 슬라이드 한 장, 도형은 그룹 하나로 묶여 그림 영역 가운데에. path 는 테스트용(대화상자 없이)
+  const savePptx = useCallback(async (selectedOnly, path) => {
+    const p = pptScene(selectedOnly);
+    if (!p) return null;
+    if (!window.desktop?.call) { toastMsg('PPT 파일 저장은 Windows 버전(EXE)에서 됩니다. 브라우저에서는 PNG/SVG 로 저장하세요.', 5000); return null; }
+    try {
+      const r = await window.desktop.call('ppt.save', { name: safeName(title), title, scene: JSON.stringify(p.scene), ...(path ? { path } : {}) });
+      if (r?.cancelled) return null;
+      toastMsg(`PPT 파일로 저장했습니다: ${r.name} · ${p.desc}${p.fitNote}`, p.fit.scale < 1 ? 7000 : 4000);
+      return r;
+    } catch (e) { toastMsg('PPT 저장 실패: ' + (e.message || e)); return null; }
+  }, [pptScene, title, toastMsg]);
+  const copyPpt = useCallback(async (selectedOnly) => {
+    const p = pptScene(selectedOnly);
+    if (!p) return;
+    const { scene, fit, desc, fitNote } = p;
     try {
       if (window.desktop) {
         await window.desktop.copyScene(JSON.stringify(scene));
@@ -1702,7 +1721,7 @@ function Editor() {
     } catch (e) {
       toastMsg('복사 실패: ' + (e.message || e));
     }
-  }, [catalog, currentGraph, rf, title, toastMsg, view.textScale, view.pptFit]);
+  }, [pptScene, title, toastMsg]);
 
   // ----- 파일 -----
   // 저장: 탭마다 마지막으로 저장한 파일을 기억해서 Ctrl+S 는 그 파일을 덮어쓰고, Ctrl+Shift+S 는 새 이름으로.
@@ -1912,9 +1931,10 @@ function Editor() {
       copyAll: () => copyPpt(false),
       scene: () => { const raw = graphToScene(currentGraph(), catalog, null, { textScale: viewRef.current?.textScale ?? 1 }); return viewRef.current?.pptFit !== false ? fitScene(raw).scene : raw; },   // 테스트: PowerPoint 로 보낼 장면 그대로(장표 맞춤 포함)
       copySelected: () => copyPpt(true),
+      savePptx: (path) => savePptx(false, path),
     };
     return () => { delete window.__arch; };
-  }, [catalog, commit, tryCommit, currentGraph, copyPpt, renderSvg, runAi, ai, aiSettings, setAiSettings, applyAiOps, updateContext, guide, setGuide, startGuide, loadTemplateById, applyOpsRaw, checkUpdate, applyUpdate]);
+  }, [catalog, commit, tryCommit, currentGraph, copyPpt, savePptx, renderSvg, runAi, ai, aiSettings, setAiSettings, applyAiOps, updateContext, guide, setGuide, startGuide, loadTemplateById, applyOpsRaw, checkUpdate, applyUpdate]);
 
   const selectedNodes = useMemo(() => nodes.filter((n) => n.selected), [nodes]);
   const selectedEdges = useMemo(() => edges.filter((e) => e.selected), [edges]);
@@ -1961,6 +1981,7 @@ function Editor() {
                   <div className="menu-sec">PowerPoint 편집 도형 (EXE 전용)</div>
                   <button onClick={() => copyPpt(false)}>전체를 도형으로 복사<small>Ctrl+Shift+C</small></button>
                   <button onClick={() => copyPpt(true)} disabled={!selectedNodes.length && !selectedEdges.length}>선택만 도형으로 복사</button>
+                  <button onClick={() => savePptx(false)}>PPT 파일로 저장<small>.pptx · 슬라이드 1장, 편집 가능한 도형</small></button>
                   <button onClick={() => setView({ pptFit: view.pptFit === false })} title="16:9 장표의 그림 영역(좌우 1cm·위 제목 띠 2.4cm·아래 1cm 를 뺀 자리)보다 크면 아이콘·선·글자를 같은 비율로 줄여서 복사합니다. 작으면 그대로입니다">
                     {view.pptFit !== false ? '☑' : '☐'} 장표에 맞춰 줄이기<small>{view.pptFit !== false ? '넘치면 같은 비율로 축소' : '원래 크기 그대로(1.5cm 아이콘)'}</small>
                   </button>

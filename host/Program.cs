@@ -363,6 +363,7 @@ sealed class MainForm : Form
                     case "file.saveAs": result = FileSaveAs(S(prm, "name"), S(prm, "text")); break;
                     case "file.save": result = FileSave(S(prm, "path"), S(prm, "text")); break;
                     case "file.open": result = FileOpen(); break;
+                    case "ppt.save": result = PptSave(S(prm, "name"), S(prm, "title"), S(prm, "scene"), S(prm, "path")); break;
                     case "template.delete": UserTemplates.Delete(S(prm, "file")); result = true; break;
                     case "update.check": result = Updater.Check(); break;
                     case "update.apply": result = Updater.Apply(prm, () => BeginInvoke(new Action(() => { try { Close(); } catch { Application.Exit(); } }))); break;
@@ -405,6 +406,23 @@ sealed class MainForm : Form
         File.WriteAllText(path, text ?? "", new UTF8Encoding(false));
         lock (_pickedFiles) _pickedFiles.Add(path);
         return new Dictionary<string, object> { { "path", path }, { "name", Path.GetFileName(path) } };
+    }
+    /// <summary>장면을 .pptx 로 저장. path 가 오면(테스트) 대화상자 없이 그 자리에 쓴다.</summary>
+    object PptSave(string name, string title, string sceneJson, string path)
+    {
+        if (string.IsNullOrEmpty(sceneJson)) throw new Exception("장면이 비어 있습니다");
+        byte[] bytes = PptClipboard.BuildPptx(sceneJson, title ?? "");
+        if (string.IsNullOrEmpty(path))
+        {
+            path = OnUi(() =>
+            {
+                using (var d = new SaveFileDialog { Filter = "PowerPoint 프레젠테이션 (*.pptx)|*.pptx", FileName = string.Join("_", (name ?? "diagram").Split(Path.GetInvalidFileNameChars())), InitialDirectory = DownloadsDir(), OverwritePrompt = true, AddExtension = true, DefaultExt = "pptx" })
+                    return d.ShowDialog(this) == DialogResult.OK ? d.FileName : null;
+            });
+            if (path == null) return new Dictionary<string, object> { { "cancelled", true } };
+        }
+        File.WriteAllBytes(path, bytes);
+        return new Dictionary<string, object> { { "path", path }, { "name", Path.GetFileName(path) }, { "bytes", bytes.Length } };
     }
     object FileSave(string path, string text)
     {
@@ -1065,6 +1083,11 @@ static class PptClipboard
     const string NsR = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
     const string NsLc = "http://schemas.openxmlformats.org/drawingml/2006/lockedCanvas";
     const string NsSvg = "http://schemas.microsoft.com/office/drawing/2016/SVG/main";
+    const string NsP = "http://schemas.openxmlformats.org/presentationml/2006/main";
+    // 감싸는 요소의 접두어: 클립보드(lockedCanvas)는 a:sp/a:pic/a:cxnSp, 슬라이드(.pptx)는 p:sp/p:pic/p:cxnSp + p:nvPr. 안쪽(a:xfrm 등)은 같다.
+    static string P = "a";
+    static bool Slide = false;
+    static string NvPr { get { return Slide ? "<p:nvPr/>" : ""; } }
 
     public static void CopyScene(string json)
     {
@@ -1080,6 +1103,7 @@ static class PptClipboard
 
     public static byte[] BuildGvml(string json)
     {
+        P = "a"; Slide = false;
         var ser = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
         var scene = (Dictionary<string, object>)ser.DeserializeObject(json);
         var media = (Dictionary<string, object>)(scene.ContainsKey("media") ? scene["media"] : new Dictionary<string, object>());
@@ -1155,30 +1179,155 @@ static class PptClipboard
         }
     }
 
+    /// <summary>
+    /// 장면 → 슬라이드 한 장짜리 .pptx (16:9, 12192000×6858000 EMU). 도형은 하나의 그룹(p:grpSp)으로 묶어
+    /// 그림 영역(좌우 1cm·위 2.4cm·아래 1cm 를 뺀 자리) 가운데에 놓고, 제목이 있으면 위 띠에 글상자로 넣는다.
+    /// 패키지: presentation / slideMaster1 / slideLayout1(blank) / theme1 / slides/slide1 + media/imageN.svg
+    /// </summary>
+    public static byte[] BuildPptx(string json, string title)
+    {
+        P = "p"; Slide = true;
+        try
+        {
+            var ser = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+            var scene = (Dictionary<string, object>)ser.DeserializeObject(json);
+            var media = (Dictionary<string, object>)(scene.ContainsKey("media") ? scene["media"] : new Dictionary<string, object>());
+            var shapes = (object[])scene["shapes"];
+            long width = L(scene, "width"), height = L(scene, "height");
+            const long SW = 12192000, SH = 6858000, ML = 360000, MT = 864000, MR = 360000, MB = 360000;
+            long boxW = SW - ML - MR, boxH = SH - MT - MB;
+            long ox = ML + Math.Max(0, (boxW - width) / 2), oy = MT + Math.Max(0, (boxH - height) / 2);
+
+            var mediaRel = new Dictionary<string, string>();
+            var mediaFiles = new List<KeyValuePair<string, byte[]>>();
+            int rid = 2;   // rId1 = 레이아웃
+            foreach (var kv in media)
+            {
+                string file = "image" + (rid - 1) + ".svg";
+                mediaRel[kv.Key] = "rId" + rid;
+                mediaFiles.Add(new KeyValuePair<string, byte[]>(file, Convert.FromBase64String((string)kv.Value)));
+                rid++;
+            }
+            var spId = new Dictionary<string, int>();
+            int next = 4;   // 1 = spTree, 2 = 제목, 3 = 그룹
+            foreach (Dictionary<string, object> s in shapes) spId[(string)s["id"]] = next++;
+
+            var x = new StringBuilder();
+            x.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+            x.Append("<p:sld xmlns:a=\"" + NsA + "\" xmlns:r=\"" + NsR + "\" xmlns:p=\"" + NsP + "\"><p:cSld><p:spTree>");
+            x.Append("<p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"0\" cy=\"0\"/><a:chOff x=\"0\" y=\"0\"/><a:chExt cx=\"0\" cy=\"0\"/></a:xfrm></p:grpSpPr>");
+            if (!string.IsNullOrEmpty(title))
+            {
+                x.Append("<p:sp><p:nvSpPr><p:cNvPr id=\"2\" name=\"제목\"/><p:cNvSpPr txBox=\"1\"/><p:nvPr/></p:nvSpPr>");
+                x.Append("<p:spPr><a:xfrm><a:off x=\"" + ML + "\" y=\"252000\"/><a:ext cx=\"" + boxW + "\" cy=\"540000\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>");
+                x.Append("<p:txBody><a:bodyPr wrap=\"square\" lIns=\"0\" tIns=\"0\" rIns=\"0\" bIns=\"0\" anchor=\"ctr\" rtlCol=\"0\"><a:normAutofit/></a:bodyPr><a:lstStyle/><a:p><a:pPr algn=\"l\"/><a:r><a:rPr lang=\"ko-KR\" altLang=\"en-US\" sz=\"2000\" b=\"1\" dirty=\"0\"><a:solidFill><a:srgbClr val=\"232F3E\"/></a:solidFill></a:rPr><a:t>" + Esc(title) + "</a:t></a:r></a:p></p:txBody></p:sp>");
+            }
+            x.Append("<p:grpSp><p:nvGrpSpPr><p:cNvPr id=\"3\" name=\"Arch Canvas\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>");
+            x.Append("<p:grpSpPr><a:xfrm><a:off x=\"" + ox + "\" y=\"" + oy + "\"/><a:ext cx=\"" + width + "\" cy=\"" + height + "\"/><a:chOff x=\"0\" y=\"0\"/><a:chExt cx=\"" + width + "\" cy=\"" + height + "\"/></a:xfrm></p:grpSpPr>");
+            foreach (Dictionary<string, object> s in shapes)
+            {
+                string t = (string)s["t"];
+                int id = spId[(string)s["id"]];
+                string name = Esc(S(s, "name"));
+                if (t == "rect") AppendRect(x, s, id, name, false);
+                else if (t == "text") AppendRect(x, s, id, name, true);
+                else if (t == "pic") AppendPic(x, s, id, name, mediaRel);
+                else if (t == "cxn") AppendCxn(x, s, id, name, spId);
+            }
+            x.Append("</p:grpSp></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>");
+
+            const string xmlHead = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>";
+            const string NsCt = "http://schemas.openxmlformats.org/package/2006/content-types";
+            const string NsPr = "http://schemas.openxmlformats.org/package/2006/relationships";
+            const string OD = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+            string types = xmlHead + "<Types xmlns=\"" + NsCt + "\">" +
+                "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>" +
+                "<Default Extension=\"xml\" ContentType=\"application/xml\"/>" +
+                "<Default Extension=\"svg\" ContentType=\"image/svg+xml\"/>" +
+                "<Override PartName=\"/ppt/presentation.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml\"/>" +
+                "<Override PartName=\"/ppt/slideMasters/slideMaster1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml\"/>" +
+                "<Override PartName=\"/ppt/slideLayouts/slideLayout1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml\"/>" +
+                "<Override PartName=\"/ppt/slides/slide1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slide+xml\"/>" +
+                "<Override PartName=\"/ppt/theme/theme1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.theme+xml\"/>" +
+                "</Types>";
+            string rootRels = xmlHead + "<Relationships xmlns=\"" + NsPr + "\"><Relationship Id=\"rId1\" Type=\"" + OD + "/officeDocument\" Target=\"ppt/presentation.xml\"/></Relationships>";
+            string pres = xmlHead + "<p:presentation xmlns:a=\"" + NsA + "\" xmlns:r=\"" + NsR + "\" xmlns:p=\"" + NsP + "\" saveSubsetFonts=\"1\">" +
+                "<p:sldMasterIdLst><p:sldMasterId id=\"2147483648\" r:id=\"rId1\"/></p:sldMasterIdLst><p:sldIdLst><p:sldId id=\"256\" r:id=\"rId2\"/></p:sldIdLst>" +
+                "<p:sldSz cx=\"" + SW + "\" cy=\"" + SH + "\"/><p:notesSz cx=\"6858000\" cy=\"9144000\"/></p:presentation>";
+            string presRels = xmlHead + "<Relationships xmlns=\"" + NsPr + "\">" +
+                "<Relationship Id=\"rId1\" Type=\"" + OD + "/slideMaster\" Target=\"slideMasters/slideMaster1.xml\"/>" +
+                "<Relationship Id=\"rId2\" Type=\"" + OD + "/slide\" Target=\"slides/slide1.xml\"/>" +
+                "<Relationship Id=\"rId3\" Type=\"" + OD + "/theme\" Target=\"theme/theme1.xml\"/></Relationships>";
+            string emptyTree = "<p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"0\" cy=\"0\"/><a:chOff x=\"0\" y=\"0\"/><a:chExt cx=\"0\" cy=\"0\"/></a:xfrm></p:grpSpPr></p:spTree>";
+            string master = xmlHead + "<p:sldMaster xmlns:a=\"" + NsA + "\" xmlns:r=\"" + NsR + "\" xmlns:p=\"" + NsP + "\"><p:cSld><p:bg><p:bgRef idx=\"1001\"><a:schemeClr val=\"bg1\"/></p:bgRef></p:bg>" + emptyTree + "</p:cSld>" +
+                "<p:clrMap bg1=\"lt1\" tx1=\"dk1\" bg2=\"lt2\" tx2=\"dk2\" accent1=\"accent1\" accent2=\"accent2\" accent3=\"accent3\" accent4=\"accent4\" accent5=\"accent5\" accent6=\"accent6\" hlink=\"hlink\" folHlink=\"folHlink\"/>" +
+                "<p:sldLayoutIdLst><p:sldLayoutId id=\"2147483649\" r:id=\"rId1\"/></p:sldLayoutIdLst>" +
+                "<p:txStyles><p:titleStyle><a:lvl1pPr><a:defRPr sz=\"4400\"/></a:lvl1pPr></p:titleStyle><p:bodyStyle><a:lvl1pPr><a:defRPr sz=\"2800\"/></a:lvl1pPr></p:bodyStyle><p:otherStyle><a:lvl1pPr><a:defRPr sz=\"1800\"/></a:lvl1pPr></p:otherStyle></p:txStyles></p:sldMaster>";
+            string masterRels = xmlHead + "<Relationships xmlns=\"" + NsPr + "\"><Relationship Id=\"rId1\" Type=\"" + OD + "/slideLayout\" Target=\"../slideLayouts/slideLayout1.xml\"/><Relationship Id=\"rId2\" Type=\"" + OD + "/theme\" Target=\"../theme/theme1.xml\"/></Relationships>";
+            string layout = xmlHead + "<p:sldLayout xmlns:a=\"" + NsA + "\" xmlns:r=\"" + NsR + "\" xmlns:p=\"" + NsP + "\" type=\"blank\" preserve=\"1\"><p:cSld name=\"Blank\">" + emptyTree + "</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>";
+            string layoutRels = xmlHead + "<Relationships xmlns=\"" + NsPr + "\"><Relationship Id=\"rId1\" Type=\"" + OD + "/slideMaster\" Target=\"../slideMasters/slideMaster1.xml\"/></Relationships>";
+            string ph = "<a:solidFill><a:schemeClr val=\"phClr\"/></a:solidFill>";
+            string theme = xmlHead + "<a:theme xmlns:a=\"" + NsA + "\" name=\"Arch Canvas\"><a:themeElements>" +
+                "<a:clrScheme name=\"Office\"><a:dk1><a:sysClr val=\"windowText\" lastClr=\"000000\"/></a:dk1><a:lt1><a:sysClr val=\"window\" lastClr=\"FFFFFF\"/></a:lt1><a:dk2><a:srgbClr val=\"44546A\"/></a:dk2><a:lt2><a:srgbClr val=\"E7E6E6\"/></a:lt2>" +
+                "<a:accent1><a:srgbClr val=\"4472C4\"/></a:accent1><a:accent2><a:srgbClr val=\"ED7D31\"/></a:accent2><a:accent3><a:srgbClr val=\"A5A5A5\"/></a:accent3><a:accent4><a:srgbClr val=\"FFC000\"/></a:accent4><a:accent5><a:srgbClr val=\"5B9BD5\"/></a:accent5><a:accent6><a:srgbClr val=\"70AD47\"/></a:accent6>" +
+                "<a:hlink><a:srgbClr val=\"0563C1\"/></a:hlink><a:folHlink><a:srgbClr val=\"954F72\"/></a:folHlink></a:clrScheme>" +
+                "<a:fontScheme name=\"Office\"><a:majorFont><a:latin typeface=\"Calibri Light\"/><a:ea typeface=\"\"/><a:cs typeface=\"\"/></a:majorFont><a:minorFont><a:latin typeface=\"Calibri\"/><a:ea typeface=\"\"/><a:cs typeface=\"\"/></a:minorFont></a:fontScheme>" +
+                "<a:fmtScheme name=\"Office\"><a:fillStyleLst>" + ph + ph + ph + "</a:fillStyleLst>" +
+                "<a:lnStyleLst><a:ln w=\"6350\">" + ph + "</a:ln><a:ln w=\"12700\">" + ph + "</a:ln><a:ln w=\"19050\">" + ph + "</a:ln></a:lnStyleLst>" +
+                "<a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst>" +
+                "<a:bgFillStyleLst>" + ph + ph + ph + "</a:bgFillStyleLst></a:fmtScheme></a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>";
+            var sr = new StringBuilder(xmlHead + "<Relationships xmlns=\"" + NsPr + "\"><Relationship Id=\"rId1\" Type=\"" + OD + "/slideLayout\" Target=\"../slideLayouts/slideLayout1.xml\"/>");
+            int k = 2;
+            foreach (var mf in mediaFiles) { sr.Append("<Relationship Id=\"rId" + k + "\" Type=\"" + OD + "/image\" Target=\"../media/" + mf.Key + "\"/>"); k++; }
+            sr.Append("</Relationships>");
+
+            using (var ms = new MemoryStream())
+            {
+                using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, true))
+                {
+                    AddBytes(zip, "[Content_Types].xml", Utf8(types));
+                    AddBytes(zip, "_rels/.rels", Utf8(rootRels));
+                    AddBytes(zip, "ppt/presentation.xml", Utf8(pres));
+                    AddBytes(zip, "ppt/_rels/presentation.xml.rels", Utf8(presRels));
+                    AddBytes(zip, "ppt/slideMasters/slideMaster1.xml", Utf8(master));
+                    AddBytes(zip, "ppt/slideMasters/_rels/slideMaster1.xml.rels", Utf8(masterRels));
+                    AddBytes(zip, "ppt/slideLayouts/slideLayout1.xml", Utf8(layout));
+                    AddBytes(zip, "ppt/slideLayouts/_rels/slideLayout1.xml.rels", Utf8(layoutRels));
+                    AddBytes(zip, "ppt/theme/theme1.xml", Utf8(theme));
+                    AddBytes(zip, "ppt/slides/slide1.xml", Utf8(x.ToString()));
+                    AddBytes(zip, "ppt/slides/_rels/slide1.xml.rels", Utf8(sr.ToString()));
+                    foreach (var mf in mediaFiles) AddBytes(zip, "ppt/media/" + mf.Key, mf.Value);
+                }
+                return ms.ToArray();
+            }
+        }
+        finally { P = "a"; Slide = false; }
+    }
+
     // 사각형(그룹) / 글상자. 글상자는 txBox="1", 채움·선 없음.
     static void AppendRect(StringBuilder x, Dictionary<string, object> s, int id, string name, bool textBox)
     {
-        x.Append("<a:sp><a:nvSpPr><a:cNvPr id=\"" + id + "\" name=\"" + name + "\"/><a:cNvSpPr" + (textBox ? " txBox=\"1\"" : "") + "/></a:nvSpPr>");
+        x.Append("<" + P + ":sp><" + P + ":nvSpPr><" + P + ":cNvPr id=\"" + id + "\" name=\"" + name + "\"/><" + P + ":cNvSpPr" + (textBox ? " txBox=\"1\"" : "") + "/>" + NvPr + "</" + P + ":nvSpPr>");
         string prst = S(s, "prst") ?? "rect";
         if (prst != "rect" && prst != "roundRect" && prst != "ellipse") prst = "rect";   // 장면 JSON 값이 XML 에 그대로 들어가므로 허용 목록만
-        x.Append("<a:spPr>" + Xfrm(s, 0, false, false) + Geom(s, prst));
+        x.Append("<" + P + ":spPr>" + Xfrm(s, 0, false, false) + Geom(s, prst));
         // 글상자도 fill 이 있으면 채운다(아이콘 이름표 바탕). fillAlpha(0~100)가 있으면 반투명
         var fill = S(s, "fill");
         string alpha = s.ContainsKey("fillAlpha") && s["fillAlpha"] != null ? "<a:alpha val=\"" + (Convert.ToInt32(s["fillAlpha"]) * 1000) + "\"/>" : null;
         x.Append(fill != null ? "<a:solidFill><a:srgbClr val=\"" + Hex(fill) + "\">" + (alpha ?? "") + "</a:srgbClr></a:solidFill>" : "<a:noFill/>");
         var line = textBox ? null : s.ContainsKey("line") ? s["line"] as Dictionary<string, object> : null;
         x.Append(line != null ? Ln(line, null, null) : "<a:ln><a:noFill/></a:ln>");
-        x.Append("</a:spPr>");
+        x.Append("</" + P + ":spPr>");
         var text = s.ContainsKey("text") ? s["text"] as Dictionary<string, object> : null;
         if (text != null) AppendText(x, text);
-        x.Append("</a:sp>");
+        x.Append("</" + P + ":sp>");
     }
 
     static void AppendText(StringBuilder x, Dictionary<string, object> t)
     {
         string anchor = S(t, "anchor") == "ctr" ? "ctr" : "t";
         string wrap = S(t, "wrap") == "none" ? "none" : "square";
-        x.Append("<a:txSp><a:txBody>");
+        x.Append(Slide ? "<p:txBody>" : "<a:txSp><a:txBody>");
         x.Append("<a:bodyPr wrap=\"" + wrap + "\" lIns=\"" + L(t, "l") + "\" tIns=\"" + L(t, "t") + "\" rIns=\"" + L(t, "r") + "\" bIns=\"" + L(t, "b") + "\" anchor=\"" + anchor + "\" rtlCol=\"0\"><a:noAutofit/></a:bodyPr>");
         x.Append("<a:lstStyle/>");
         // 줄바꿈은 문단으로. 카드는 첫 줄(제목)만 굵게, 나머지(설명)는 bodySz/bodyColor.
@@ -1201,7 +1350,7 @@ static class PptClipboard
             }
             x.Append("<a:endParaRPr lang=\"ko-KR\" sz=\"" + sz + "\"/></a:p>");
         }
-        x.Append("</a:txBody><a:useSpRect/></a:txSp>");
+        x.Append(Slide ? "</p:txBody>" : "</a:txBody><a:useSpRect/></a:txSp>");
     }
 
     // SVG 그림. PowerPoint 자신이 만드는 것과 같이 blip 에는 svgBlip 확장만 넣는다(PNG 대체 이미지 없음).
@@ -1209,26 +1358,26 @@ static class PptClipboard
     {
         string rel;
         if (!mediaRel.TryGetValue(S(s, "media") ?? "", out rel)) return;
-        x.Append("<a:pic><a:nvPicPr><a:cNvPr id=\"" + id + "\" name=\"" + name + "\"/><a:cNvPicPr><a:picLocks noChangeAspect=\"1\"/></a:cNvPicPr></a:nvPicPr>");
-        x.Append("<a:blipFill><a:blip><a:extLst><a:ext uri=\"{96DAC541-7B7A-43D3-8B79-37D633B846F1}\"><asvg:svgBlip xmlns:asvg=\"" + NsSvg + "\" r:embed=\"" + rel + "\"/></a:ext></a:extLst></a:blip><a:stretch><a:fillRect/></a:stretch></a:blipFill>");
-        x.Append("<a:spPr>" + Xfrm(s, 0, false, false) + Geom(s, "rect") + "</a:spPr></a:pic>");
+        x.Append("<" + P + ":pic><" + P + ":nvPicPr><" + P + ":cNvPr id=\"" + id + "\" name=\"" + name + "\"/><" + P + ":cNvPicPr><a:picLocks noChangeAspect=\"1\"/></" + P + ":cNvPicPr>" + NvPr + "</" + P + ":nvPicPr>");
+        x.Append("<" + P + ":blipFill><a:blip><a:extLst><a:ext uri=\"{96DAC541-7B7A-43D3-8B79-37D633B846F1}\"><asvg:svgBlip xmlns:asvg=\"" + NsSvg + "\" r:embed=\"" + rel + "\"/></a:ext></a:extLst></a:blip><a:stretch><a:fillRect/></a:stretch></" + P + ":blipFill>");
+        x.Append("<" + P + ":spPr>" + Xfrm(s, 0, false, false) + Geom(s, "rect") + "</" + P + ":spPr></" + P + ":pic>");
     }
 
     // 연결선. st/end 가 가리키는 도형이 패키지에 있으면 stCxn/endCxn 으로 붙인다.
     static void AppendCxn(StringBuilder x, Dictionary<string, object> s, int id, string name, Dictionary<string, int> spId)
     {
-        x.Append("<a:cxnSp><a:nvCxnSpPr><a:cNvPr id=\"" + id + "\" name=\"" + name + "\"/><a:cNvCxnSpPr><a:cxnSpLocks/>");
+        x.Append("<" + P + ":cxnSp><" + P + ":nvCxnSpPr><" + P + ":cNvPr id=\"" + id + "\" name=\"" + name + "\"/><" + P + ":cNvCxnSpPr><a:cxnSpLocks/>");
         var st = s.ContainsKey("st") ? s["st"] as Dictionary<string, object> : null;
         var en = s.ContainsKey("end") ? s["end"] as Dictionary<string, object> : null;
         int sid, eid;
         if (st != null && spId.TryGetValue(S(st, "id") ?? "", out sid)) x.Append("<a:stCxn id=\"" + sid + "\" idx=\"" + L(st, "idx") + "\"/>");
         if (en != null && spId.TryGetValue(S(en, "id") ?? "", out eid)) x.Append("<a:endCxn id=\"" + eid + "\" idx=\"" + L(en, "idx") + "\"/>");
-        x.Append("</a:cNvCxnSpPr></a:nvCxnSpPr>");
-        x.Append("<a:spPr>" + Xfrm(s, L(s, "rot"), B(s, "flipH"), B(s, "flipV")));
+        x.Append("</" + P + ":cNvCxnSpPr>" + NvPr + "</" + P + ":nvCxnSpPr>");
+        x.Append("<" + P + ":spPr>" + Xfrm(s, L(s, "rot"), B(s, "flipH"), B(s, "flipV")));
         x.Append("<a:prstGeom prst=\"" + (S(s, "prst") ?? "straightConnector1") + "\">" + (s.ContainsKey("adj") ? "<a:avLst><a:gd name=\"adj1\" fmla=\"val " + L(s, "adj") + "\"/></a:avLst>" : "<a:avLst/>") + "</a:prstGeom>");
         var line = s.ContainsKey("line") ? s["line"] as Dictionary<string, object> : new Dictionary<string, object>();
         x.Append(Ln(line, S(s, "head") ?? "none", S(s, "tail") ?? "triangle"));
-        x.Append("</a:spPr></a:cxnSp>");
+        x.Append("</" + P + ":spPr></" + P + ":cxnSp>");
     }
 
     // 도형 모양. cxn(연결점 목록 [{x,y,ang}], 도형 안 EMU)이 있는 사각형은 같은 모양의 custGeom 으로 쓰고 연결점을 그 목록대로 둔다:
