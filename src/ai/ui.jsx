@@ -237,7 +237,7 @@ export function ConnectModal({ open, pending, settings, onSettings, onClose, onR
 }
 
 // ---------------------------------------------------------------------------------------------
-export function AiPanel({ context, onContext, settings, verified, onOpenConnect, state, onReview, onAsk, onAskSelection, selection, onFixFromAnswer, onApplyOps, onCancel, onPick, nameOf, activeDocId, onWizard, onArrange, onImages, onAttachDoc, onToast, onRate }) {
+export function AiPanel({ context, onContext, settings, verified, onOpenConnect, state, onReview, onAsk, onAskSelection, selection, onFixFromAnswer, onApplyOps, onCancel, onPick, nameOf, activeDocId, onWizard, onArrange, onImages, onAttachDoc, onToast, onRate, onPickMany }) {
   const [text, setText] = useState('');
   const [draft, setDraft] = useState(context);
   const [ctxOpen, setCtxOpen] = useState(false);
@@ -246,6 +246,7 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
   const [note, setNote] = useState(null);     // 👎 뒤에 적는 한 줄 { key }
   const [noteText, setNoteText] = useState('');
   const [openLog, setOpenLog] = useState(null);   // 지난 기록 중 펼친 것
+  const [showLog, setShowLog] = useState(false);   // 지난 기록 목록을 펼쳤는지 (기본은 접힘: 한 줄만)
   const [sent, setSent] = useState(null);        // 방금 보낸 것 { text, intent, forced } — 다른 뜻이었으면 바꿔 보낼 수 있게
   const [images, setImages] = useState([]);      // 붙인 그림 [{ name, dataUrl, w, h }] — 다음 요청에 같이 간다
   const fileRef = useRef(null);
@@ -401,7 +402,7 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
         <div className={'send-row' + (busy ? ' wait' : '')}>
           {busy ? (
             <>
-              <Busy label={busy === 'review' ? '검수 중' : busy === 'ask' ? '생각 중' : busy === 'arrange' ? '배치안 정하는 중 · 1~2분' : '그릴 내용 만드는 중 · 1~2분'} />
+              <Busy label={busy === 'review' ? '검수 중' : busy === 'ask' ? '생각 중' : busy === 'arrange' ? '배치안 정하는 중 · 그림이 크면 몇 분' : '그릴 내용 만드는 중 · 1~2분'} />
               <button onClick={onCancel}>취소</button>
             </>
           ) : (
@@ -436,16 +437,31 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
       {/* 대화: 지난 기록(접힌 줄) → 지금 결과(펼친 카드). 아래가 최근 */}
       {(history.length > 0 || r) && (
         <div className="thread">
-          <div className="more-head">대화 <small className="hint">이 그림에서 주고받은 것 · AI 가 다음에도 같이 봅니다</small>{history.length > 0 && <button className="link" onClick={() => onContext({ log: [] })}>기록 지우기</button>}</div>
-          {history.map((x, i) => (
-            <div key={x.t || i} className={'turn past' + (openLog === (x.t || i) ? ' open' : '')} onClick={() => setOpenLog(openLog === (x.t || i) ? null : (x.t || i))} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') setOpenLog(openLog === (x.t || i) ? null : (x.t || i)); }}>
-              <span className={'log-k ' + x.k}>{KIND[x.k] || x.k}</span>
-              <div className="turn-body">
-                <div className="log-q">{openLog === (x.t || i) || x.q.length <= 120 ? x.q : x.q.slice(0, 120) + '…'}</div>
-                {x.a && <div className="hint">→ {openLog === (x.t || i) || x.a.length <= 120 ? x.a : x.a.slice(0, 120) + '…'}</div>}
-              </div>
+          {history.length > 0 && (
+            <button type="button" className={'more-head log-toggle' + (showLog ? ' open' : '')} onClick={() => setShowLog(!showLog)} aria-expanded={showLog} title="이 그림에서 AI 와 주고받은 기록. AI 가 다음 요청 때도 같이 봅니다">
+              <Icon name="chevron" size={14} className="chev" /> 지난 대화 {history.length}개
+              <small className="hint">{showLog ? '누르면 그때 그린·바꾼 요소를 캔버스에서 보여 줍니다' : '펼치기'}</small>
+            </button>
+          )}
+          <div className={'log-list' + (showLog ? ' open' : '')} aria-hidden={!showLog}>
+            <div>
+              {history.map((x, i) => {
+                const k = x.t || i, open = openLog === k, n = (x.ids || []).length;
+                const pick = () => { setOpenLog(open ? null : k); if (n && onPickMany) { const got = onPickMany(x.ids); if (!got) onToast?.('그때 그린 요소가 지금 그림에는 없습니다 (지웠거나 다른 탭)'); } };
+                return (
+                  <div key={k} className={'turn past' + (open ? ' open' : '')} onClick={pick} role="button" tabIndex={showLog ? 0 : -1} onKeyDown={(e) => { if (e.key === 'Enter') pick(); }}>
+                    <span className={'log-k ' + x.k}>{KIND[x.k] || x.k}</span>
+                    <div className="turn-body">
+                      <div className="log-q">{open || x.q.length <= 120 ? x.q : x.q.slice(0, 120) + '…'}</div>
+                      {x.a && <div className="hint">→ {open || x.a.length <= 120 ? x.a : x.a.slice(0, 120) + '…'}</div>}
+                      {n > 0 && <div className="hint log-ids">{x.k === 'review' ? '핀이 붙은' : x.k === 'arrange' ? '새로 만든 상자' : '그리거나 바꾼'} 요소 {n}개 · 누르면 캔버스에서 표시</div>}
+                    </div>
+                  </div>
+                );
+              })}
+              {history.length > 0 && <div className="log-foot"><button className="link" onClick={() => onContext({ log: [] })}>기록 지우기</button></div>}
             </div>
-          ))}
+          </div>
 
           {r && r.mode === 'arrange' && (
             <div className="turn now" ref={(el) => { if (el && el.dataset.k !== key) { el.dataset.k = key; el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } }}>

@@ -1103,7 +1103,8 @@ function Editor() {
         if (retried?.ok && retried.summary) summary += '\n(점검 뒤 다시 나눔) ' + retried.summary;
         if (bundled) summary += `\n(상자 단위로 묶은 선 ${bundled}개: 상자 안 모두가 같은 곳으로 가던 선을 상자에서 한 줄로)`;
         // 기록은 같은 커밋에 넣는다. 따로 logAi 를 부르면(바로든 다음 틱이든) 아직 화면에 안 올라간 옛 그래프를 다시 커밋해 정렬이 되돌아간다
-        cur.context = { ...cur.context, log: [...(cur.context?.log || []), { k: 'arrange', q: request && request.trim() ? request.trim() : 'AI 정렬', a: summary.slice(0, 400), t: Date.now() }].slice(-20) };
+        const madeBoxes = cur.groups.map((x) => x.id).filter((id) => !g.groups.some((x) => x.id === id));   // 정렬이 새로 만든 상자
+        cur.context = { ...cur.context, log: [...(cur.context?.log || []), { k: 'arrange', q: request && request.trim() ? request.trim() : 'AI 정렬', a: summary.slice(0, 400), t: Date.now(), ...(madeBoxes.length ? { ids: madeBoxes } : {}) }].slice(-20) };
         const ok = tryCommit(cur);
         if (ok) setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 30);
         setAi({ busy: null, error: null, result: { mode: 'arrange', request: request && request.trim() ? request.trim() : '', docId, docTitle, raw, at: Date.now(), ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary, placed, ops, applied: patched ? { applied: patched.applied, errors: patched.errors } : null, size: { w: Math.round(m.w), h: Math.round(m.h) }, crossings: cross.length, retried, blocked: !ok } });
@@ -1123,7 +1124,7 @@ function Editor() {
           toastMsg(`AI 검수 결과를 "${docTitle}" 탭에 넣었습니다.`, 4000);
         }
         setAi({ busy: null, error: null, result: { ...base, findings: annotations, dropped } });
-        logAi({ k: 'review', q: '검수', a: [base.summary, ...annotations.slice(0, 5).map((f) => f.message)].filter(Boolean).join(' / ') }, docId);
+        logAi({ k: 'review', q: '검수', a: [base.summary, ...annotations.slice(0, 5).map((f) => f.message)].filter(Boolean).join(' / '), ids: [...new Set(annotations.map((f) => f.target).filter(Boolean))] }, docId);
       } else {
         setAi({ busy: null, error: null, result: { ...base, request: opts.label || request, ops: Array.isArray(j.ops) ? j.ops : [], arrangeAfter: !!opts.arrangeAfter } });
       }
@@ -1210,18 +1211,36 @@ function Editor() {
       toastMsg(`이 명령은 "${name}" 탭에서 만든 것이라 그 탭으로 이동했습니다. [적용]을 다시 누르십시오.`, 5000);
       return;
     }
-    const r = applyPatch(currentGraph(), ops, catalog.check);
+    const before = currentGraph();
+    const r = applyPatch(before, ops, catalog.check);
     // 답변대로 고치기: 옮기고 다시 이은 뒤 한 번에 자동 정렬까지 (Ctrl+Z 한 번에 되돌아간다)
     if (ai.result?.arrangeAfter && r.graph) autoArrange(r.graph, [...r.graph.groups.map((x) => x.id), ...r.graph.nodes.map((x) => x.id)], isOverlay);
     const ok = tryCommit(r.graph);
     setAi((s) => ({ ...s, result: s.result ? { ...s.result, applied: { ...r, blocked: !ok } } : s.result }));
-    if (ok) { setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 30); if (ai.result?.request) setTimeout(() => logAi({ k: 'draw', q: ai.result.request, a: ai.result.summary || '' }), 0); }
+    if (ok) {
+      setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 30);
+      if (ai.result?.request) {
+        // 이번에 새로 생기거나 바뀐 요소(자리만 바뀐 건 제외) — 기록을 눌렀을 때 캔버스에서 보여 주려고
+        const was = new Map([...before.groups, ...before.nodes, ...before.edges].map((x) => [x.id, JSON.stringify({ ...x, x: 0, y: 0, w: 0, h: 0 })]));
+        const ids = [...r.graph.groups, ...r.graph.nodes, ...r.graph.edges].filter((x) => was.get(x.id) !== JSON.stringify({ ...x, x: 0, y: 0, w: 0, h: 0 })).map((x) => x.id);
+        setTimeout(() => logAi({ k: 'draw', q: ai.result.request, a: ai.result.summary || '', ids }), 0);
+      }
+    }
     return { ...r, blocked: !ok };
   }, [catalog, currentGraph, tryCommit, ai.result, switchDoc, toastMsg, rf, logAi]);
 
   const selectById = useCallback((id) => {
     rf.setNodes((ns) => ns.map((n) => ({ ...n, selected: n.id === id })));
     rf.setEdges((es) => es.map((e) => ({ ...e, selected: e.id === id })));
+  }, [rf]);
+  // 기록을 눌렀을 때: 그때 그리거나 바꾼 요소를 모두 골라 화면에 맞춘다 (없는 id 는 조용히 건너뛴다)
+  const selectMany = useCallback((ids) => {
+    const set = new Set((ids || []).map(String));
+    const have = rf.getNodes().filter((n) => set.has(n.id));
+    rf.setNodes((ns) => ns.map((n) => ({ ...n, selected: set.has(n.id) })));
+    rf.setEdges((es) => es.map((e) => ({ ...e, selected: set.has(e.id) })));
+    if (have.length) setTimeout(() => rf.fitView({ nodes: have.map((n) => ({ id: n.id })), padding: 0.35, duration: 350, maxZoom: 1.2 }), 0);
+    return have.length;
   }, [rf]);
 
   // ----- 오른쪽 클릭 메뉴 만들기 -----
@@ -2122,7 +2141,7 @@ function Editor() {
             onOpenConnect={(pending) => setConnect({ open: true, pending })}
             state={ai} onReview={() => runAi('review')} onDraw={(req) => runAi('draw', req)} onAsk={(q) => runAi('ask', q)}
             onFixFromAnswer={(q, a) => runAi('draw', fixFromAnswer(q, a), { arrangeAfter: true, label: '답변대로 고치기: ' + String(q).split('\n').pop().slice(0, 80) })}
-            onApplyOps={applyAiOps} onCancel={() => aiAbort.current?.abort()} onPick={selectById} nameOf={labelOf} activeDocId={docs.active}
+            onApplyOps={applyAiOps} onCancel={() => aiAbort.current?.abort()} onPick={selectById} onPickMany={selectMany} nameOf={labelOf} activeDocId={docs.active}
             onWizard={(text) => setWizard({ open: true, text })}
             onArrange={(text) => runAi('arrange', text || '')}
             onImages={(list) => { aiImages.current = list || []; }}

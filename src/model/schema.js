@@ -76,7 +76,7 @@ export function normalizeGraph(input) {
   const doc = c.doc && typeof c.doc === 'object' && typeof c.doc.text === 'string' && c.doc.text.trim() ? { name: toText(c.doc.name).slice(0, 120) || '문서.md', text: c.doc.text.slice(0, DOC_MAX) } : null;
   const KINDS = new Set(['draw', 'ask', 'review', 'arrange']);
   const log = (Array.isArray(c.log) ? c.log : []).filter((x) => x && KINDS.has(x.k) && typeof x.q === 'string').slice(-LOG_MAX)
-    .map((x) => ({ k: x.k, q: x.q.slice(0, 1500), a: toText(x.a).slice(0, 800), t: Number.isFinite(+x.t) ? +x.t : 0 }));
+    .map((x) => { const ids = (Array.isArray(x.ids) ? x.ids : []).map((v) => toText(v)).filter(Boolean).slice(0, 80); return { k: x.k, q: x.q.slice(0, 1500), a: toText(x.a).slice(0, 800), t: Number.isFinite(+x.t) ? +x.t : 0, ...(ids.length ? { ids } : {}) }; });
   out.context = { title: toText(c.title), requirements: toText(c.requirements), constraints: toText(c.constraints), ...(doc ? { doc } : {}), ...(log.length ? { log } : {}) };
   out.mode = MODES.includes(g.mode) ? g.mode : 'infra';
   out.theme = THEMES.includes(g.theme) ? g.theme : 'light';
