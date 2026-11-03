@@ -102,7 +102,7 @@ import { useExit as useExit2 } from './useExit.js';
 import { ConnectModal, AiPanel, AiChip, Busy, describeOps } from './ai/ui.jsx';
 import { useExit } from './useExit.js';
 import { loadSettings, saveSettings, isVerified, run as aiRun } from './ai/connection.js';
-import { buildReviewMessages, buildDrawMessages, buildAskMessages, buildClarifyMessages, buildArrangeMessages, buildArrangeRetryMessages, parseJsonReply, findingsToAnnotations, confirmedLines, fixFromAnswer } from './ai/prompts.js';
+import { buildReviewMessages, buildDrawMessages, buildAskMessages, buildClarifyMessages, buildArrangeMessages, buildArrangeRetryMessages, imagesNote, IMAGES_SYSTEM, parseJsonReply, findingsToAnnotations, confirmedLines, fixFromAnswer } from './ai/prompts.js';
 import { AiWizard, AskBackModal } from './ai/Wizard.jsx';
 import { MakerMark } from './MakerMark.jsx';
 import { CanvasStart } from './CanvasStart.jsx';
@@ -142,7 +142,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.35';
+export const APP_VERSION = '0.9.36';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -193,6 +193,7 @@ function Editor() {
   const [ai, setAi] = useState({ busy: null, result: null, error: null });
   const aiAbort = useRef(null);
   const pendingDraw = useRef('');
+  const aiImages = useRef([]);   // 채팅칸에 붙인 그림 [{ name, dataUrl }] — 다음 요청 한 번에 같이 보내고 비운다
   // 패널 폭
   const [layout, setLayout] = useState(loadLayout);
   const onResize = useCallback((which, w, done) => {
@@ -1012,7 +1013,9 @@ function Editor() {
     setPanel('ai');
     const t0 = Date.now();
     try {
-      const raw = await aiRun(aiSettings, { ...msgs, signal: ac.signal, maxTokens: mode === 'ask' ? 4000 : 16000 });
+      const images = aiImages.current.splice(0);
+      if (images.length) { msgs.user += imagesNote(images); msgs.system = IMAGES_SYSTEM + msgs.system; }
+      const raw = await aiRun(aiSettings, { ...msgs, images, signal: ac.signal, maxTokens: mode === 'ask' ? 4000 : 16000 });
       if (ac.signal.aborted) return;
       // 의도 먼저: 답이 크게 달라지는데 모르는 게 있으면 AI 가 먼저 쉬운 말로 되묻는다
       let j = null;
@@ -1041,7 +1044,7 @@ function Editor() {
       if (!j) j = parseJsonReply(raw);   // 검수·그리기는 JSON 이어야 한다 (못 읽으면 여기서 오류)
       if (mode === 'arrange') {
         // AI 정렬: AI 가 준 단·순서(columns)대로 기본 정렬이 자리를 잡는다. 바로 적용(Ctrl+Z 로 되돌림)
-        // 배치안: rows(격자, 0.9.35~) 또는 columns(단, 0.9.29~). 부모 키가 없는 id 는 버린다
+        // 배치안: rows(격자, 0.9.36~) 또는 columns(단, 0.9.29~). 부모 키가 없는 id 는 버린다
         const planOf = (jj, knownIds) => {
           const src = jj.rows && typeof jj.rows === 'object' ? jj.rows : jj.columns && typeof jj.columns === 'object' ? jj.columns : {};
           const out = {}; let n = 0;
@@ -1083,7 +1086,7 @@ function Editor() {
         let m = measure(cur), cross = lineCrossings(cur, dropsOf(cur)), retried = null;
         if (all.length > 3 && (m.w / m.h > 2.4 || m.w / m.h < 1.3 || cross.length)) {
           try {
-            const raw2 = await aiRun(aiSettings, { ...buildArrangeRetryMessages(cur, catalog, m, cross, request), signal: ac.signal, maxTokens: 16000 });
+            const raw2 = await aiRun(aiSettings, { ...buildArrangeRetryMessages(cur, catalog, m, cross, request), images, signal: ac.signal, maxTokens: 16000 });
             if (ac.signal.aborted) return;
             const j2 = parseJsonReply(raw2);
             const p2 = planOf(j2, known2);
@@ -1872,7 +1875,7 @@ function Editor() {
       load: (graph) => commit(normalizeGraph(graph), undefined, { fit: true }),
       update: { check: () => checkUpdate(false), apply: applyUpdate, state: () => updRef.current },
       select: (ids) => { const set = new Set(ids); rf.setNodes((ns) => ns.map((n) => ({ ...n, selected: set.has(n.id) }))); rf.setEdges((es) => es.map((x) => ({ ...x, selected: set.has(x.id) }))); },
-      ai: { review: () => runAi('review'), draw: (req) => runAi('draw', req), ask: (q) => runAi('ask', q), arrange: () => runAi('arrange'), state: () => ai, settings: () => aiSettings, setSettings: setAiSettings, applyOps: applyAiOps, setContext: updateContext },
+      ai: { review: () => runAi('review'), draw: (req) => runAi('draw', req), ask: (q) => runAi('ask', q), arrange: (t) => runAi('arrange', t || ''), images: (list) => { aiImages.current = list || []; }, state: () => ai, settings: () => aiSettings, setSettings: setAiSettings, applyOps: applyAiOps, setContext: updateContext },
       guide: {
         state: () => guide, set: (s) => { setGuide(s); setPanel('guide'); }, start: startGuide,
         steps: (s) => visibleSteps(s || guide), ops: (step, s) => opsFor(step, s || guide),
@@ -2121,6 +2124,7 @@ function Editor() {
             onApplyOps={applyAiOps} onCancel={() => aiAbort.current?.abort()} onPick={selectById} nameOf={labelOf} activeDocId={docs.active}
             onWizard={(text) => setWizard({ open: true, text })}
             onArrange={(text) => runAi('arrange', text || '')}
+            onImages={(list) => { aiImages.current = list || []; }}
             onAttachDoc={(d) => updateContext({ doc: d || undefined })} onToast={toastMsg}
             selection={{ count: selectedNodes.length + selectedEdges.length }} onAskSelection={(q) => askSelRef.current?.(q)} onRate={rateAi}
           />

@@ -150,6 +150,14 @@ export const ARRANGE_SYSTEM = `${COMMON_SYSTEM}
   }
 }`;
 
+/** 첨부 그림이 있을 때 사용자 프롬프트 끝에 붙이는 안내 */
+export function imagesNote(images) {
+  const n = images?.length || 0;
+  return n ? `\n\n# 첨부 그림 ${n}장\n사용자가 그림을 붙였다(지금 캔버스의 스샷이거나 참고할 다른 그림). 그림에 보이는 구도·선 모양·문제를 요청과 함께 반영한다. 그림 속 요소 이름은 위 목록의 id 와 맞춰 본다.` : '';
+}
+/** 그림이 있을 때 시스템 프롬프트 앞에 붙이는 한 줄(CLI 는 Read 도구로 열어야 보인다) */
+export const IMAGES_SYSTEM = `사용자가 그림을 첨부했다. 답하기 전에 반드시 그림을 본다: 프롬프트에 "# 첨부 그림" 절과 파일 경로가 있으면 Read 도구로 그 파일을 전부 열어 보고(이미 메시지에 그림이 들어 있으면 그것을 본다), 그림 내용을 근거로 답한다.\n\n`;
+
 export function buildArrangeMessages(graph, catalog, request = '') {
   const want = request && request.trim() ? `\n\n# 사용자가 이번 정렬에서 바라는 것 (최우선으로 따른다)\n${request.trim()}` : '';
   const user = `# 제안서 컨텍스트\n${contextText(graph.context)}\n\n# 현재 다이어그램: ${graph.title}\n${summarizeGraph(graph, catalog)}${want}\n\n# 배치 요청\n위 다이어그램을 ${FRAME.w}×${FRAME.h} 틀에 들어가는 구도로 다시 잡아 출력 형식대로 JSON 으로 적어라. 부모마다 직접 자식 id 만 쓰고(손자는 그 부모 항목에), id 는 위 목록의 것을 그대로 쓴다.${want ? ' 사용자가 바라는 것을 먼저 반영한다.' : ''}`;

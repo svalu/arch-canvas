@@ -237,7 +237,7 @@ export function ConnectModal({ open, pending, settings, onSettings, onClose, onR
 }
 
 // ---------------------------------------------------------------------------------------------
-export function AiPanel({ context, onContext, settings, verified, onOpenConnect, state, onReview, onAsk, onAskSelection, selection, onFixFromAnswer, onApplyOps, onCancel, onPick, nameOf, activeDocId, onWizard, onArrange, onAttachDoc, onToast, onRate }) {
+export function AiPanel({ context, onContext, settings, verified, onOpenConnect, state, onReview, onAsk, onAskSelection, selection, onFixFromAnswer, onApplyOps, onCancel, onPick, nameOf, activeDocId, onWizard, onArrange, onImages, onAttachDoc, onToast, onRate }) {
   const [text, setText] = useState('');
   const [draft, setDraft] = useState(context);
   const [ctxOpen, setCtxOpen] = useState(false);
@@ -247,6 +247,20 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
   const [noteText, setNoteText] = useState('');
   const [openLog, setOpenLog] = useState(null);   // 지난 기록 중 펼친 것
   const [sent, setSent] = useState(null);        // 방금 보낸 것 { text, intent, forced } — 다른 뜻이었으면 바꿔 보낼 수 있게
+  const [images, setImages] = useState([]);      // 붙인 그림 [{ name, dataUrl, w, h }] — 다음 요청에 같이 간다
+  const fileRef = useRef(null);
+  const addImageFiles = (files) => {
+    const list = [...(files || [])].filter((f) => /^image\/(png|jpeg|webp|gif)$/.test(f.type)).slice(0, 6 - images.length);
+    if (!list.length) return;
+    Promise.all(list.map((f) => new Promise((res) => {
+      const rd = new FileReader();
+      rd.onload = () => { const img = new Image(); img.onload = () => res({ name: f.name || 'clipboard.png', dataUrl: String(rd.result), w: img.naturalWidth, h: img.naturalHeight }); img.onerror = () => res(null); img.src = String(rd.result); };
+      rd.onerror = () => res(null); rd.readAsDataURL(f);
+    }))).then((got) => { const ok = got.filter(Boolean); if (!ok.length) return; const next = [...images, ...ok].slice(0, 6); setImages(next); onImages?.(next); });
+  };
+  const onPaste = (e) => { const files = [...(e.clipboardData?.items || [])].filter((it) => it.kind === 'file').map((it) => it.getAsFile()).filter(Boolean); if (files.length) { e.preventDefault(); addImageFiles(files); } };
+  const onDrop = (e) => { if (e.dataTransfer?.files?.length) { e.preventDefault(); addImageFiles(e.dataTransfer.files); } };
+  const dropImage = (i) => { const next = images.filter((_, k) => k !== i); setImages(next); onImages?.(next); };
   useEffect(() => setDraft(context), [context]);
   const p = providerById(settings.provider);
   const busy = state.busy;
@@ -263,6 +277,7 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
 
   // 보내기. Enter = 적은 말로 종류를 정해서(정렬·검수·질문·그리기) 보낸다. 버튼으로 종류를 직접 고를 수도 있다
   const dispatch = (how, t) => {
+    onImages?.(images); setImages([]);   // 붙인 그림은 이번 요청에 같이 가고 칸은 비운다
     if (how === 'review') { onReview(); return; }
     if (how === 'arrange') { onArrange?.(t); return; }
     if (!t) return;
@@ -350,6 +365,7 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
           </span>
           {selCount > 0 && <small className="hint">물어보기만 · 검수·그리기는 전체</small>}
           <DocAttach doc={context.doc} onAttach={onAttachDoc} onError={onToast} onCopied={onToast} compact />
+          <button className={'chip' + (images.length ? ' on' : '')} onClick={() => fileRef.current?.click()} title="스샷이나 참고 그림을 붙입니다(Ctrl+V 로 붙여 넣거나 끌어다 놓아도 됨). 정렬·질문·그리기·검수 어디든 같이 갑니다"><Icon name="image" size={13} /> 그림{images.length ? ` ${images.length}` : ''}</button>
           <button className={'chip' + (ctxFilled ? ' on' : '') + (ctxOpen ? ' open' : '')} onClick={() => setCtxOpen(!ctxOpen)} title="무엇을 만드는지·꼭 되어야 하는 것·지켜야 할 조건. AI 가 늘 같이 봅니다">
             <Icon name="info" size={13} /> 상황{ctxFilled ? ' ✓' : ''}{told.length ? ` · 알려준 것 ${told.length}` : ''}
           </button>
@@ -368,8 +384,20 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
             <p className="hint">말로 그리기 때 AI 가 물어본 답도 여기 "알려준 것"으로 쌓입니다.</p>
           </div>
         )}
-        <textarea value={text} onChange={(e) => setText(e.target.value)} onKeyDown={onKey} disabled={!!busy}
-          placeholder={busy ? '' : selCount ? '선택한 것에 대해 묻거나, 어떻게 바꿀지 적으세요 · Enter 로 보내기' : '무엇이든 적으세요. 예: 정렬해 줘 / 고객 채널은 상자에서 한 줄로 묶어 / NAT 하나면 괜찮아? · Enter 로 보내기'} />
+        {images.length > 0 && (
+          <div className="img-chips" aria-label="붙인 그림">
+            {images.map((im, i) => (
+              <span key={i} className="img-chip" title={`${im.name} · ${im.w}×${im.h}`}>
+                <img src={im.dataUrl} alt="" />
+                <button className="x" onClick={() => dropImage(i)} aria-label="그림 빼기"><Icon name="close" size={12} /></button>
+              </span>
+            ))}
+            <small className="hint">그림 {images.length}장 · 다음 요청에 같이 갑니다</small>
+          </div>
+        )}
+        <textarea value={text} onChange={(e) => setText(e.target.value)} onKeyDown={onKey} onPaste={onPaste} onDrop={onDrop} onDragOver={(e) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); }} disabled={!!busy}
+          placeholder={busy ? '' : selCount ? '선택한 것에 대해 묻거나, 어떻게 바꿀지 적으세요 · Enter 로 보내기 · 스샷은 Ctrl+V' : '무엇이든 적으세요. 예: 정렬해 줘 / 고객 채널은 상자에서 한 줄로 묶어 / NAT 하나면 괜찮아? · Enter 로 보내기 · 스샷은 Ctrl+V'} />
+        <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple style={{ display: 'none' }} onChange={(e) => { addImageFiles(e.target.files); e.target.value = ''; }} />
         <div className="send-row">
           {busy ? (
             <>

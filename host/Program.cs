@@ -30,8 +30,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: System.Reflection.AssemblyCompany("heerang")]
 [assembly: System.Reflection.AssemblyProduct("Arch Canvas")]
 [assembly: System.Reflection.AssemblyCopyright("2026 heerang")]
-[assembly: System.Reflection.AssemblyVersion("0.9.35.0")]
-[assembly: System.Reflection.AssemblyFileVersion("0.9.35.0")]
+[assembly: System.Reflection.AssemblyVersion("0.9.36.0")]
+[assembly: System.Reflection.AssemblyFileVersion("0.9.36.0")]
 
 static class Program
 {
@@ -88,7 +88,7 @@ static class Program
 /// <summary>EXE에 내장된 리소스(app/..., bin/...)를 data 폴더에 풀고, bin의 DLL을 로드한다.</summary>
 static class Bootstrap
 {
-    public const string AppVersion = "0.9.35";
+    public const string AppVersion = "0.9.36";
     public static readonly string ExePath = Assembly.GetExecutingAssembly().Location;
     public static readonly string BaseDir = Path.GetDirectoryName(ExePath);
     public static string DataDir;    // EXE 옆 data\ (쓰기 불가하면 %LocalAppData%\ArchCanvas\data)
@@ -675,13 +675,42 @@ static class CliRunner
         try
         {
             string args, lastFile = Path.Combine(work, "last.txt");
+            // 첨부 그림: 실행 폴더에 풀어 두고, claude 는 Read 도구만 열어 그 파일을 보게 하고, codex 는 -i 로 넘긴다
+            var imgFiles = new List<string>();
+            var images = prm.ContainsKey("images") ? prm["images"] as object[] : null;
+            if (images != null)
+            {
+                int n = 0;
+                foreach (var o in images)
+                {
+                    var im = o as Dictionary<string, object>; if (im == null || n >= 6) continue;
+                    string name = Get(im, "name"), data = Get(im, "data");
+                    if (string.IsNullOrEmpty(data) || data.Length > 12 * 1024 * 1024) continue;
+                    string ext = name != null && name.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ? ".jpg" : name != null && name.EndsWith(".webp", StringComparison.OrdinalIgnoreCase) ? ".webp" : ".png";
+                    string f = Path.Combine(work, "img" + (++n) + ext);
+                    try { File.WriteAllBytes(f, Convert.FromBase64String(data)); imgFiles.Add(f); } catch { }
+                }
+            }
             if (codex)
             {
                 // codex exec 에는 system 자리가 따로 없어서 앞에 붙여 한 덩어리로 넣는다. "-" = stdin 에서 읽기
-                args = CodexArgs + (string.IsNullOrEmpty(model) ? "" : " -m " + model) + " -o \"" + lastFile + "\" -";
+                string imgArgs = ""; foreach (var f in imgFiles) imgArgs += " -i \"" + f + "\"";
+                args = CodexArgs + imgArgs + (string.IsNullOrEmpty(model) ? "" : " -m " + model) + " -o \"" + lastFile + "\" -";
                 if (!string.IsNullOrEmpty(system)) user = "<지시>\n" + system + "\n</지시>\n\n" + user;
             }
-            else args = LockedArgs + (string.IsNullOrEmpty(model) ? "" : " --model " + model);
+            else
+            {
+                args = (imgFiles.Count > 0 ? LockedArgs.Replace("--tools \"\"", "--tools \"Read\" --allowedTools \"Read\"") : LockedArgs) + (string.IsNullOrEmpty(model) ? "" : " --model " + model);
+                if (imgFiles.Count > 0)
+                {
+                    // 맨 앞에 둔다: 긴 그래프 요약 뒤에 붙이면 모델이 그림을 안 보고 답하는 일이 있었다
+                    var sb = new StringBuilder();
+                    sb.Append("# 첨부 그림 ").Append(imgFiles.Count).Append("장 — 답하기 전에 반드시 Read 도구로 아래 파일을 전부 열어 본다. 그림을 보지 않고 답하지 않는다.\n");
+                    foreach (var f in imgFiles) sb.Append("- ").Append(f).Append("\n");
+                    sb.Append("\n").Append(user);
+                    user = sb.ToString();
+                }
+            }
             if (!codex && !string.IsNullOrEmpty(system))
             {
                 string sysFile = Path.Combine(work, "system.txt");

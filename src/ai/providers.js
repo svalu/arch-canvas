@@ -48,10 +48,15 @@ export async function ask(settings, req) {
   throw new AiError('모르는 연결 방식: ' + p.id, { kind: 'config' });
 }
 
-async function askClaudeApi({ key, model }, { system, user, maxTokens = 16000, signal }) {
+// 첨부 그림: [{ name, dataUrl }] (PNG/JPEG data URL). API 는 그대로 블록으로, CLI 는 호스트가 임시 파일로 풀어 준다
+const imgParts = (images) => (images || []).map((im) => { const m = /^data:(image\/(?:png|jpeg|webp|gif));base64,(.+)$/s.exec(im.dataUrl || ''); return m ? { type: m[1], data: m[2], name: im.name || 'image' } : null; }).filter(Boolean);
+
+async function askClaudeApi({ key, model }, { system, user, images, maxTokens = 16000, signal }) {
   if (!key) throw new AiError('API 키가 없습니다', { kind: 'auth' });
   const client = new Anthropic({ apiKey: key, dangerouslyAllowBrowser: true, maxRetries: 1 });
-  const base = { model: model || 'claude-opus-5-5', max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] };
+  const parts = imgParts(images);
+  const content = parts.length ? [...parts.map((p) => ({ type: 'image', source: { type: 'base64', media_type: p.type, data: p.data } })), { type: 'text', text: user }] : user;
+  const base = { model: model || 'claude-opus-5-5', max_tokens: maxTokens, system, messages: [{ role: 'user', content }] };
   let res;
   try {
     try {
@@ -76,14 +81,16 @@ async function askClaudeApi({ key, model }, { system, user, maxTokens = 16000, s
   return text;
 }
 
-async function askOpenAi({ key, model }, { system, user, maxTokens = 8000, signal }) {
+async function askOpenAi({ key, model }, { system, user, images, maxTokens = 8000, signal }) {
   if (!key) throw new AiError('API 키가 없습니다', { kind: 'auth' });
+  const parts = imgParts(images);
+  const content = parts.length ? [...parts.map((p) => ({ type: 'image_url', image_url: { url: `data:${p.type};base64,${p.data}` } })), { type: 'text', text: user }] : user;
   let r;
   try {
     r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST', signal,
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
-      body: JSON.stringify({ model: model || 'gpt-5', max_completion_tokens: maxTokens, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
+      body: JSON.stringify({ model: model || 'gpt-5', max_completion_tokens: maxTokens, messages: [{ role: 'system', content: system }, { role: 'user', content }] }),
     });
   } catch (e) {
     if (e?.name === 'AbortError') throw new AiError('취소했습니다', { kind: 'cancel' });
@@ -147,13 +154,15 @@ const cliCall = (method, prm, opt) => {
   return bridgeFetch('/run', prm, { ...opt, timeoutMs: (prm.timeoutMs || 240000) + 15000 });
 };
 
-async function askCli(tool, { model }, { system, user, signal, timeoutMs = 240000 }) {
+async function askCli(tool, { model }, { system, user, images, signal, timeoutMs = 240000 }) {
   const H = CLI_HELP[tool];
   const id = Math.random().toString(36).slice(2);
   const onAbort = () => cliCall('ai.cancel', { runId: id }).catch(() => {});
   signal?.addEventListener('abort', onAbort, { once: true });
+  const parts = imgParts(images);
+  if (parts.length && !window.desktop?.call) throw new AiError('그림 붙이기는 Windows 버전(EXE)이나 API 키 연결에서 됩니다. 웹의 브리지 연결은 아직 그림을 넘기지 못합니다.', { kind: 'config' });
   try {
-    const r = await cliCall('ai.run', { runId: id, tool, system, user, model: model || '', timeoutMs });
+    const r = await cliCall('ai.run', { runId: id, tool, system, user, model: model || '', timeoutMs, ...(parts.length ? { images: parts.map((p, i) => ({ name: `img${i + 1}.${p.type === 'image/jpeg' ? 'jpg' : p.type.slice(6)}`, data: p.data })) } : {}) });
     if (!r?.text?.trim()) throw new AiError('빈 응답이 왔습니다', { kind: 'empty', detail: r?.stderr });
     return r.text;
   } catch (e) {
