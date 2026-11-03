@@ -173,7 +173,7 @@ export function graphToScene(graph, catalog, include = null, { textScale = 1 } =
       tail: e.arrow === 'none' ? 'none' : 'triangle',
     });
     if (e.label) {
-      const { mid } = edgePath(geo, e.shape, bendOfEdge(e));
+      const { mid } = edgePath(geo, e.shape, bendOfEdge(e), po.lb || null);
       const mx = mid.x, my = mid.y;
       edgeLabels.push({
         t: 'text', id: e.id + '#label', name: e.label, x: E(mx - 50), y: E(my - 18), w: E(100), h: E(16),

@@ -102,7 +102,7 @@ export const ArchEdge = memo(function ArchEdge({ id, source, target, data = {}, 
   // 아이콘 뒤 흰 바탕(3px)이 선 위에 그려져 화살촉 끝이 묻히지 않게, 아이콘에 붙는 끝은 3px 당긴다(이름표 밑은 그대로)
   const pull = (p, side, n, drop) => { if (!n || n.type !== 'awsIcon' || (side === 'b' && drop)) return p; const q = { ...p }; if (side === 't') q.y -= HALO; else if (side === 'b') q.y += HALO; else if (side === 'l') q.x -= HALO; else q.x += HALO; return q; };
   const geoDraw = { ...geo, p1: drag?.end === 'source' || data.sp ? geo.p1 : pull(geo.p1, geo.s, a, da), p2: drag?.end === 'target' || data.tp ? geo.p2 : pull(geo.p2, geo.t, b, db) };
-  const { d, mid } = edgePath(geoDraw, data.shape, bend);
+  const { d, mid } = edgePath(geoDraw, data.shape, bend, po.lb || null);
   const bent = isBent(geo, data.shape);
   // 손잡이: 가운데 구간 위. 이름표가 있으면 겹치지 않게 구간의 1/4 지점
   const hp = !data.label ? mid : geo.horizontal ? { x: mid.x, y: geo.p1.y + (geo.p2.y - geo.p1.y) * 0.25 } : { x: geo.p1.x + (geo.p2.x - geo.p1.x) * 0.25, y: mid.y };

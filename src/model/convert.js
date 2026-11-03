@@ -59,7 +59,7 @@ export function edgeToFlow(e, pins = [], theme = 'light', po = null) {
     zIndex: Z_EDGE,
     ...(e.arrow !== 'none' ? { markerEnd: ARROW(theme) } : {}),
     ...(e.arrow === 'both' ? { markerStart: ARROW(theme) } : {}),
-    data: { label: e.label, line: e.line, shape: e.shape, arrow: e.arrow, pins, ...(typeof e.bend === 'number' ? { bend: e.bend } : {}), ...(e.sp ? { sp: e.sp } : {}), ...(e.tp ? { tp: e.tp } : {}), ...(po && (po.s || po.t || po.b != null) ? { po } : {}) },
+    data: { label: e.label, line: e.line, shape: e.shape, arrow: e.arrow, pins, ...(typeof e.bend === 'number' ? { bend: e.bend } : {}), ...(e.sp ? { sp: e.sp } : {}), ...(e.tp ? { tp: e.tp } : {}), ...(po && (po.s || po.t || po.b != null || po.lb) ? { po } : {}) },
   };
 }
 

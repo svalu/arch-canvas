@@ -142,7 +142,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.31';
+export const APP_VERSION = '0.9.32';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -1041,7 +1041,7 @@ function Editor() {
       if (!j) j = parseJsonReply(raw);   // 검수·그리기는 JSON 이어야 한다 (못 읽으면 여기서 오류)
       if (mode === 'arrange') {
         // AI 정렬: AI 가 준 단·순서(columns)대로 기본 정렬이 자리를 잡는다. 바로 적용(Ctrl+Z 로 되돌림)
-        // 배치안: rows(격자, 0.9.31~) 또는 columns(단, 0.9.29~). 부모 키가 없는 id 는 버린다
+        // 배치안: rows(격자, 0.9.32~) 또는 columns(단, 0.9.29~). 부모 키가 없는 id 는 버린다
         const planOf = (jj, knownIds) => {
           const src = jj.rows && typeof jj.rows === 'object' ? jj.rows : jj.columns && typeof jj.columns === 'object' ? jj.columns : {};
           const out = {}; let n = 0;

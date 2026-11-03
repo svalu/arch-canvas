@@ -83,7 +83,7 @@ export function graphToSvg(graph, catalog, include = null, { background = 'trans
   const edgeGeos = edges.map((e) => {
     const po = ports.get(e.id) || {};
     const geo = edgeGeometry(endRect(rects, e.source, e.sp), endRect(rects, e.target, e.tp), labeled.has(e.source) ? LABEL_DROP : 0, labeled.has(e.target) ? LABEL_DROP : 0, po.s || 0, po.t || 0);
-    const path = edgePath(geo, e.shape, typeof e.bend === 'number' ? e.bend : po.b);
+    const path = edgePath(geo, e.shape, typeof e.bend === 'number' ? e.bend : po.b, po.lb || null);
     grow(Math.min(geo.p1.x, geo.p2.x), Math.min(geo.p1.y, geo.p2.y), Math.abs(geo.p1.x - geo.p2.x), Math.abs(geo.p1.y - geo.p2.y));
     return { e, geo, path };
   });

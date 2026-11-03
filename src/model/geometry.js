@@ -36,6 +36,8 @@ export function pickSides(a, b) {
   const dy = b.y + b.h / 2 - (a.y + a.h / 2);
   const gapX = Math.abs(dx) - (a.w + b.w) / 2;
   const gapY = Math.abs(dy) - (a.h + b.h) / 2;
+  // 가로로 떨어져 있으면(두 사각형이 가로로 안 겹치면) 세로 거리가 더 커도 옆면으로 나간다: 다른 열에 있는 것은 옆으로 잇는 관례
+  if (gapX >= 0 && gapX >= gapY - 160) return dx >= 0 ? ['r', 'l'] : ['l', 'r'];
   if (gapX >= gapY) return dx >= 0 ? ['r', 'l'] : ['l', 'r'];
   return dy >= 0 ? ['b', 't'] : ['t', 'b'];
 }
@@ -91,14 +93,33 @@ export function portOffsets(edges, rects, drops = () => 0) {
   }
   const out = new Map();
   const get = (id) => { if (!out.has(id)) out.set(id, { s: 0, t: 0 }); return out.get(id); };
-  for (const list of bySide.values()) {
+  const busKeys = new Set();
+  for (const [key, list] of bySide) {
     if (list.length < 2) continue;
     list.sort((p, q) => p.far - q.far || (p.e.id < q.e.id ? -1 : 1));
+    if (isBus(key, list)) { busKeys.add(key); list.forEach((p) => { get(p.e.id)[p.end] = 0; }); continue; }   // 줄기: 한 점에서 나간다
     const gap = Math.min(PORT_GAP_MAX, list[0].len / (list.length + 1));
     list.forEach((p, i) => { get(p.e.id)[p.end] = Math.round((i - (list.length - 1) / 2) * gap * 10) / 10; });
   }
-  staggerBends(edges, rects, drops, bySide, out);
+  staggerBends(edges, rects, drops, bySide, out, busKeys);
   return out;
+}
+
+export const BUS_D = 28;   // 줄기가 면에서 나가 버스(세로/가로 공통 구간)를 타기까지의 거리(px)
+export const BUS_SPREAD = 40;   // 반대쪽 끝들이 이만큼 이상 흩어져 있어야 줄기로 묶는다
+
+/**
+ * 줄기(bus)로 묶을 면인지: 같은 면에서 나가는 직각선들의 반대쪽 끝이 진행 방향과 수직으로 흩어져 있으면
+ * 포트를 나누지 않고 한 점에서 한 줄기로 나가 공통 구간을 탄 뒤 각자 가지로 갈라진다(선은 그대로 여러 개, 겹쳐서 한 줄로 보임).
+ * 왼쪽·오른쪽 면은 늘 그렇게 하고, 위·아래 면은 이름표가 없는 것끼리만(가지가 짧아 이름표가 겹치므로 이름표 있는 선은 따로 나란히).
+ */
+function isBus(key, list) {
+  const side = key.slice(key.lastIndexOf(':') + 1);
+  if (!list.every((p) => p.e.shape === 'elbow')) return false;
+  const spread = list[list.length - 1].far - list[0].far;
+  if (spread < BUS_SPREAD) return false;
+  if (side === 't' || side === 'b') return !list.some((p) => p.e.label);
+  return true;
 }
 
 export const BEND_GAP = 12;    // 같은 면으로 모이는 직각선들의 꺾임 간격(px)
@@ -110,14 +131,17 @@ export const BEND_MIN = 18;    // 면에서 첫 꺾임까지
  * 순서는 선끼리 교차가 가장 적은 배열을 고른다(≤6개는 전부 시도, 그 이상은 긴 구간이 바깥).
  * 결과는 out 의 b(꺾임 비율, PowerPoint bentConnector3 adj1 과 같은 뜻). 사용자가 직접 옮긴 꺾임(edge.bend)이 있으면 쓰는 쪽에서 그것을 우선한다.
  */
-function staggerBends(edges, rects, drops, bySide, out) {
+function staggerBends(edges, rects, drops, bySide, out, busKeys = new Set()) {
   // 선마다 더 붐비는 쪽 면을 고른다(허브 쪽). 둘 다 1개면 계단 없음
   const pick = new Map();   // edgeId → { key, end }
   for (const [key, list] of bySide) {
     if (list.length < 2) continue;
     for (const p of list) {
       const cur = pick.get(p.e.id);
-      if (!cur || list.length > bySide.get(cur.key).length || (list.length === bySide.get(cur.key).length && p.end === 't')) pick.set(p.e.id, { key, end: p.end });
+      const better = !cur
+        || (busKeys.has(key) && !busKeys.has(cur.key))   // 줄기 면이 우선
+        || (busKeys.has(key) === busKeys.has(cur.key) && (list.length > bySide.get(cur.key).length || (list.length === bySide.get(cur.key).length && p.end === 't')));
+      if (better) pick.set(p.e.id, { key, end: p.end });
     }
   }
   const byKey = new Map();
@@ -160,12 +184,17 @@ function staggerBends(edges, rects, drops, bySide, out) {
       for (let i = 0; i < polys.length; i++) for (let j = i + 1; j < polys.length; j++) if (polys[i] && polys[j]) n += crosses(polys[i].pts, polys[j].pts);
       return n;
     };
+    if (busKeys.has(key)) {
+      // 줄기: 모두 면에서 BUS_D 떨어진 같은 자리에서 꺾는다 → 첫 구간과 공통 구간이 겹쳐 한 줄로 보인다. 이름표는 갈라진 가지(허브 반대쪽 구간) 위에
+      for (const id of ids) { const r = polyAt(id, BUS_D); if (r) { out.get(id).b = r.k; out.get(id).lb = pick.get(id).end === 's' ? 'end' : 'start'; } }
+      continue;
+    }
     const spanOf = (id) => { const g = geoOf.get(id); return vert ? Math.abs(g.p2.y - g.p1.y) : Math.abs(g.p2.x - g.p1.x); };
     let best = [...ids].sort((p, q) => spanOf(p) - spanOf(q)), bestScore = score(best);   // 기본: 짧은 구간이 안쪽
     if (ids.length <= 6) {
       for (const order of permutations(ids)) { const s = score(order); if (s < bestScore) { best = order; bestScore = s; if (!s) break; } }
     }
-    best.forEach((id, i) => { const r = polyAt(id, BEND_MIN + i * BEND_GAP); if (r) out.get(id).b = r.k; });
+    best.forEach((id, i) => { const r = polyAt(id, BEND_MIN + i * BEND_GAP); if (r) { out.get(id).b = r.k; out.get(id).lb = pick.get(id).end === 's' ? 'end' : 'start'; } });   // 이름표는 허브 반대쪽 긴 구간에
   }
 }
 
@@ -188,7 +217,8 @@ export const endRect = (rects, id, pt) => (id ? rects.get(id) : pt ? { x: pt.x, 
 export const bendOf = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0.5);
 export const isBent = (geo, shape) => shape === 'elbow' && Math.abs(geo.p1.x - geo.p2.x) >= 1 && Math.abs(geo.p1.y - geo.p2.y) >= 1;
 
-export function edgePath(geo, shape, bend) {
+/** labelAt: 'start' = 첫 구간 가운데, 'end' = 마지막 구간 가운데(줄기에서 갈라진 가지), 그 밖은 가운데 구간. 가지가 짧으면(70px 미만) 가운데로 */
+export function edgePath(geo, shape, bend, labelAt = null) {
   const { p1, p2, horizontal } = geo;
   const k = bendOf(bend);
   const straightish = Math.abs(p1.x - p2.x) < 1 || Math.abs(p1.y - p2.y) < 1;
@@ -201,12 +231,19 @@ export function edgePath(geo, shape, bend) {
   if (shape !== 'elbow' || straightish) {
     return { d: `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`, mid: { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 } };
   }
+  const MIN_BRANCH = 70;
   if (horizontal) {
     const mx = p1.x + (p2.x - p1.x) * k;
-    return { d: `M ${p1.x} ${p1.y} L ${mx} ${p1.y} L ${mx} ${p2.y} L ${p2.x} ${p2.y}`, mid: { x: mx, y: (p1.y + p2.y) / 2 } };
+    let mid = { x: mx, y: (p1.y + p2.y) / 2 };
+    if (labelAt === 'end' && Math.abs(p2.x - mx) >= MIN_BRANCH) mid = { x: (mx + p2.x) / 2, y: p2.y };
+    else if (labelAt === 'start' && Math.abs(mx - p1.x) >= MIN_BRANCH) mid = { x: (p1.x + mx) / 2, y: p1.y };
+    return { d: `M ${p1.x} ${p1.y} L ${mx} ${p1.y} L ${mx} ${p2.y} L ${p2.x} ${p2.y}`, mid };
   }
   const my = p1.y + (p2.y - p1.y) * k;
-  return { d: `M ${p1.x} ${p1.y} L ${p1.x} ${my} L ${p2.x} ${my} L ${p2.x} ${p2.y}`, mid: { x: (p1.x + p2.x) / 2, y: my } };
+  let mid = { x: (p1.x + p2.x) / 2, y: my };
+  if (labelAt === 'end' && Math.abs(p2.y - my) >= MIN_BRANCH) mid = { x: p2.x, y: (my + p2.y) / 2 };
+  else if (labelAt === 'start' && Math.abs(my - p1.y) >= MIN_BRANCH) mid = { x: p1.x, y: (p1.y + my) / 2 };
+  return { d: `M ${p1.x} ${p1.y} L ${p1.x} ${my} L ${p2.x} ${my} L ${p2.x} ${p2.y}`, mid };
 }
 
 /**
