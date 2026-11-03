@@ -97,7 +97,7 @@ export const ArchEdge = memo(function ArchEdge({ id, source, target, data = {}, 
   };
   const [ra, da] = rectOf('source', a, data.sp), [rb, db] = rectOf('target', b, data.tp);
   const po = data.po || {};   // 포트: 같은 면에 선이 여럿이면 비켜 붙는다(convert.js 가 계산). 끌고 있는 끝·빈 끝은 중앙
-  const geo = edgeGeometry(ra, rb, da, db, drag?.end === 'source' || data.sp ? 0 : po.s || 0, drag?.end === 'target' || data.tp ? 0 : po.t || 0);
+  const geo = edgeGeometry(ra, rb, da, db, drag?.end === 'source' || data.sp ? 0 : po.s || 0, drag?.end === 'target' || data.tp ? 0 : po.t || 0, drag || data.sp || data.tp ? null : po.sd || null);
   const bend = bd.bend ?? (typeof data.bend === 'number' ? bendOf(data.bend) : bendOf(po.b));   // 사용자가 옮긴 꺾임 > 자동 계단 > 가운데
   // 아이콘 뒤 흰 바탕(3px)이 선 위에 그려져 화살촉 끝이 묻히지 않게, 아이콘에 붙는 끝은 3px 당긴다(이름표 밑은 그대로)
   const pull = (p, side, n, drop) => { if (!n || n.type !== 'awsIcon' || (side === 'b' && drop)) return p; const q = { ...p }; if (side === 't') q.y -= HALO; else if (side === 'b') q.y += HALO; else if (side === 'l') q.x -= HALO; else q.x += HALO; return q; };

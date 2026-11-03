@@ -400,7 +400,8 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
                 {r.summary && <p className="summary">{r.summary}</p>}
                 {r.ops?.length > 0 && <ol className="ops">{describeOps(r.ops, nameOf).map((t, i) => <li key={i}>{t}</li>)}</ol>}
                 <p className={r.blocked ? 'hint' : 'ok'}>{r.blocked ? '규칙 검사에서 막혀 적용하지 않았습니다.' : `AI 가 정한 격자(${r.placed}개)대로 배치했습니다${r.size ? ` · ${r.size.w}×${r.size.h} (가로:세로 ${(r.size.w / r.size.h).toFixed(1)})` : ''} · Ctrl+Z 로 되돌릴 수 있습니다`}</p>
-                {r.retried && !r.retried.ok && <p className="hint">틀에 맞춰 한 번 더 나눠 봤지만 더 나아지지 않아 1차 결과를 두었습니다.</p>}
+                {r.crossings > 0 && <p className="hint">선이 남의 아이콘을 지나가는 곳이 {r.crossings}건 남았습니다. 그 아이콘을 옆 열이나 아래 행으로 옮기면 없어집니다.</p>}
+                {r.retried && !r.retried.ok && <p className="hint">점검 뒤 한 번 더 나눠 봤지만 더 나아지지 않아 1차 결과를 두었습니다.</p>}
                 <Raw res={r} />
                 <Foot res={r} />
               </div>

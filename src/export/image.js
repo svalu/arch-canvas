@@ -2,7 +2,7 @@
 // 아이콘은 SVG 원본(data URI)을 <image> 로 넣어서 래스터화해도 선명하다. 좌표 계산은 캔버스/PPT 와 같은 geometry.js.
 import { ICON_SIZE, GROUP_ICON_SIZE, LABEL_WIDTH, ICON_LABEL_GAP, LABEL_DROP, sortGroups } from '../model/schema.js';
 import { themedIcon } from '../model/schema.js';
-import { absoluteRects, edgeGeometry, edgePath, endRect, portOffsets } from '../model/geometry.js';
+import { absoluteRects, edgeGeometry, edgePath, endRect, portOffsets, iconRects } from '../model/geometry.js';
 import { LABEL_PX, INK, GROUP_LABEL_PAD, groupPaint, drawnIds } from './scene.js';
 import { isOverlay } from '../model/contain.js';
 
@@ -79,10 +79,10 @@ export function graphToSvg(graph, catalog, include = null, { background = 'trans
   for (const e of edges) for (const p of [e.sp, e.tp]) if (p) grow(p.x - 6, p.y - 6, 12, 12);   // 빈 끝도 범위에
   const texts = graph.nodes.filter((n) => has(n.id) && (n.type === 'text' || n.type === 'badge'));
   for (const c of texts) { const r = rects.get(c.id); grow(r.x, r.y, r.w, r.h); }
-  const ports = portOffsets(edges, rects, (id) => (labeled.has(id) ? LABEL_DROP : 0));
+  const ports = portOffsets(edges, rects, (id) => (labeled.has(id) ? LABEL_DROP : 0), iconRects(graph, rects));
   const edgeGeos = edges.map((e) => {
     const po = ports.get(e.id) || {};
-    const geo = edgeGeometry(endRect(rects, e.source, e.sp), endRect(rects, e.target, e.tp), labeled.has(e.source) ? LABEL_DROP : 0, labeled.has(e.target) ? LABEL_DROP : 0, po.s || 0, po.t || 0);
+    const geo = edgeGeometry(endRect(rects, e.source, e.sp), endRect(rects, e.target, e.tp), labeled.has(e.source) ? LABEL_DROP : 0, labeled.has(e.target) ? LABEL_DROP : 0, po.s || 0, po.t || 0, po.sd || null);
     const path = edgePath(geo, e.shape, typeof e.bend === 'number' ? e.bend : po.b, po.lb || null);
     grow(Math.min(geo.p1.x, geo.p2.x), Math.min(geo.p1.y, geo.p2.y), Math.abs(geo.p1.x - geo.p2.x), Math.abs(geo.p1.y - geo.p2.y));
     return { e, geo, path };

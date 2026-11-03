@@ -92,7 +92,7 @@ import { AskBar } from './canvas/AskBar.jsx';
 import { edgeTypes } from './canvas/edges.jsx';
 import { graphToFlow, flowToGraph } from './model/convert.js';
 import { normalizeGraph, emptyGraph, uid, allIds, ICON_SIZE, LINES, SHAPES, ARROWS, EDGE_DEFAULTS, setEdgeDefaults, sortGroups, CARD_DEFAULT, LABEL_DROP } from './model/schema.js';
-import { absoluteRects, innermostGroupAt, descendants, autoArrange } from './model/geometry.js';
+import { absoluteRects, innermostGroupAt, descendants, autoArrange, lineCrossings } from './model/geometry.js';
 import { applyPatch, PATCH_OPS, alignParentsToPlan } from './model/patch.js';
 import { graphToScene, selectionIds, sceneStats } from './export/scene.js';
 import { lint, diffViolations, mergeRuleAnnotations, RULES } from './model/rules.js';
@@ -142,7 +142,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.32';
+export const APP_VERSION = '0.9.33';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -1041,7 +1041,7 @@ function Editor() {
       if (!j) j = parseJsonReply(raw);   // 검수·그리기는 JSON 이어야 한다 (못 읽으면 여기서 오류)
       if (mode === 'arrange') {
         // AI 정렬: AI 가 준 단·순서(columns)대로 기본 정렬이 자리를 잡는다. 바로 적용(Ctrl+Z 로 되돌림)
-        // 배치안: rows(격자, 0.9.32~) 또는 columns(단, 0.9.29~). 부모 키가 없는 id 는 버린다
+        // 배치안: rows(격자, 0.9.33~) 또는 columns(단, 0.9.29~). 부모 키가 없는 id 는 버린다
         const planOf = (jj, knownIds) => {
           const src = jj.rows && typeof jj.rows === 'object' ? jj.rows : jj.columns && typeof jj.columns === 'object' ? jj.columns : {};
           const out = {}; let n = 0;
@@ -1073,29 +1073,32 @@ function Editor() {
         let summary = String(j.summary || '');
         // 결과가 틀(16:9)에서 많이 벗어나면 크기를 알려 주고 행만 다시 받는다 (한 번)
         const measure = (gg) => { const rs = [...absoluteRects(gg).values()]; const x0 = Math.min(...rs.map((r) => r.x)), y0 = Math.min(...rs.map((r) => r.y)), x1 = Math.max(...rs.map((r) => r.x + r.w)), y1 = Math.max(...rs.map((r) => r.y + r.h)); return { w: x1 - x0, h: y1 - y0 }; };
-        let m = measure(cur), retried = null;
-        if (all.length > 3 && (m.w / m.h > 2.4 || m.w / m.h < 1.3)) {
+        // 결과 점검: 틀 비율 + 선이 남의 아이콘을 관통하는 곳. 하나라도 있으면 측정값을 알려 주고 행 나누기를 한 번 더 받는다
+        const dropsOf = (gg) => { const lab = new Set(gg.nodes.filter((n) => n.type !== 'card' && n.type !== 'text' && n.type !== 'badge' && n.label).map((n) => n.id)); return (id) => (lab.has(id) ? LABEL_DROP : 0); };
+        const aspectOff = (mm) => Math.abs(Math.log((mm.w / mm.h) / 1.9));
+        let m = measure(cur), cross = lineCrossings(cur, dropsOf(cur)), retried = null;
+        if (all.length > 3 && (m.w / m.h > 2.4 || m.w / m.h < 1.3 || cross.length)) {
           try {
-            const raw2 = await aiRun(aiSettings, { ...buildArrangeRetryMessages(cur, catalog, m), signal: ac.signal, maxTokens: 16000 });
+            const raw2 = await aiRun(aiSettings, { ...buildArrangeRetryMessages(cur, catalog, m, cross), signal: ac.signal, maxTokens: 16000 });
             if (ac.signal.aborted) return;
             const j2 = parseJsonReply(raw2);
             const p2 = planOf(j2, known2);
             if (p2.n) {
               const snap = structuredClone({ groups: cur.groups, nodes: cur.nodes });
               autoArrange(cur, all.map((x) => x.id), isOverlay, locked, { plan: p2.plan });
-              const m2 = measure(cur);
-              const closer = Math.abs(Math.log((m2.w / m2.h) / 1.9)) < Math.abs(Math.log((m.w / m.h) / 1.9));
-              if (closer) { plan = p2.plan; placed = p2.n; m = m2; retried = { ok: true, summary: String(j2.summary || '') }; }
+              const m2 = measure(cur), cross2 = lineCrossings(cur, dropsOf(cur));
+              const better = cross2.length < cross.length || (cross2.length === cross.length && aspectOff(m2) < aspectOff(m));
+              if (better) { plan = p2.plan; placed = p2.n; m = m2; cross = cross2; retried = { ok: true, summary: String(j2.summary || '') }; }
               else { cur.groups = snap.groups; cur.nodes = snap.nodes; retried = { ok: false }; }
             }
           } catch (e) { if (ac.signal.aborted) return; retried = { ok: false, error: e.message }; }
         }
-        if (retried?.ok && retried.summary) summary += '\n(틀에 맞춰 다시 나눔) ' + retried.summary;
+        if (retried?.ok && retried.summary) summary += '\n(점검 뒤 다시 나눔) ' + retried.summary;
         // 기록은 같은 커밋에 넣는다. 따로 logAi 를 부르면(바로든 다음 틱이든) 아직 화면에 안 올라간 옛 그래프를 다시 커밋해 정렬이 되돌아간다
         cur.context = { ...cur.context, log: [...(cur.context?.log || []), { k: 'arrange', q: 'AI 정렬', a: summary.slice(0, 400), t: Date.now() }].slice(-20) };
         const ok = tryCommit(cur);
         if (ok) setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 30);
-        setAi({ busy: null, error: null, result: { mode: 'arrange', docId, docTitle, raw, at: Date.now(), ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary, placed, ops, applied: patched ? { applied: patched.applied, errors: patched.errors } : null, size: { w: Math.round(m.w), h: Math.round(m.h) }, retried, blocked: !ok } });
+        setAi({ busy: null, error: null, result: { mode: 'arrange', docId, docTitle, raw, at: Date.now(), ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary, placed, ops, applied: patched ? { applied: patched.applied, errors: patched.errors } : null, size: { w: Math.round(m.w), h: Math.round(m.h) }, crossings: cross.length, retried, blocked: !ok } });
         return;
       }
       const base = { mode, docId, docTitle, raw, at: Date.now(), ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary: String(j.summary || ''), ...intent };

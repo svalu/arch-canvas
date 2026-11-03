@@ -13,7 +13,7 @@
 import { ICON_SIZE, GROUP_ICON_SIZE, LABEL_WIDTH, ICON_LABEL_GAP, ICON_LABEL_H, LABEL_DROP, sortGroups } from '../model/schema.js';
 import { themedIcon } from '../model/schema.js';
 import { isOverlay } from '../model/contain.js';
-import { absoluteRects, descendants, edgeGeometry, edgePath, bendOf, endRect, SIDE_IDX, portOffsets } from '../model/geometry.js';
+import { absoluteRects, descendants, edgeGeometry, edgePath, bendOf, endRect, SIDE_IDX, portOffsets, iconRects } from '../model/geometry.js';
 export { ICON_LABEL_GAP, ICON_LABEL_H };
 
 export const EMU_PER_PX = 11250;
@@ -143,7 +143,7 @@ export function graphToScene(graph, catalog, include = null, { textScale = 1 } =
   const labeled = new Map(graph.nodes.filter((n) => n.type !== 'card' && n.label && catalog.icons.has(n.icon)).map((n) => [n.id, true]));
   const edgeLabels = [];
   const drawn = drawnIds(graph, catalog);
-  const ports = portOffsets(graph.edges, rects, (id) => (labeled.has(id) ? LABEL_DROP : 0));
+  const ports = portOffsets(graph.edges, rects, (id) => (labeled.has(id) ? LABEL_DROP : 0), iconRects(graph, rects));
   const bendOfEdge = (e) => (typeof e.bend === 'number' ? e.bend : (ports.get(e.id) || {}).b);
   const sites = new Map();   // 도형 id → 쓰인 연결점 [{ side, off }] (면 중앙 말고 다른 곳에 붙는 도형만 custom geometry 로)
   for (const e of graph.edges) {
@@ -152,7 +152,7 @@ export function graphToScene(graph, catalog, include = null, { textScale = 1 } =
     const a = endRect(rects, e.source, e.sp), b = endRect(rects, e.target, e.tp);
     if (!a || !b) continue;
     const po = ports.get(e.id) || {};
-    const geo = edgeGeometry(a, b, labeled.has(e.source) ? LABEL_DROP : 0, labeled.has(e.target) ? LABEL_DROP : 0, po.s || 0, po.t || 0);
+    const geo = edgeGeometry(a, b, labeled.has(e.source) ? LABEL_DROP : 0, labeled.has(e.target) ? LABEL_DROP : 0, po.s || 0, po.t || 0, po.sd || null);
     // 연결점: 면 중앙이면 사각형의 기본 연결점(0~3), 비켜 붙으면 그 도형의 연결점 목록(sites)에 넣고 그 번호. 번호는 attachPorts 가 확정한다
     const anchor = (id, side, off) => {
       const sid = side === 'b' && labeled.has(id) ? id + '#label' : id;

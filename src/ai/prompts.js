@@ -131,6 +131,7 @@ export const ARRANGE_SYSTEM = `${COMMON_SYSTEM}
    - 흐름은 왼쪽→오른쪽: 입구(사용자·고객 채널)는 왼쪽 열, 핵심 처리(Connect·ALB·앱)는 가운데, 데이터·분석·연동은 오른쪽, 사내·온프레미스는 맨 오른쪽 열.
    - 최상위(root)는 보통 행 1개: [입구 묶음, 리전/클라우드 상자, 연결 상자, 사내 상자]. 세로로 긴 것(채널 5개)은 그 상자 안에서 세로 1열로 쌓아 높이를 쓰고, 가로는 아낀다.
    - 세로로 걸치기(rowspan): 같은 id 를 아래 행의 같은 열에 또 적으면 그만큼 세로로 걸친다. 리전 안에서 AI 계층을 코어 위에 쌓고 데이터 상자를 오른쪽에 두 행 높이로 두려면 [["ai-tier","data"],["core","data"]].
+   - 허브(선이 여럿 나가는 요소)의 가지 대상들은 허브와 **같은 행에 줄줄이 두지 않는다**(뒤 대상으로 가는 선이 앞 아이콘을 관통한다). 허브 옆 열에 세로로 쌓거나(허브가 1열, 대상들이 2열에 한 줄씩), 허브 아래 행에 나란히 둔다. 같은 행에 나란히 둘 수 있는 것은 서로 사슬로 이어진 흐름(A→B→C)뿐이다.
    - 상자 안 아이콘이 5개 이상이면 한 행에 4개 이하로 줄을 바꾼다. 같은 흐름(예: Connect 에서 나가는 네 갈래)은 행마다 하나씩 두어 왼쪽 선 이름표가 줄줄이 읽히게 한다.
    - AZ 끼리, VPC 끼리는 한 행에 옆으로. 서브넷은 AZ 안에서 Public → Private 순서로 행을 나눠 위→아래.
    - 모든 부모("root" 와 그룹 id)마다 직접 자식 전부를 정확히 한 번씩 쓴다. 겹치는 상자(members 가 있는 auto-scaling·security-group 등)는 쓰지 않는다. 자식이 하나뿐인 부모는 생략해도 된다.
@@ -153,9 +154,16 @@ export function buildArrangeMessages(graph, catalog) {
 }
 
 /** 1차 결과가 틀에 안 맞을 때 한 번 더: 지금 크기를 알려 주고 행만 다시 나누게 한다(ops 는 이미 적용됨). */
-export function buildArrangeRetryMessages(graph, catalog, measured) {
+export function buildArrangeRetryMessages(graph, catalog, measured, crossings = []) {
   const sizes = graph.groups.map((x) => `- ${x.id} "${x.label || ''}": ${Math.round(x.w)}×${Math.round(x.h)}`).join('\n');
-  const user = `# 현재 다이어그램(구도 재해석 적용 뒤): ${graph.title}\n${summarizeGraph(graph, catalog)}\n\n# 1차 배치 결과\n전체 ${Math.round(measured.w)}×${Math.round(measured.h)} (가로:세로 ${(measured.w / measured.h).toFixed(2)}) — 틀 ${FRAME.w}×${FRAME.h}(1.92)에 ${measured.w / measured.h > 2 ? '비해 너무 넓다. 가로로 늘어선 것을 행으로 나눠 쌓아라(최상위 행을 둘로, 또는 넓은 상자 안을 더 많은 행으로).' : '비해 너무 높다. 세로로 쌓인 것을 한 행에 옆으로 펼쳐라.'}\n상자 크기:\n${sizes}\n\n# 배치 요청\nops 없이 rows 만 다시 적어라(출력 형식의 summary 와 rows). 부모마다 직접 자식 전부를 정확히 한 번씩.`;
+  const ratio = measured.w / measured.h;
+  const aspectNote = ratio > 2.4 ? `틀 ${FRAME.w}×${FRAME.h}(1.92)에 비해 너무 넓다. 가로로 늘어선 것을 행으로 나눠 쌓아라(최상위 행을 둘로, 또는 넓은 상자 안을 더 많은 행으로).`
+    : ratio < 1.3 ? `틀 ${FRAME.w}×${FRAME.h}(1.92)에 비해 너무 높다. 세로로 쌓인 것을 한 행에 옆으로 펼쳐라.` : '비율은 괜찮다(그대로 두어도 됨).';
+  const crossNote = crossings.length
+    ? `\n\n# 선이 남의 아이콘을 관통하는 곳 (${crossings.length}건) — 이것을 없애는 것이 이번 재배치의 목적이다\n` + crossings.slice(0, 20).map((c) => `- ${c.id}: ${c.source} → ${c.target}${c.label ? ` "${c.label}"` : ''} 이(가) ${c.through.join(', ')} 을(를) 지나간다`).join('\n')
+      + `\n고치는 법: 관통당하는 아이콘과 선의 대상이 같은 행에 줄줄이 있으면, 대상들을 허브 옆 열에 세로로 쌓거나 허브 아래 행으로 옮긴다. 사슬(A→B→C)이 아닌 것들을 한 행에 늘어놓지 않는다.`
+    : '';
+  const user = `# 현재 다이어그램(구도 재해석 적용 뒤): ${graph.title}\n${summarizeGraph(graph, catalog)}\n\n# 1차 배치 결과\n전체 ${Math.round(measured.w)}×${Math.round(measured.h)} (가로:세로 ${ratio.toFixed(2)}) — ${aspectNote}\n상자 크기:\n${sizes}${crossNote}\n\n# 배치 요청\nops 없이 rows 만 다시 적어라(출력 형식의 summary 와 rows). 부모마다 직접 자식 전부를 정확히 한 번씩.`;
   return { system: ARRANGE_SYSTEM, user };
 }
 

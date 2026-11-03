@@ -37,7 +37,7 @@ export function pickSides(a, b) {
   const gapX = Math.abs(dx) - (a.w + b.w) / 2;
   const gapY = Math.abs(dy) - (a.h + b.h) / 2;
   // 가로로 떨어져 있으면(두 사각형이 가로로 안 겹치면) 세로 거리가 더 커도 옆면으로 나간다: 다른 열에 있는 것은 옆으로 잇는 관례
-  if (gapX >= 0 && gapX >= gapY - 160) return dx >= 0 ? ['r', 'l'] : ['l', 'r'];
+  if (gapX >= 0) return dx >= 0 ? ['r', 'l'] : ['l', 'r'];
   if (gapX >= gapY) return dx >= 0 ? ['r', 'l'] : ['l', 'r'];
   return dy >= 0 ? ['b', 't'] : ['t', 'b'];
 }
@@ -55,8 +55,8 @@ export function sidePoint(r, side) {
  * 엣지 한 개의 양 끝점/면. shape=elbow 는 가운데에서 한 번 꺾는 3구간 선(PowerPoint bentConnector3 와 같은 모양).
  * dropA/dropB: 아이콘 아래 라벨 높이. 아래쪽(b) 면으로 나갈 때는 라벨을 관통하지 않게 그만큼 내려서 시작한다.
  */
-export function edgeGeometry(a, b, dropA = 0, dropB = 0, offA = 0, offB = 0) {
-  const [s, t] = pickSides(a, b);
+export function edgeGeometry(a, b, dropA = 0, dropB = 0, offA = 0, offB = 0, sides = null) {
+  const [s, t] = sides || pickSides(a, b);
   const p1 = sidePoint(a, s);
   const p2 = sidePoint(b, t);
   if (s === 'b') p1.y += dropA;
@@ -74,7 +74,7 @@ export const PORT_GAP_MAX = 28;   // 포트 사이 최대 간격(px). 아이콘(
  * 반대쪽 끝이 있는 방향 순서로 배정해서 포트 앞에서 서로 꼬이지 않는다.
  * 반환: Map edgeId → { s, t } = 면 중앙에서의 px 오프셋(위·아래 면은 x, 왼쪽·오른쪽 면은 y). 캔버스·PNG·PowerPoint 가 같이 쓴다.
  */
-export function portOffsets(edges, rects, drops = () => 0) {
+export function portOffsets(edges, rects, drops = () => 0, icons = null) {
   const bySide = new Map();   // "id:side" → [{ e, end, far, len }]
   for (const e of edges) {
     const a = endRect(rects, e.source, e.sp), b = endRect(rects, e.target, e.tp);
@@ -102,7 +102,88 @@ export function portOffsets(edges, rects, drops = () => 0) {
     list.forEach((p, i) => { get(p.e.id)[p.end] = Math.round((i - (list.length - 1) / 2) * gap * 10) / 10; });
   }
   staggerBends(edges, rects, drops, bySide, out, busKeys);
+  if (icons) detourEdges(edges, rects, drops, out, icons);
   return out;
+}
+
+/** 직각선의 꼭짓점들(2점 또는 4점). k 는 꺾임 비율(범위 밖도 됨 = U 자 우회) */
+export function elbowPoints(geo, shape, k) {
+  const { p1, p2, horizontal } = geo;
+  const straightish = Math.abs(p1.x - p2.x) < 1 || Math.abs(p1.y - p2.y) < 1;
+  if (shape !== 'elbow' || straightish) return [p1, p2];
+  if (horizontal) { const mx = p1.x + (p2.x - p1.x) * bendOf(k); return [p1, { x: mx, y: p1.y }, { x: mx, y: p2.y }, p2]; }
+  const my = p1.y + (p2.y - p1.y) * bendOf(k);
+  return [p1, { x: p1.x, y: my }, { x: p2.x, y: my }, p2];
+}
+
+const HALO_PAD = 3, DETOUR_GAP = 16;
+// 축에 나란한 구간 a→b 가 사각형을 지나는 아이콘 id 들(양 끝 요소 제외)
+function iconsCrossed(pts, icons, skip) {
+  const out = [];
+  for (const [id, r0] of icons) {
+    if (skip.has(id)) continue;
+    const r = { x: r0.x - HALO_PAD, y: r0.y - HALO_PAD, w: r0.w + HALO_PAD * 2, h: r0.h + HALO_PAD * 2 };
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
+      if (x1 >= r.x && x0 <= r.x + r.w && y1 >= r.y && y0 <= r.y + r.h) { out.push(id); break; }
+    }
+  }
+  return out;
+}
+
+/**
+ * 우회: 선이 남의 아이콘을 관통하면 나가는 면·들어오는 면과 꺾임 위치를 바꿔 본다(같은 면 둘 = U 자, 꺾임 비율이 0~1 밖).
+ * 후보는 (가로/세로 × 면 조합) × (가운데, 관통하는 아이콘들의 위아래/좌우 16px 바깥). 관통이 가장 적고 짧은 것을 고르고,
+ * 원래 길보다 나아질 때만 바꾼다. PowerPoint 는 bentConnector3 의 adj 가 범위 밖이어도 그대로 그린다.
+ */
+function detourEdges(edges, rects, drops, out, icons) {
+  for (const e of edges) {
+    if (e.shape !== 'elbow' || typeof e.bend === 'number') continue;   // 사용자가 꺾임을 옮긴 선은 그대로
+    const a = endRect(rects, e.source, e.sp), b = endRect(rects, e.target, e.tp);
+    if (!a || !b) continue;
+    const po = out.get(e.id) || { s: 0, t: 0 };
+    const skip = new Set([e.source, e.target]);
+    const geo0 = edgeGeometry(a, b, drops(e.source), drops(e.target), po.s || 0, po.t || 0, po.sd || null);
+    const cur = iconsCrossed(elbowPoints(geo0, 'elbow', po.b), icons, skip);
+    if (!cur.length) continue;
+    const dx = b.x + b.w / 2 - (a.x + a.w / 2), dy = b.y + b.h / 2 - (a.y + a.h / 2);
+    const pairs = [
+      [dx >= 0 ? 'r' : 'l', dx >= 0 ? 'l' : 'r'], ['r', 'r'], ['l', 'l'],
+      [dy >= 0 ? 'b' : 't', dy >= 0 ? 't' : 'b'], ['b', 'b'], ['t', 't'],
+    ];
+    const len = (pts) => { let L = 0; for (let i = 0; i + 1 < pts.length; i++) L += Math.abs(pts[i + 1].x - pts[i].x) + Math.abs(pts[i + 1].y - pts[i].y); return L; };
+    let best = null;
+    for (const pair of pairs) {
+      const geo = edgeGeometry(a, b, drops(e.source), drops(e.target), 0, 0, pair);
+      const { p1, p2, horizontal } = geo;
+      const span = horizontal ? p2.x - p1.x : p2.y - p1.y;
+      if (Math.abs(span) < 8) continue;
+      const same = pair[0] === pair[1];
+      // 마주 보는 면 조합은 나가는 방향으로 진행해야 한다(아래로 나가서 위로 되돌아오면 자기 이름표를 관통한다)
+      if (!same) { const fwd = pair[0] === 'r' || pair[0] === 'b' ? span : -span; if (fwd < 8) continue; }
+      const lo = horizontal ? Math.min(p1.x, p2.x) : Math.min(p1.y, p2.y), hi = horizontal ? Math.max(p1.x, p2.x) : Math.max(p1.y, p2.y);
+      const ms = [];
+      if (!same) ms.push((lo + hi) / 2);
+      for (const [id, r] of icons) {
+        if (skip.has(id)) continue;
+        const c1 = horizontal ? r.x - DETOUR_GAP - HALO_PAD : r.y - DETOUR_GAP - HALO_PAD, c2 = horizontal ? r.x + r.w + DETOUR_GAP + HALO_PAD : r.y + r.h + DETOUR_GAP + HALO_PAD;
+        for (const m of [c1, c2]) {
+          if (same) { if (pair[0] === 'r' || pair[0] === 'b') { if (m > hi + 8) ms.push(m); } else if (m < lo - 8) ms.push(m); }
+          else if (m > lo + 8 && m < hi - 8) ms.push(m);
+        }
+      }
+      if (same && !ms.length) ms.push(pair[0] === 'r' || pair[0] === 'b' ? hi + 24 : lo - 24);
+      for (const m of ms) {
+        const k = (m - (horizontal ? p1.x : p1.y)) / span;
+        const pts = elbowPoints(geo, 'elbow', k);
+        const c = iconsCrossed(pts, icons, skip).length;
+        const cost = c * 10000 + len(pts) + (same ? 300 : 0) + (pair === pairs[0] || pair === pairs[3] ? 0 : 100);
+        if (!best || cost < best.cost) best = { cost, c, k: Math.round(k * 1000) / 1000, pair };
+      }
+    }
+    if (best && best.c < cur.length) out.set(e.id, { s: 0, t: 0, b: best.k, sd: best.pair });
+  }
 }
 
 export const BUS_D = 28;   // 줄기가 면에서 나가 버스(세로/가로 공통 구간)를 타기까지의 거리(px)
@@ -209,6 +290,39 @@ function segCross(a, b, c, d) {
   const o1 = o(a, b, c), o2 = o(a, b, d), o3 = o(c, d, a), o4 = o(c, d, b);
   return o1 !== o2 && o3 !== o4 && o1 !== 0 && o2 !== 0 && o3 !== 0 && o4 !== 0;
 }
+
+/**
+ * 선이 남의 아이콘을 관통하는 곳: 각 선의 꺾은선 구간이 양 끝이 아닌 아이콘(바탕 3px 포함)을 지나면 기록한다.
+ * 반환: [{ id, source, target, label, through: [nodeId…] }]. 배치가 선을 망가뜨렸는지 재는 데 쓴다(AI 정렬 되묻기·검증 도구).
+ */
+export function lineCrossings(g, drops = () => 0) {
+  const rects = absoluteRects(g);
+  const icons = g.nodes.filter((n) => n.type !== 'card' && n.type !== 'text' && n.type !== 'badge' && rects.has(n.id));
+  const ports = portOffsets(g.edges, rects, drops, iconRects(g, rects));
+  const out = [];
+  const hit = (a, b, r) => {   // 축에 나란한 구간 a→b 가 사각형 r 안을 지나는지(끝점이 r 안에 있으면 그 끝은 r 의 선이라 제외)
+    const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
+    return x1 >= r.x && x0 <= r.x + r.w && y1 >= r.y && y0 <= r.y + r.h;
+  };
+  for (const e of g.edges) {
+    const a = endRect(rects, e.source, e.sp), b = endRect(rects, e.target, e.tp);
+    if (!a || !b) continue;
+    const po = ports.get(e.id) || {};
+    const geo = edgeGeometry(a, b, drops(e.source), drops(e.target), po.s || 0, po.t || 0, po.sd || null);
+    const pts = elbowPoints(geo, e.shape, typeof e.bend === 'number' ? e.bend : po.b);
+    const through = [];
+    for (const n of icons) {
+      if (n.id === e.source || n.id === e.target) continue;
+      const r0 = rects.get(n.id), r = { x: r0.x - 3, y: r0.y - 3, w: r0.w + 6, h: r0.h + 6 };
+      for (let i = 0; i + 1 < pts.length; i++) if (hit(pts[i], pts[i + 1], r)) { through.push(n.id); break; }
+    }
+    if (through.length) out.push({ id: e.id, source: e.source, target: e.target, label: e.label || '', through });
+  }
+  return out;
+}
+
+/** 우회 계산용 아이콘 사각형 지도(카드·글상자·배지 제외) */
+export const iconRects = (g, rects) => new Map(g.nodes.filter((n) => n.type !== 'card' && n.type !== 'text' && n.type !== 'badge' && rects.has(n.id)).map((n) => [n.id, rects.get(n.id)]));
 
 /** 선 한쪽 끝의 사각형: 요소면 그 사각형, 빈 곳이면 크기 0 인 점 */
 export const endRect = (rects, id, pt) => (id ? rects.get(id) : pt ? { x: pt.x, y: pt.y, w: 0, h: 0 } : null);
