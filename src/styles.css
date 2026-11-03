@@ -716,7 +716,7 @@ input[type=checkbox] { transition: transform .1s; } input[type=checkbox]:active 
 .align-tools h4 { margin: 0; font-size: 12px; }
 .align-row { display: flex; gap: 4px; flex-wrap: wrap; }
 .align-row .al { width: 32px; height: 30px; padding: 0; display: inline-grid; place-items: center; }
-.align-row .al.wide { width: auto; padding: 0 10px; font-size: 12px; }
+.align-row .al.wide { width: auto; padding: 0 10px; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; }
 .guide-lines line { stroke: #e8458b; stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
 .app.theme-dark .guide-lines line { stroke: #ff7ab8; }
 
