@@ -14,7 +14,7 @@ import { LayersPanel } from './canvas/LayersPanel.jsx';
 const LS_VIEW = 'arch-canvas:view';
 // 격자 색: 라이트는 잉크, 다크는 민트. 진하기 0 이면 완전히 사라진다
 const GRID_RGB = { light: '35, 47, 62', dark: '127, 227, 214' };
-const VIEW_DEFAULT = { dots: true, lines: false, strength: 35, gap: 16, major: true, depth: true, textScale: 1, edgeShape: 'elbow', edgeArrow: 'end', pins: true, guides: true, aiOff: false };
+const VIEW_DEFAULT = { dots: true, lines: false, strength: 35, gap: 16, major: true, depth: true, textScale: 1, edgeShape: 'elbow', edgeArrow: 'end', pins: true, guides: true, aiOff: false, pptFit: true };
 function loadView() {
   try {
     const s = JSON.parse(localStorage.getItem(LS_VIEW) || '{}');
@@ -94,7 +94,7 @@ import { graphToFlow, flowToGraph } from './model/convert.js';
 import { normalizeGraph, emptyGraph, uid, allIds, ICON_SIZE, LINES, SHAPES, ARROWS, EDGE_DEFAULTS, setEdgeDefaults, sortGroups, CARD_DEFAULT, LABEL_DROP } from './model/schema.js';
 import { absoluteRects, innermostGroupAt, descendants, autoArrange, lineCrossings } from './model/geometry.js';
 import { applyPatch, PATCH_OPS, alignParentsToPlan, bundleEdges } from './model/patch.js';
-import { graphToScene, selectionIds, sceneStats } from './export/scene.js';
+import { graphToScene, selectionIds, sceneStats, fitScene } from './export/scene.js';
 import { lint, diffViolations, mergeRuleAnnotations, RULES } from './model/rules.js';
 import { graphToSvg, svgToPng, svgToBlob, copyPngToClipboard, saveBlob } from './export/image.js';
 import { decorateSvg, EXPORT_DEFAULT, usedLineStyles } from './export/decorate.js';
@@ -1681,14 +1681,20 @@ function Editor() {
       if (!sel.length) { toastMsg('선택된 게 없습니다. 먼저 골라 주세요.'); return; }
       include = selectionIds(g, new Set(sel));
     }
-    const scene = graphToScene(g, catalog, include, { textScale: view.textScale });
-    if (!scene.shapes.length) { toastMsg('복사할 게 없습니다.'); return; }
+    const raw = graphToScene(g, catalog, include, { textScale: view.textScale });
+    if (!raw.shapes.length) { toastMsg('복사할 게 없습니다.'); return; }
+    // 장표에 맞춰 줄이기: 장표 사용 영역보다 크면 아이콘·선·글자를 같은 비율로 축소 (그림은 그대로)
+    const fit = view.pptFit !== false ? fitScene(raw) : { scene: raw, scale: 1, fontPt: null };
+    const scene = fit.scene;
     const st = sceneStats(scene);
     const desc = `도형 ${st.rect + st.pic + st.text + st.cxn}개 (그룹 ${st.rect}, 아이콘 ${st.pic}, 글상자 ${st.text}, 연결선 ${st.cxn}) · ${(scene.width / 360000).toFixed(1)}×${(scene.height / 360000).toFixed(1)}cm`;
+    const fitNote = fit.scale < 1
+      ? ` · 장표에 맞춰 ${Math.round(fit.scale * 100)}% 로 줄임${fit.fontPt != null ? ` (가장 작은 글자 ${fit.fontPt.toFixed(1)}pt)` : ''}${fit.fontPt != null && fit.fontPt < 7 ? ' — 글자가 작아요. 간격을 줄여 정렬하면 더 크게 들어갑니다' : ''}`
+      : '';
     try {
       if (window.desktop) {
         await window.desktop.copyScene(JSON.stringify(scene));
-        toastMsg('PowerPoint에서 Ctrl+V · ' + desc, 4000);
+        toastMsg('PowerPoint에서 Ctrl+V · ' + desc + fitNote, fit.scale < 1 ? 7000 : 4000);
       } else {
         downloadText(JSON.stringify(scene), safeName(title) + '.scene.json');
         toastMsg('브라우저에서는 PowerPoint 복사가 안 됩니다. 장면 JSON으로 저장했습니다. ' + desc, 5000);
@@ -1696,7 +1702,7 @@ function Editor() {
     } catch (e) {
       toastMsg('복사 실패: ' + (e.message || e));
     }
-  }, [catalog, currentGraph, rf, title, toastMsg, view.textScale]);
+  }, [catalog, currentGraph, rf, title, toastMsg, view.textScale, view.pptFit]);
 
   // ----- 파일 -----
   // 저장: 탭마다 마지막으로 저장한 파일을 기억해서 Ctrl+S 는 그 파일을 덮어쓰고, Ctrl+Shift+S 는 새 이름으로.
@@ -1904,7 +1910,7 @@ function Editor() {
       exportSvg: (selectedOnly = false) => renderSvg(selectedOnly),
       exportPng: async (selectedOnly = false, scale = 2) => { const r = renderSvg(selectedOnly); const b = await svgToPng(r.svg, r.width, r.height, scale); return new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(b); }); },
       copyAll: () => copyPpt(false),
-      scene: () => graphToScene(currentGraph(), catalog, null, { textScale: viewRef.current?.textScale ?? 1 }),   // 테스트: PowerPoint 로 보낼 장면 그대로
+      scene: () => { const raw = graphToScene(currentGraph(), catalog, null, { textScale: viewRef.current?.textScale ?? 1 }); return viewRef.current?.pptFit !== false ? fitScene(raw).scene : raw; },   // 테스트: PowerPoint 로 보낼 장면 그대로(장표 맞춤 포함)
       copySelected: () => copyPpt(true),
     };
     return () => { delete window.__arch; };
@@ -1955,6 +1961,9 @@ function Editor() {
                   <div className="menu-sec">PowerPoint 편집 도형 (EXE 전용)</div>
                   <button onClick={() => copyPpt(false)}>전체를 도형으로 복사<small>Ctrl+Shift+C</small></button>
                   <button onClick={() => copyPpt(true)} disabled={!selectedNodes.length && !selectedEdges.length}>선택만 도형으로 복사</button>
+                  <button onClick={() => setView({ pptFit: view.pptFit === false })} title="16:9 장표의 그림 영역(좌우 1cm·위 제목 띠 2.4cm·아래 1cm 를 뺀 자리)보다 크면 아이콘·선·글자를 같은 비율로 줄여서 복사합니다. 작으면 그대로입니다">
+                    {view.pptFit !== false ? '☑' : '☐'} 장표에 맞춰 줄이기<small>{view.pptFit !== false ? '넘치면 같은 비율로 축소' : '원래 크기 그대로(1.5cm 아이콘)'}</small>
+                  </button>
                 </>
               )}
             </div>

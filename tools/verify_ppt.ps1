@@ -44,6 +44,7 @@ try {
     $n = $sl.Shapes.Count
     "pasted shapes: $n"
     $cm = 28.3465  # pt per cm
+    $picSizes = @(1.5, 1.0) + @($expected.shapes | Where-Object { $_.t -eq 'pic' } | ForEach-Object { [math]::Round($_.w / 360000, 2) } | Select-Object -Unique)
     $byType = @{}
     $rows = @()
     $connected = 0; $cxnTotal = 0; $svg = 0; $textOk = 0; $sizeBad = 0
@@ -61,7 +62,9 @@ try {
         }
         elseif ($t -eq 13 -or $t -eq 28) {   # msoPicture / msoGraphic(SVG)
             $svg++
-            if ([math]::Abs($w - 1.5) -gt 0.02 -and [math]::Abs($w - 1.0) -gt 0.02) { $sizeBad++ }
+            # 아이콘 크기: 장면의 그림 크기(장표 맞춤으로 줄었으면 줄어든 값) 중 하나와 맞아야 한다
+            $okSize = $false; foreach ($ps in $picSizes) { if ([math]::Abs($w - $ps) -le 0.02) { $okSize = $true } }
+            if (-not $okSize) { $sizeBad++ }
         }
         elseif ($sh.HasTextFrame -eq -1) {
             $txt = $sh.TextFrame.TextRange.Text

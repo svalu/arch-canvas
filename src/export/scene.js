@@ -297,6 +297,27 @@ function attachPorts(shapes, sites) {
 }
 
 /** 장면 요약(검증용): 종류별 개수. */
+/** 16:9 장표(33.87×19.05cm = 12192000×6858000 EMU)에서 그림을 놓는 영역: 좌우 1cm, 위 제목 띠 2.4cm, 아래 1cm 를 뺀 크기 */
+export const SLIDE = { w: 12192000, h: 6858000 };
+export const SLIDE_BOX = { w: SLIDE.w - 2 * 360000, h: SLIDE.h - 864000 - 360000 };
+/**
+ * 장면이 상자보다 크면 같은 비율로 줄인다(아이콘·상자·선 굵기·글자 크기·여백 모두). 작으면 그대로(키우지 않는다).
+ * @returns { scene, scale, fontPt }  fontPt = 줄인 뒤 가장 작은 글자(pt), 글자가 없으면 null
+ */
+export function fitScene(scene, box = SLIDE_BOX) {
+  const s = Math.min(1, scene.width ? box.w / scene.width : 1, scene.height ? box.h / scene.height : 1);
+  let minSz = Infinity;
+  const txt = (t) => { if (!t) return t; const sz = Math.max(100, Math.round(t.sz * s)); minSz = Math.min(minSz, sz); return { ...t, sz, l: Math.round(t.l * s), t: Math.round(t.t * s), r: Math.round(t.r * s), b: Math.round(t.b * s) }; };
+  if (s >= 1) { for (const sh of scene.shapes) if (sh.text) minSz = Math.min(minSz, sh.text.sz); return { scene, scale: 1, fontPt: minSz < Infinity ? minSz / 100 : null }; }
+  const shapes = scene.shapes.map((sh) => ({
+    ...sh, x: Math.round(sh.x * s), y: Math.round(sh.y * s), w: Math.round(sh.w * s), h: Math.round(sh.h * s),
+    ...(sh.line ? { line: { ...sh.line, w: Math.max(6350, Math.round(sh.line.w * s)) } } : {}),   // 선은 0.5pt 아래로는 안 내린다
+    ...(sh.text ? { text: txt(sh.text) } : {}),
+    ...(Array.isArray(sh.cxn) ? { cxn: sh.cxn.map((c) => ({ ...c, x: Math.round(c.x * s), y: Math.round(c.y * s) })) } : {}),
+  }));
+  return { scene: { ...scene, width: Math.round(scene.width * s), height: Math.round(scene.height * s), shapes }, scale: s, fontPt: minSz < Infinity ? minSz / 100 : null };
+}
+
 export function sceneStats(scene) {
   const c = { rect: 0, pic: 0, text: 0, cxn: 0 };
   for (const s of scene.shapes) c[s.t]++;
