@@ -150,13 +150,14 @@ export const ARRANGE_SYSTEM = `${COMMON_SYSTEM}
   }
 }`;
 
-export function buildArrangeMessages(graph, catalog) {
-  const user = `# 제안서 컨텍스트\n${contextText(graph.context)}\n\n# 현재 다이어그램: ${graph.title}\n${summarizeGraph(graph, catalog)}\n\n# 배치 요청\n위 다이어그램을 ${FRAME.w}×${FRAME.h} 틀에 들어가는 구도로 다시 잡아 출력 형식대로 JSON 으로 적어라. 부모마다 직접 자식 id 만 쓰고(손자는 그 부모 항목에), id 는 위 목록의 것을 그대로 쓴다.`;
+export function buildArrangeMessages(graph, catalog, request = '') {
+  const want = request && request.trim() ? `\n\n# 사용자가 이번 정렬에서 바라는 것 (최우선으로 따른다)\n${request.trim()}` : '';
+  const user = `# 제안서 컨텍스트\n${contextText(graph.context)}\n\n# 현재 다이어그램: ${graph.title}\n${summarizeGraph(graph, catalog)}${want}\n\n# 배치 요청\n위 다이어그램을 ${FRAME.w}×${FRAME.h} 틀에 들어가는 구도로 다시 잡아 출력 형식대로 JSON 으로 적어라. 부모마다 직접 자식 id 만 쓰고(손자는 그 부모 항목에), id 는 위 목록의 것을 그대로 쓴다.${want ? ' 사용자가 바라는 것을 먼저 반영한다.' : ''}`;
   return { system: ARRANGE_SYSTEM, user };
 }
 
 /** 1차 결과가 틀에 안 맞을 때 한 번 더: 지금 크기를 알려 주고 행만 다시 나누게 한다(ops 는 이미 적용됨). */
-export function buildArrangeRetryMessages(graph, catalog, measured, crossings = []) {
+export function buildArrangeRetryMessages(graph, catalog, measured, crossings = [], request = '') {
   const sizes = graph.groups.map((x) => `- ${x.id} "${x.label || ''}": ${Math.round(x.w)}×${Math.round(x.h)}`).join('\n');
   const ratio = measured.w / measured.h;
   const aspectNote = ratio > 2.4 ? `틀 ${FRAME.w}×${FRAME.h}(1.92)에 비해 너무 넓다. 가로로 늘어선 것을 행으로 나눠 쌓아라(최상위 행을 둘로, 또는 넓은 상자 안을 더 많은 행으로).`
@@ -165,7 +166,8 @@ export function buildArrangeRetryMessages(graph, catalog, measured, crossings = 
     ? `\n\n# 선이 남의 아이콘을 관통하는 곳 (${crossings.length}건) — 이것을 없애는 것이 이번 재배치의 목적이다\n` + crossings.slice(0, 20).map((c) => `- ${c.id}: ${c.source} → ${c.target}${c.label ? ` "${c.label}"` : ''} 이(가) ${c.through.join(', ')} 을(를) 지나간다`).join('\n')
       + `\n고치는 법: 관통당하는 아이콘과 선의 대상이 같은 행에 줄줄이 있으면, 대상들을 허브 옆 열에 세로로 쌓거나 허브 아래 행으로 옮긴다. 사슬(A→B→C)이 아닌 것들을 한 행에 늘어놓지 않는다.`
     : '';
-  const user = `# 현재 다이어그램(구도 재해석 적용 뒤): ${graph.title}\n${summarizeGraph(graph, catalog)}\n\n# 1차 배치 결과\n전체 ${Math.round(measured.w)}×${Math.round(measured.h)} (가로:세로 ${ratio.toFixed(2)}) — ${aspectNote}\n상자 크기:\n${sizes}${crossNote}\n\n# 배치 요청\nops 없이 rows 만 다시 적어라(출력 형식의 summary 와 rows). 부모마다 직접 자식 전부를 정확히 한 번씩.`;
+  const want = request && request.trim() ? `\n\n# 사용자가 이번 정렬에서 바라는 것 (최우선)\n${request.trim()}` : '';
+  const user = `# 현재 다이어그램(구도 재해석 적용 뒤): ${graph.title}\n${summarizeGraph(graph, catalog)}${want}\n\n# 1차 배치 결과\n전체 ${Math.round(measured.w)}×${Math.round(measured.h)} (가로:세로 ${ratio.toFixed(2)}) — ${aspectNote}\n상자 크기:\n${sizes}${crossNote}\n\n# 배치 요청\nops 없이 rows 만 다시 적어라(출력 형식의 summary 와 rows). 부모마다 직접 자식 전부를 정확히 한 번씩.`;
   return { system: ARRANGE_SYSTEM, user };
 }
 

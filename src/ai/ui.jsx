@@ -5,6 +5,7 @@ import { useExit } from '../useExit.js';
 import { PROVIDERS, providerById as providerByIdBase, detectCli, MOCK_PROVIDER, mockEnabled } from './providers.js';
 import { DocAttach } from './DocAttach.jsx';
 import { BridgeSetup } from './BridgeSetup.jsx';
+import { classifyIntent, INTENT_LABEL } from './intent.js';
 
 const providerById = (id) => (id === 'mock' ? MOCK_PROVIDER : providerByIdBase(id));
 const providerList = () => (mockEnabled() ? [...PROVIDERS, MOCK_PROVIDER] : PROVIDERS);
@@ -236,7 +237,7 @@ export function ConnectModal({ open, pending, settings, onSettings, onClose, onR
 }
 
 // ---------------------------------------------------------------------------------------------
-export function AiPanel({ context, onContext, settings, verified, onOpenConnect, state, onReview, onAsk, onAskSelection, selection, onFixFromAnswer, onApplyOps, onCancel, onPick, nameOf, activeDocId, onWizard, onAttachDoc, onToast, onRate }) {
+export function AiPanel({ context, onContext, settings, verified, onOpenConnect, state, onReview, onAsk, onAskSelection, selection, onFixFromAnswer, onApplyOps, onCancel, onPick, nameOf, activeDocId, onWizard, onArrange, onAttachDoc, onToast, onRate }) {
   const [text, setText] = useState('');
   const [draft, setDraft] = useState(context);
   const [ctxOpen, setCtxOpen] = useState(false);
@@ -245,6 +246,7 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
   const [note, setNote] = useState(null);     // 👎 뒤에 적는 한 줄 { key }
   const [noteText, setNoteText] = useState('');
   const [openLog, setOpenLog] = useState(null);   // 지난 기록 중 펼친 것
+  const [sent, setSent] = useState(null);        // 방금 보낸 것 { text, intent, forced } — 다른 뜻이었으면 바꿔 보낼 수 있게
   useEffect(() => setDraft(context), [context]);
   const p = providerById(settings.provider);
   const busy = state.busy;
@@ -259,20 +261,36 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
   const log = context.log || [];
   const KIND = { draw: '그림', ask: '질문', review: '검수', arrange: '정렬' };
 
-  // 보내기: 버튼이 의도를 정한다. 글이 비어 있으면 물어보기·그리기는 안 보낸다
-  const send = (how) => {
-    const t = text.trim();
-    flush();
+  // 보내기. Enter = 적은 말로 종류를 정해서(정렬·검수·질문·그리기) 보낸다. 버튼으로 종류를 직접 고를 수도 있다
+  const dispatch = (how, t) => {
     if (how === 'review') { onReview(); return; }
+    if (how === 'arrange') { onArrange?.(t); return; }
     if (!t) return;
     if (how === 'ask') { if (selCount && onAskSelection) onAskSelection(t); else onAsk(t); }
     else onWizard(t);
+  };
+  const send = (how) => {
+    const t = text.trim();
+    flush();
+    if (how === 'chat') {
+      const it = classifyIntent(t);
+      if (!t && it.intent !== 'review') return;
+      setSent({ text: it.text, intent: it.intent, forced: it.forced, raw: t });
+      dispatch(it.intent, it.text);
+      setText('');
+      return;
+    }
+    if (how !== 'review' && !t) return;
+    setSent(t ? { text: t, intent: how, forced: true, raw: t } : null);
+    dispatch(how, t);
     setText('');
   };
+  const resend = (how) => { if (!sent) return; setSent({ ...sent, intent: how, forced: true }); dispatch(how, sent.text || sent.raw); };
   const onKey = (e) => {
-    if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey) || !verified || e.nativeEvent?.isComposing) return;
+    if (e.key !== 'Enter' || !verified || e.nativeEvent?.isComposing) return;
+    if (e.shiftKey && !(e.ctrlKey || e.metaKey)) return;   // Shift+Enter = 줄 바꿈
     e.preventDefault();
-    send(e.shiftKey ? 'ask' : 'draw');
+    if (e.ctrlKey || e.metaKey) send(e.shiftKey ? 'ask' : 'draw'); else send('chat');
   };
 
   // 지금 결과가 기록에도 들어 있으면 기록 쪽은 숨긴다 (같은 것이 두 번 보이지 않게)
@@ -351,22 +369,31 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
           </div>
         )}
         <textarea value={text} onChange={(e) => setText(e.target.value)} onKeyDown={onKey} disabled={!!busy}
-          placeholder={busy ? '' : selCount ? '선택한 것에 대해 묻거나, 그림을 어떻게 바꿀지 적으세요' : '무엇이든 적으세요. 예: 내 PC 의 AI 를 휴대폰에서도 쓰고 싶어 / NAT 를 하나만 두면? / 줄 좀 맞춰 줘'} />
+          placeholder={busy ? '' : selCount ? '선택한 것에 대해 묻거나, 어떻게 바꿀지 적으세요 · Enter 로 보내기' : '무엇이든 적으세요. 예: 정렬해 줘 / 고객 채널은 상자에서 한 줄로 묶어 / NAT 하나면 괜찮아? · Enter 로 보내기'} />
         <div className="send-row">
           {busy ? (
             <>
-              <Busy label={busy === 'review' ? '검수 중' : busy === 'ask' ? '생각 중' : busy === 'arrange' ? '배치안 정하는 중 · 1분쯤' : '그릴 내용 만드는 중 · 1~2분'} />
+              <Busy label={busy === 'review' ? '검수 중' : busy === 'ask' ? '생각 중' : busy === 'arrange' ? '배치안 정하는 중 · 1~2분' : '그릴 내용 만드는 중 · 1~2분'} />
               <button onClick={onCancel}>취소</button>
             </>
           ) : (
             <>
-              <button disabled={!verified} onClick={() => send('review')} title="그림 전체를 요건과 비교해 빈틈을 요소 위에 표시합니다. 글은 안 적어도 됩니다"><Icon name="shield" size={14} /> 검수 받기</button>
+              <span className="kinds" aria-label="종류 직접 고르기">
+                <button className="small" disabled={!verified} onClick={() => send('review')} title="그림 전체를 요건과 비교해 빈틈을 요소 위에 표시합니다. 글은 안 적어도 됩니다"><Icon name="shield" size={13} /> 검수</button>
+                <button className="small" disabled={!verified} onClick={() => send('arrange')} title="AI 가 구도·순서를 정하고 기본 정렬이 자리를 잡습니다. 적은 말이 있으면 그것을 먼저 따릅니다">정렬</button>
+                <button className="small" disabled={!verified || !text.trim()} onClick={() => send('ask')} title="그림을 보고 답만 합니다. 그림은 안 바뀝니다 (Ctrl+Shift+Enter)">질문</button>
+                <button className="small" disabled={!verified || !text.trim()} onClick={() => send('draw')} title="부족한 건 쉬운 질문으로 묻고, 그릴 내용을 먼저 보여 준 뒤 그립니다 (Ctrl+Enter)">그리기·고치기</button>
+              </span>
               <span className="grow" />
-              <button disabled={!verified || !text.trim()} onClick={() => send('ask')} title="그림을 보고 답만 합니다. 그림은 안 바뀝니다 (Ctrl+Shift+Enter)">물어보기</button>
-              <button className="primary" disabled={!verified || !text.trim()} onClick={() => send('draw')} title="부족한 건 쉬운 질문으로 묻고, 그릴 내용을 먼저 보여 준 뒤 그립니다 (Ctrl+Enter)"><Icon name="sparkle" size={14} /> 그리기·고치기</button>
+              <button className="primary" disabled={!verified || (!text.trim())} onClick={() => send('chat')} title="적은 말을 보고 정렬·검수·질문·그리기 중 하나로 보냅니다 (Enter)"><Icon name="sparkle" size={14} /> 보내기</button>
             </>
           )}
         </div>
+        {sent && !busy && !sent.forced && (
+          <p className="hint sent-as">"{sent.raw.length > 40 ? sent.raw.slice(0, 40) + '…' : sent.raw}" 을(를) <b>{INTENT_LABEL[sent.intent]}</b>(으)로 보냈어요. 다른 뜻이었으면:
+            {['arrange', 'draw', 'ask', 'review'].filter((k) => k !== sent.intent).map((k) => <button key={k} className="link" onClick={() => resend(k)}>{INTENT_LABEL[k]}</button>)}
+          </p>
+        )}
         {!verified && <p className="hint">먼저 위의 [연결하기]로 AI 를 연결하세요.</p>}
       </div>
 
@@ -394,14 +421,13 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
 
           {r && r.mode === 'arrange' && (
             <div className="turn now" ref={(el) => { if (el && el.dataset.k !== key) { el.dataset.k = key; el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } }}>
-              <div className="turn-user"><span className="log-k draw">정렬</span><div className="log-q">AI 정렬</div></div>
+              <div className="turn-user"><span className="log-k draw">정렬</span><div className="log-q">{r.request || 'AI 정렬'}</div></div>
               <div className="turn-ai">
-                <h4>AI 정렬</h4>
-                {r.summary && <p className="summary">{r.summary}</p>}
-                {r.ops?.length > 0 && <ol className="ops">{describeOps(r.ops, nameOf).map((t, i) => <li key={i}>{t}</li>)}</ol>}
-                <p className={r.blocked ? 'hint' : 'ok'}>{r.blocked ? '규칙 검사에서 막혀 적용하지 않았습니다.' : `AI 가 정한 격자(${r.placed}개)대로 배치했습니다${r.size ? ` · ${r.size.w}×${r.size.h} (가로:세로 ${(r.size.w / r.size.h).toFixed(1)})` : ''} · Ctrl+Z 로 되돌릴 수 있습니다`}</p>
-                {r.crossings > 0 && <p className="hint">선이 남의 아이콘을 지나가는 곳이 {r.crossings}건 남았습니다. 그 아이콘을 옆 열이나 아래 행으로 옮기면 없어집니다.</p>}
-                {r.retried && !r.retried.ok && <p className="hint">점검 뒤 한 번 더 나눠 봤지만 더 나아지지 않아 1차 결과를 두었습니다.</p>}
+                {r.summary && <p className="summary">{boldText(r.summary)}</p>}
+                <p className={r.blocked ? 'hint' : 'ok'}>{r.blocked ? '규칙 검사에서 막혀 적용하지 않았습니다.' : `배치했어요 · ${r.placed}개${r.size ? ` · ${r.size.w}×${r.size.h} (${(r.size.w / r.size.h).toFixed(1)}:1)` : ''}${r.crossings > 0 ? ` · 선이 아이콘을 지나는 곳 ${r.crossings}건` : ''} · 되돌리기 Ctrl+Z`}</p>
+                {r.ops?.length > 0 && <details className="more"><summary>구도 변경 {r.ops.length}개 보기</summary><ol className="ops">{describeOps(r.ops, nameOf).map((t, i) => <li key={i}>{t}</li>)}</ol></details>}
+                {r.crossings > 0 && <p className="hint">남은 관통은 그 아이콘을 옆 열이나 아래 행으로 옮기면 없어져요. "Lens 는 Connect 위에 한 줄로" 처럼 적어 다시 정렬시켜도 됩니다.</p>}
+                {r.retried && !r.retried.ok && <p className="hint">점검 뒤 한 번 더 나눠 봤지만 더 나아지지 않아 1차 결과를 두었어요.</p>}
                 <Raw res={r} />
                 <Foot res={r} />
               </div>
@@ -411,10 +437,12 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
             <div className="turn now" ref={(el) => { if (el && el.dataset.k !== key) { el.dataset.k = key; el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } }}>
               {r.request && <div className="turn-user"><span className="log-k draw">그림</span><div className="log-q">{r.request}</div></div>}
               <div className="turn-ai">
-                <h4>{r.applied ? '그린 내용' : '그릴 내용 (아직 캔버스에 안 그려짐)'}</h4>
+                {!r.applied && <h4>그릴 내용 (아직 캔버스에 안 그려짐)</h4>}
                 <Intent res={r} />
-                {r.summary && <p className="summary">{r.summary}</p>}
-                <ol className="ops">{describeOps(r.ops || [], nameOf).map((t, i) => <li key={i}>{t}</li>)}</ol>
+                {r.summary && <p className="summary">{boldText(r.summary)}</p>}
+                {r.applied
+                  ? (r.ops?.length > 0 && <details className="more"><summary>바뀐 것 {r.ops.length}개 보기</summary><ol className="ops">{describeOps(r.ops, nameOf).map((t, i) => <li key={i}>{t}</li>)}</ol></details>)
+                  : <ol className="ops">{describeOps(r.ops || [], nameOf).map((t, i) => <li key={i}>{t}</li>)}</ol>}
                 {!r.ops?.length && <p className="hint">바꿀 내용이 없습니다.</p>}
                 {r.applied ? (
                   <p className="ok">{r.applied.blocked ? '규칙 검사에서 막혀 그리지 않았습니다.' : `캔버스에 그렸습니다 · ${r.applied.applied}개 · Ctrl+Z 로 되돌릴 수 있어요`}{r.applied.errors?.length ? ` · 실패 ${r.applied.errors.length}개: ${r.applied.errors.map((e) => e.message).join('; ')}` : ''}</p>

@@ -13,6 +13,7 @@ const cases = {
   idle: { state: { busy: null, result: null, error: null }, selection: { count: 0 } },
   selected: { state: { busy: null, result: null, error: null }, selection: { count: 3 } },
   busy: { state: { busy: 'ask', result: null, error: null }, selection: { count: 0 } },
+  arrangeReq: { state: { busy: null, result: { mode: 'arrange', request: 'AI 계층은 위에 한 줄로', summary: '위에 한 줄로 두었습니다', placed: 5, ops: [{ op: 'update', id: 'a', set: { label: 'X' } }], provider: 'x', ms: 1000, docId: 'd1' }, error: null }, selection: { count: 0 } },
   ask: { state: { busy: null, result: { mode: 'ask', question: 'NAT 하나면?', answer: '**단일 장애점**이 됩니다.\n둘째 줄', provider: 'Claude CLI', ms: 3200, docId: 'd1', understood: '가용성 질문' }, error: null }, selection: { count: 0 } },
   draw: { state: { busy: null, result: { mode: 'draw', request: '줄 맞춰', summary: '두 개 옮김', ops: [{ op: 'move', id: 'a', x: 1, y: 2 }], provider: 'Claude CLI', ms: 9000, docId: 'd1' }, error: null }, selection: { count: 0 } },
   drawApplied: { state: { busy: null, result: { mode: 'draw', request: '줄 맞춰', summary: '두 개 옮김', ops: [{ op: 'move', id: 'a', x: 1, y: 2 }], applied: { applied: 1, errors: [] }, provider: 'Claude CLI', ms: 9000, docId: 'd1' }, error: null }, selection: { count: 0 } },
@@ -26,7 +27,7 @@ let bad = 0;
 for (const [name, extra] of Object.entries(cases)) {
   try {
     const html = renderToStaticMarkup(React.createElement(AiPanel, { ...base, ...extra }));
-    const must = { idle: ['전체 그림', '그리기·고치기', '대화'], selected: ['선택한 3개'], busy: ['생각 중', '취소'], ask: ['단일 장애점', '이 답변대로 그림 고치기', '3.2s', '이렇게 이해했어요'], draw: ['캔버스에 그리기', '아직 캔버스에 안 그려짐'], drawApplied: ['캔버스에 그렸습니다 · 1개'], review: ['NAT 단일', '지적 1건'], error: ['실패했어요', '연결 다시 하기'], arrange: ['입구를 왼쪽에', '12개', 'Ctrl+Z'], arrangeBusy: ['배치안 정하는 중'], other: ['다른 탭', '탭에서 요청'] }[name];
+    const must = { idle: ['전체 그림', '그리기·고치기', '보내기', '대화'], selected: ['선택한 3개'], busy: ['생각 중', '취소'], ask: ['단일 장애점', '이 답변대로 그림 고치기', '3.2s', '이렇게 이해했어요'], draw: ['캔버스에 그리기', '아직 캔버스에 안 그려짐'], drawApplied: ['캔버스에 그렸습니다 · 1개'], review: ['NAT 단일', '지적 1건'], error: ['실패했어요', '연결 다시 하기'], arrange: ['입구를 왼쪽에', '12개', 'Ctrl+Z'], arrangeReq: ['AI 계층은 위에 한 줄로', '구도 변경 1개 보기'], arrangeBusy: ['배치안 정하는 중'], other: ['다른 탭', '탭에서 요청'] }[name];
     const miss = must.filter((m) => !html.includes(m));
     // 기록 중복: ask 케이스는 기록의 "NAT 하나면?" 줄이 숨어야 한다 (지금 결과와 같은 것)
     const dup = name === 'ask' && (html.match(/NAT 하나면\?/g) || []).length !== 1;

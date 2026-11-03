@@ -142,7 +142,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.34';
+export const APP_VERSION = '0.9.35';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -1003,7 +1003,7 @@ function Editor() {
     const docTitle = docsRef.current.list.find((x) => x.id === docId)?.title || g.title;
     const msgs = mode === 'review' ? buildReviewMessages(g, catalog, lintRef.current)
       : mode === 'ask' ? buildAskMessages(g, catalog, request, lintRef.current, askHistory.current)
-      : mode === 'arrange' ? buildArrangeMessages(g, catalog)
+      : mode === 'arrange' ? buildArrangeMessages(g, catalog, request)
       : buildDrawMessages(g, catalog, request, lintRef.current);
     const ac = new AbortController();
     aiAbort.current?.abort();
@@ -1041,7 +1041,7 @@ function Editor() {
       if (!j) j = parseJsonReply(raw);   // 검수·그리기는 JSON 이어야 한다 (못 읽으면 여기서 오류)
       if (mode === 'arrange') {
         // AI 정렬: AI 가 준 단·순서(columns)대로 기본 정렬이 자리를 잡는다. 바로 적용(Ctrl+Z 로 되돌림)
-        // 배치안: rows(격자, 0.9.34~) 또는 columns(단, 0.9.29~). 부모 키가 없는 id 는 버린다
+        // 배치안: rows(격자, 0.9.35~) 또는 columns(단, 0.9.29~). 부모 키가 없는 id 는 버린다
         const planOf = (jj, knownIds) => {
           const src = jj.rows && typeof jj.rows === 'object' ? jj.rows : jj.columns && typeof jj.columns === 'object' ? jj.columns : {};
           const out = {}; let n = 0;
@@ -1058,7 +1058,9 @@ function Editor() {
         if (docsRef.current.active !== docId) { setAi({ busy: null, error: null, result: null }); toastMsg(`AI 정렬은 요청한 "${docTitle}" 탭에서만 적용됩니다. 그 탭에서 다시 누르십시오.`, 5000); return; }
         // 구도 재해석(ops: 상자로 묶기·옮기기·이름 바꾸기·빈 상자 빼기)이 있으면 먼저 적용하고, 그 결과에 배치안을 입힌다
         const ARR_OPS = new Set(['add_group', 'move_into', 'update', 'remove', 'ungroup', 'bundle']);
-        const ops = (Array.isArray(j.ops) ? j.ops : []).filter((o) => o && ARR_OPS.has(o.op) && !(o.op === 'remove' && g.nodes.some((n) => n.id === o.id)));   // 노드는 지우지 않는다
+        const itemOf = (id) => [...g.groups, ...g.nodes, ...g.edges].find((x) => x.id === String(id));
+        const noop = (o) => o.op === 'update' && o.set && typeof o.set === 'object' && (() => { const it = itemOf(o.id); return !!it && Object.entries(o.set).every(([k, v]) => String(v ?? '') === String(it[k] ?? '')); })();   // 이름이 그대로인 빈 명령
+        const ops = (Array.isArray(j.ops) ? j.ops : []).filter((o) => o && ARR_OPS.has(o.op) && !(o.op === 'remove' && g.nodes.some((n) => n.id === o.id)) && !noop(o));   // 노드는 지우지 않는다
         let cur = currentGraph(), patched = null;
         if (ops.length) {
           const had = new Set(cur.groups.map((x) => x.id));
@@ -1081,7 +1083,7 @@ function Editor() {
         let m = measure(cur), cross = lineCrossings(cur, dropsOf(cur)), retried = null;
         if (all.length > 3 && (m.w / m.h > 2.4 || m.w / m.h < 1.3 || cross.length)) {
           try {
-            const raw2 = await aiRun(aiSettings, { ...buildArrangeRetryMessages(cur, catalog, m, cross), signal: ac.signal, maxTokens: 16000 });
+            const raw2 = await aiRun(aiSettings, { ...buildArrangeRetryMessages(cur, catalog, m, cross, request), signal: ac.signal, maxTokens: 16000 });
             if (ac.signal.aborted) return;
             const j2 = parseJsonReply(raw2);
             const p2 = planOf(j2, known2);
@@ -1098,10 +1100,10 @@ function Editor() {
         if (retried?.ok && retried.summary) summary += '\n(점검 뒤 다시 나눔) ' + retried.summary;
         if (bundled) summary += `\n(상자 단위로 묶은 선 ${bundled}개: 상자 안 모두가 같은 곳으로 가던 선을 상자에서 한 줄로)`;
         // 기록은 같은 커밋에 넣는다. 따로 logAi 를 부르면(바로든 다음 틱이든) 아직 화면에 안 올라간 옛 그래프를 다시 커밋해 정렬이 되돌아간다
-        cur.context = { ...cur.context, log: [...(cur.context?.log || []), { k: 'arrange', q: 'AI 정렬', a: summary.slice(0, 400), t: Date.now() }].slice(-20) };
+        cur.context = { ...cur.context, log: [...(cur.context?.log || []), { k: 'arrange', q: request && request.trim() ? request.trim() : 'AI 정렬', a: summary.slice(0, 400), t: Date.now() }].slice(-20) };
         const ok = tryCommit(cur);
         if (ok) setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 30);
-        setAi({ busy: null, error: null, result: { mode: 'arrange', docId, docTitle, raw, at: Date.now(), ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary, placed, ops, applied: patched ? { applied: patched.applied, errors: patched.errors } : null, size: { w: Math.round(m.w), h: Math.round(m.h) }, crossings: cross.length, retried, blocked: !ok } });
+        setAi({ busy: null, error: null, result: { mode: 'arrange', request: request && request.trim() ? request.trim() : '', docId, docTitle, raw, at: Date.now(), ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary, placed, ops, applied: patched ? { applied: patched.applied, errors: patched.errors } : null, size: { w: Math.round(m.w), h: Math.round(m.h) }, crossings: cross.length, retried, blocked: !ok } });
         return;
       }
       const base = { mode, docId, docTitle, raw, at: Date.now(), ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary: String(j.summary || ''), ...intent };
@@ -2118,6 +2120,7 @@ function Editor() {
             onFixFromAnswer={(q, a) => runAi('draw', fixFromAnswer(q, a), { arrangeAfter: true, label: '답변대로 고치기: ' + String(q).split('\n').pop().slice(0, 80) })}
             onApplyOps={applyAiOps} onCancel={() => aiAbort.current?.abort()} onPick={selectById} nameOf={labelOf} activeDocId={docs.active}
             onWizard={(text) => setWizard({ open: true, text })}
+            onArrange={(text) => runAi('arrange', text || '')}
             onAttachDoc={(d) => updateContext({ doc: d || undefined })} onToast={toastMsg}
             selection={{ count: selectedNodes.length + selectedEdges.length }} onAskSelection={(q) => askSelRef.current?.(q)} onRate={rateAi}
           />
