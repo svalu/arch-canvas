@@ -142,7 +142,7 @@ function suggestFor(selNodes, catalog, mode = 'infra') {
 // 플랫폼: 맥이면 단축키 표기를 ⌘·⌥ 로 바꾸고, 사파리는 클립보드 읽기를 하지 않는다
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
-export const APP_VERSION = '0.9.36';
+export const APP_VERSION = '0.9.37';
 const LS_CURRENT = 'arch-canvas:current';
 const GROUP_DEFAULT = { w: 320, h: 200 };
 
@@ -1128,6 +1128,7 @@ function Editor() {
         setAi({ busy: null, error: null, result: { ...base, request: opts.label || request, ops: Array.isArray(j.ops) ? j.ops : [], arrangeAfter: !!opts.arrangeAfter } });
       }
     } catch (e) {
+      if (aiAbort.current !== ac) return;   // 새 요청이 이것을 대신했다: 그쪽이 돌고 있으니 바쁨 표시를 건드리지 않는다
       if (ac.signal.aborted || e?.kind === 'cancel') { setAi({ busy: null, result: null, error: null }); return; }
       setAi({ busy: null, result: null, error: { message: e.message || String(e), detail: e.detail, kind: e.kind } });
     }

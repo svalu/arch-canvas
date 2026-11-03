@@ -398,7 +398,7 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
         <textarea value={text} onChange={(e) => setText(e.target.value)} onKeyDown={onKey} onPaste={onPaste} onDrop={onDrop} onDragOver={(e) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); }} disabled={!!busy}
           placeholder={busy ? '' : selCount ? '선택한 것에 대해 묻거나, 어떻게 바꿀지 적으세요 · Enter 로 보내기 · 스샷은 Ctrl+V' : '무엇이든 적으세요. 예: 정렬해 줘 / 고객 채널은 상자에서 한 줄로 묶어 / NAT 하나면 괜찮아? · Enter 로 보내기 · 스샷은 Ctrl+V'} />
         <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple style={{ display: 'none' }} onChange={(e) => { addImageFiles(e.target.files); e.target.value = ''; }} />
-        <div className="send-row">
+        <div className={'send-row' + (busy ? ' wait' : '')}>
           {busy ? (
             <>
               <Busy label={busy === 'review' ? '검수 중' : busy === 'ask' ? '생각 중' : busy === 'arrange' ? '배치안 정하는 중 · 1~2분' : '그릴 내용 만드는 중 · 1~2분'} />
