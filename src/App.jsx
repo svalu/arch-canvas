@@ -14,7 +14,7 @@ import { LayersPanel } from './canvas/LayersPanel.jsx';
 const LS_VIEW = 'arch-canvas:view';
 // 격자 색: 라이트는 잉크, 다크는 민트. 진하기 0 이면 완전히 사라진다
 const GRID_RGB = { light: '35, 47, 62', dark: '127, 227, 214' };
-const VIEW_DEFAULT = { dots: true, lines: false, strength: 35, gap: 16, major: true, depth: true, textScale: 1, edgeShape: 'elbow', edgeArrow: 'end', pins: true, guides: true, aiOff: false, pptFit: true };
+const VIEW_DEFAULT = { dots: true, lines: false, strength: 35, gap: 16, major: true, depth: true, textScale: 1, edgeShape: 'elbow', edgeArrow: 'end', pins: true, guides: true, aiOff: false, pptFit: true, slideFit: false };
 function loadView() {
   try {
     const s = JSON.parse(localStorage.getItem(LS_VIEW) || '{}');
@@ -92,7 +92,7 @@ import { AskBar } from './canvas/AskBar.jsx';
 import { edgeTypes } from './canvas/edges.jsx';
 import { graphToFlow, flowToGraph } from './model/convert.js';
 import { normalizeGraph, emptyGraph, uid, allIds, ICON_SIZE, LINES, SHAPES, ARROWS, EDGE_DEFAULTS, setEdgeDefaults, sortGroups, CARD_DEFAULT, LABEL_DROP } from './model/schema.js';
-import { absoluteRects, innermostGroupAt, descendants, autoArrange, lineCrossings } from './model/geometry.js';
+import { absoluteRects, innermostGroupAt, descendants, autoArrange, lineCrossings, slideFitOf } from './model/geometry.js';
 import { applyPatch, PATCH_OPS, alignParentsToPlan, bundleEdges } from './model/patch.js';
 import { graphToScene, selectionIds, sceneStats, fitScene } from './export/scene.js';
 import { lint, diffViolations, mergeRuleAnnotations, RULES } from './model/rules.js';
@@ -102,7 +102,7 @@ import { useExit as useExit2 } from './useExit.js';
 import { ConnectModal, AiPanel, AiChip, Busy, describeOps } from './ai/ui.jsx';
 import { useExit } from './useExit.js';
 import { loadSettings, saveSettings, isVerified, run as aiRun } from './ai/connection.js';
-import { buildReviewMessages, buildDrawMessages, buildAskMessages, buildClarifyMessages, buildArrangeMessages, buildArrangeRetryMessages, imagesNote, IMAGES_SYSTEM, parseJsonReply, findingsToAnnotations, confirmedLines, fixFromAnswer } from './ai/prompts.js';
+import { buildReviewMessages, buildDrawMessages, buildAskMessages, buildClarifyMessages, buildArrangeMessages, buildArrangeRetryMessages, imagesNote, IMAGES_SYSTEM, parseJsonReply, FRAME, SLIDE_FRAME, findingsToAnnotations, confirmedLines, fixFromAnswer } from './ai/prompts.js';
 import { AiWizard, AskBackModal } from './ai/Wizard.jsx';
 import { MakerMark } from './MakerMark.jsx';
 import { CanvasStart } from './CanvasStart.jsx';
@@ -1002,9 +1002,12 @@ function Editor() {
     const g = currentGraph();
     const docId = docsRef.current.active;   // 결과는 요청한 탭에 붙인다 (그사이 탭을 옮겨도)
     const docTitle = docsRef.current.list.find((x) => x.id === docId)?.title || g.title;
+    // 장표 맞춤 정렬: 스위치가 켜져 있거나 말에 장표/PPT 가 들어 있으면 틀을 줄이고(1520×750) 촘촘하게 배치한다
+    const slideMode = mode === 'arrange' && (!!viewRef.current?.slideFit || /장표|ppt|파워포인트|슬라이드/i.test(request || ''));
+    const frame = slideMode ? SLIDE_FRAME : FRAME;
     const msgs = mode === 'review' ? buildReviewMessages(g, catalog, lintRef.current)
       : mode === 'ask' ? buildAskMessages(g, catalog, request, lintRef.current, askHistory.current)
-      : mode === 'arrange' ? buildArrangeMessages(g, catalog, request)
+      : mode === 'arrange' ? buildArrangeMessages(g, catalog, request, frame)
       : buildDrawMessages(g, catalog, request, lintRef.current);
     const ac = new AbortController();
     aiAbort.current?.abort();
@@ -1076,7 +1079,7 @@ function Editor() {
         const known2 = new Set(all.map((x) => x.id));
         ({ plan, n: placed } = planOf(j, known2));   // ops 로 생긴 상자 id 까지 포함해서 다시
         const locked = new Set(all.filter((x) => x.locked).map((x) => x.id));
-        autoArrange(cur, all.map((x) => x.id), isOverlay, locked, { plan });
+        autoArrange(cur, all.map((x) => x.id), isOverlay, locked, { plan, compact: slideMode });
         let summary = String(j.summary || '');
         // 결과가 틀(16:9)에서 많이 벗어나면 크기를 알려 주고 행만 다시 받는다 (한 번)
         const measure = (gg) => { const rs = [...absoluteRects(gg).values()]; const x0 = Math.min(...rs.map((r) => r.x)), y0 = Math.min(...rs.map((r) => r.y)), x1 = Math.max(...rs.map((r) => r.x + r.w)), y1 = Math.max(...rs.map((r) => r.y + r.h)); return { w: x1 - x0, h: y1 - y0 }; };
@@ -1084,17 +1087,18 @@ function Editor() {
         const dropsOf = (gg) => { const lab = new Set(gg.nodes.filter((n) => n.type !== 'card' && n.type !== 'text' && n.type !== 'badge' && n.label).map((n) => n.id)); return (id) => (lab.has(id) ? LABEL_DROP : 0); };
         const aspectOff = (mm) => Math.abs(Math.log((mm.w / mm.h) / 1.9));
         let m = measure(cur), cross = lineCrossings(cur, dropsOf(cur)), retried = null;
-        if (all.length > 3 && (m.w / m.h > 2.4 || m.w / m.h < 1.3 || cross.length)) {
+        const overSlide = (mm) => slideMode && (mm.w > frame.w * 1.1 || mm.h > frame.h * 1.1);   // 장표 맞춤인데 틀보다 10% 넘게 크다
+        if (all.length > 3 && (m.w / m.h > 2.4 || m.w / m.h < 1.3 || cross.length || overSlide(m))) {
           try {
-            const raw2 = await aiRun(aiSettings, { ...buildArrangeRetryMessages(cur, catalog, m, cross, request), images, signal: ac.signal, maxTokens: 16000 });
+            const raw2 = await aiRun(aiSettings, { ...buildArrangeRetryMessages(cur, catalog, m, cross, request, frame), images, signal: ac.signal, maxTokens: 16000 });
             if (ac.signal.aborted) return;
             const j2 = parseJsonReply(raw2);
             const p2 = planOf(j2, known2);
             if (p2.n) {
               const snap = structuredClone({ groups: cur.groups, nodes: cur.nodes });
-              autoArrange(cur, all.map((x) => x.id), isOverlay, locked, { plan: p2.plan });
+              autoArrange(cur, all.map((x) => x.id), isOverlay, locked, { plan: p2.plan, compact: slideMode });
               const m2 = measure(cur), cross2 = lineCrossings(cur, dropsOf(cur));
-              const better = cross2.length < cross.length || (cross2.length === cross.length && aspectOff(m2) < aspectOff(m));
+              const better = cross2.length < cross.length || (cross2.length === cross.length && aspectOff(m2) < aspectOff(m)) || (overSlide(m) && m2.w * m2.h < m.w * m.h * 0.92 && cross2.length <= cross.length + 2);   // 장표 맞춤이면 면적이 8% 넘게 줄어도 받는다
               if (better) { plan = p2.plan; placed = p2.n; m = m2; cross = cross2; retried = { ok: true, summary: String(j2.summary || '') }; }
               else { cur.groups = snap.groups; cur.nodes = snap.nodes; retried = { ok: false }; }
             }
@@ -1102,12 +1106,14 @@ function Editor() {
         }
         if (retried?.ok && retried.summary) summary += '\n(점검 뒤 다시 나눔) ' + retried.summary;
         if (bundled) summary += `\n(상자 단위로 묶은 선 ${bundled}개: 상자 안 모두가 같은 곳으로 가던 선을 상자에서 한 줄로)`;
+        const slide = slideMode ? slideFitOf(m.w, m.h) : null;
+        if (slide) summary += `\n(장표 맞춤: ${Math.round(m.w)}×${Math.round(m.h)} → 장표에 ${Math.round(slide.scale * 100)}% 로 들어감, 이름표 약 ${slide.pt.toFixed(1)}pt${slide.pt < 7 ? ' — 아직 작아요. 상자를 합치거나 이름을 줄여 다시 시켜 보세요' : ''})`;
         // 기록은 같은 커밋에 넣는다. 따로 logAi 를 부르면(바로든 다음 틱이든) 아직 화면에 안 올라간 옛 그래프를 다시 커밋해 정렬이 되돌아간다
         const madeBoxes = cur.groups.map((x) => x.id).filter((id) => !g.groups.some((x) => x.id === id));   // 정렬이 새로 만든 상자
         cur.context = { ...cur.context, log: [...(cur.context?.log || []), { k: 'arrange', q: request && request.trim() ? request.trim() : 'AI 정렬', a: summary.slice(0, 400), t: Date.now(), ...(madeBoxes.length ? { ids: madeBoxes } : {}) }].slice(-20) };
         const ok = tryCommit(cur);
         if (ok) setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 30);
-        setAi({ busy: null, error: null, result: { mode: 'arrange', request: request && request.trim() ? request.trim() : '', docId, docTitle, raw, at: Date.now(), ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary, placed, ops, applied: patched ? { applied: patched.applied, errors: patched.errors } : null, size: { w: Math.round(m.w), h: Math.round(m.h) }, crossings: cross.length, retried, blocked: !ok } });
+        setAi({ busy: null, error: null, result: { mode: 'arrange', request: request && request.trim() ? request.trim() : '', docId, docTitle, raw, at: Date.now(), ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary, placed, ops, applied: patched ? { applied: patched.applied, errors: patched.errors } : null, size: { w: Math.round(m.w), h: Math.round(m.h) }, crossings: cross.length, retried, blocked: !ok, slide } });
         return;
       }
       const base = { mode, docId, docTitle, raw, at: Date.now(), ms: Date.now() - t0, provider: providerById(aiSettings.provider)?.name || aiSettings.provider, summary: String(j.summary || ''), ...intent };
@@ -1375,8 +1381,21 @@ function Editor() {
     const all = [...g.groups, ...g.nodes];
     const picked = ids0 && ids0.length ? ids0 : selIds().length ? selIds() : all.map((x) => x.id);
     const locked = new Set(all.filter((x) => x.locked).map((x) => x.id));
-    autoArrange(g, picked, isOverlay, locked);
-    if (tryCommit(g)) { toastMsg('자동 정렬했습니다. 마음에 안 들면 Ctrl+Z 로 되돌리십시오.', 3000); setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 30); }
+    const slide = !!viewRef.current?.slideFit;
+    autoArrange(g, picked, isOverlay, locked, { compact: slide });
+    if (tryCommit(g)) {
+      let note = '';
+      if (slide) {
+        const rs = [...absoluteRects(g).values()];
+        if (rs.length) {
+          const x0 = Math.min(...rs.map((r) => r.x)), y0 = Math.min(...rs.map((r) => r.y)), x1 = Math.max(...rs.map((r) => r.x + r.w)), y1 = Math.max(...rs.map((r) => r.y + r.h));
+          const f = slideFitOf(x1 - x0, y1 - y0);
+          note = ` 장표 맞춤: ${f.w}×${f.h} → 장표에 ${Math.round(f.scale * 100)}% 로 들어가고 이름표가 약 ${f.pt.toFixed(1)}pt${f.pt < 7 ? ' (아직 작아요 — AI 정렬로 구도를 다시 잡거나 상자를 합쳐 보세요)' : ' (읽힙니다)'}`;
+        }
+      }
+      toastMsg((slide ? '촘촘하게 정렬했습니다.' : '자동 정렬했습니다.') + note + ' 마음에 안 들면 Ctrl+Z 로 되돌리십시오.', slide ? 7000 : 3000);
+      setTimeout(() => rf.fitView({ padding: 0.08, duration: 300 }), 30);
+    }
   }, [currentGraph, tryCommit, toastMsg, rf]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 레이어: 앞뒤 순서, 잠금, 패널에서 끌어 옮기기
@@ -2185,7 +2204,7 @@ function Editor() {
         ) : panel === 'help' ? (
           <Help isDesktop={isDesktop} ctx={nodes.length === 0 ? 'first' : selectedNodes.length > 1 ? 'align' : selectedEdges.length ? 'connect' : selectedNodes[0]?.type === 'awsGroup' ? 'boxes' : violations.length ? 'pins' : null} onPatch={() => setPanel('patch')} onTour={() => { setPanel(null); setTour(true); }} onCheckUpdate={() => checkUpdate(true)} updBusy={upd.busy} updInfo={upd.info} onToast={toastMsg} stats={{ groups: nodes.filter((n) => n.type === 'awsGroup').length, nodes: nodes.filter((n) => n.type !== 'awsGroup').length, edges: edges.length, mode: docMode, theme }} />
         ) : (
-          <Inspector allNodes={nodes} nodes={selectedNodes} edges={selectedEdges} onChange={updateItem} onChangeMany={updateMany} onWrap={wrapSelection} onGroup={groupSel} onUngroup={ungroupSel} onAlign={alignSel} onDistribute={distributeSel} onSameSize={sameSizeSel} onAutoArrange={() => autoArrangeSel()} onAiArrange={() => runAi('arrange')} onCompact={makeCompact} annotations={annotationsRef.current} violations={violations} onShowRules={() => setPanel('rules')} onStartGuide={startGuide} onAsk={(p) => runAi('ask', askAboutText(p))} stats={{ groups: nodes.filter((n) => n.type === 'awsGroup').length, icons: nodes.filter((n) => n.type === 'awsIcon').length, edges: edges.length }} />
+          <Inspector allNodes={nodes} nodes={selectedNodes} edges={selectedEdges} onChange={updateItem} onChangeMany={updateMany} onWrap={wrapSelection} onGroup={groupSel} onUngroup={ungroupSel} onAlign={alignSel} onDistribute={distributeSel} onSameSize={sameSizeSel} onAutoArrange={() => autoArrangeSel()} onAiArrange={() => runAi('arrange')} onCompact={makeCompact} slideFit={!!view.slideFit} onSlideFit={() => setView({ slideFit: !view.slideFit })} annotations={annotationsRef.current} violations={violations} onShowRules={() => setPanel('rules')} onStartGuide={startGuide} onAsk={(p) => runAi('ask', askAboutText(p))} stats={{ groups: nodes.filter((n) => n.type === 'awsGroup').length, icons: nodes.filter((n) => n.type === 'awsIcon').length, edges: edges.length }} />
         )}
       </aside>
 
@@ -2335,7 +2354,7 @@ function TemplateMenu({ builtin, user, onPick, onSave, onSavePiece, onDelete, ha
 }
 
 // ---------------------------------------------------------------------------------------------
-function Inspector({ nodes, edges, onChange, onChangeMany, onWrap, onGroup, onUngroup, onAutoArrange, onAiArrange, onCompact, onAlign, onDistribute, onSameSize, annotations, violations, onShowRules, onStartGuide, onAsk, stats, allNodes = [] }) {
+function Inspector({ nodes, edges, onChange, onChangeMany, onWrap, onGroup, onUngroup, onAutoArrange, onAiArrange, onCompact, slideFit = false, onSlideFit, onAlign, onDistribute, onSameSize, annotations, violations, onShowRules, onStartGuide, onAsk, stats, allNodes = [] }) {
   const catalog = useCatalog();
   const parentName = (id) => { const p = allNodes.find((n) => n.id === id); return p?.data?.label || catalog.kinds.get(p?.data?.kind)?.name || '그룹'; };
   const one = nodes.length + edges.length === 1 ? (nodes[0] || edges[0]) : null;
@@ -2369,6 +2388,7 @@ function Inspector({ nodes, edges, onChange, onChangeMany, onWrap, onGroup, onUn
                   <button className="al" title="가로 간격 같게 (3개 이상)" aria-label="가로 간격 같게" disabled={nodes.length < 3} onClick={() => onDistribute('h')}><AlignIcon kind="dist-h" /></button>
                   <button className="al" title="세로 간격 같게 (3개 이상)" aria-label="세로 간격 같게" disabled={nodes.length < 3} onClick={() => onDistribute('v')}><AlignIcon kind="dist-v" /></button>
                   <button className="al wide" title="그룹·카드 크기를 가장 큰 것에 맞춤" onClick={() => onSameSize('both')}>크기 맞추기</button>
+                  <button className={'al wide' + (slideFit ? ' on' : '')} title="켜면 기본 정렬·AI 정렬이 PPT 한 장에 맞게 촘촘하게 배치합니다(간격·여백 반, AI 는 더 작은 틀). 정렬 뒤 장표에 들어가는 비율과 글자 크기를 알려 줍니다" aria-pressed={slideFit} onClick={() => onSlideFit?.()}>{slideFit ? '☑' : '☐'} 장표 맞춤</button>
                   <button className="al wide primary" title="연결 흐름(왼쪽→오른쪽)대로 자리를 잡고, 빈 공간을 줄이고, 상자 크기·간격과 아이콘 줄을 맞춥니다 (Ctrl+Z 로 되돌리기)" onClick={() => onAutoArrange()}><Icon name="sparkle" size={14} /> 기본 정렬</button>
                   <button className="al wide" title="AI 가 역할을 보고 구역 순서(입구 왼쪽 → 핵심 → 데이터 → 사내 오른쪽)와 상자 안 순서를 정하면, 기본 정렬이 그 순서대로 자리를 잡습니다. 1분쯤 걸림 (Ctrl+Z 로 되돌리기)" onClick={() => onAiArrange()}><Icon name="sparkle" size={14} /> AI 정렬</button>
                 </div>
@@ -2391,6 +2411,7 @@ function Inspector({ nodes, edges, onChange, onChangeMany, onWrap, onGroup, onUn
               : stats.groups + stats.icons > 0 && <p className="ok">규칙 위반 없음</p>}
             {stats.groups + stats.icons > 1 && (
               <div className="align-row" role="group" aria-label="전체 정렬">
+                <button className={'al wide' + (slideFit ? ' on' : '')} title="켜면 기본 정렬·AI 정렬이 PPT 한 장에 맞게 촘촘하게 배치합니다(간격·여백 반, AI 는 더 작은 틀). 정렬 뒤 장표에 들어가는 비율과 글자 크기를 알려 줍니다" aria-pressed={slideFit} onClick={() => onSlideFit?.()}>{slideFit ? '☑' : '☐'} 장표 맞춤</button>
                 <button className="al wide primary" title="연결 흐름(왼쪽→오른쪽)대로 자리를 잡고, 빈 공간을 줄이고, 상자 크기·간격과 아이콘 줄을 맞춥니다 (Ctrl+Z 로 되돌리기)" onClick={() => onAutoArrange()}><Icon name="sparkle" size={14} /> 기본 정렬</button>
                 <button className="al wide" title="AI 가 역할을 보고 구역 순서(입구 왼쪽 → 핵심 → 데이터 → 사내 오른쪽)와 상자 안 순서를 정하면, 기본 정렬이 그 순서대로 자리를 잡습니다. 1분쯤 걸림 (Ctrl+Z 로 되돌리기)" onClick={() => onAiArrange()}><Icon name="sparkle" size={14} /> AI 정렬</button>
               </div>

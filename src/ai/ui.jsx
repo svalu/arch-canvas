@@ -458,7 +458,7 @@ export function AiPanel({ context, onContext, settings, verified, onOpenConnect,
               <div className="turn-user"><span className="log-k draw">정렬</span><div className="log-q">{r.request || 'AI 정렬'}</div></div>
               <div className="turn-ai">
                 {r.summary && <p className="summary">{boldText(r.summary)}</p>}
-                <p className={r.blocked ? 'hint' : 'ok'}>{r.blocked ? '규칙 검사에서 막혀 적용하지 않았습니다.' : `배치했어요 · ${r.placed}개${r.size ? ` · ${r.size.w}×${r.size.h} (${(r.size.w / r.size.h).toFixed(1)}:1)` : ''}${r.crossings > 0 ? ` · 선이 아이콘을 지나는 곳 ${r.crossings}건` : ''} · 되돌리기 Ctrl+Z`}</p>
+                <p className={r.blocked ? 'hint' : 'ok'}>{r.blocked ? '규칙 검사에서 막혀 적용하지 않았습니다.' : `배치했어요 · ${r.placed}개${r.size ? ` · ${r.size.w}×${r.size.h} (${(r.size.w / r.size.h).toFixed(1)}:1)` : ''}${r.crossings > 0 ? ` · 선이 아이콘을 지나는 곳 ${r.crossings}건` : ''}${r.slide ? ` · 장표에 ${Math.round(r.slide.scale * 100)}% (이름표 약 ${r.slide.pt.toFixed(1)}pt${r.slide.pt < 7 ? ', 아직 작음' : ', 읽힘'})` : ''} · 되돌리기 Ctrl+Z`}</p>
                 {r.ops?.length > 0 && <details className="more"><summary>구도 변경 {r.ops.length}개 보기</summary><ol className="ops">{describeOps(r.ops, nameOf).map((t, i) => <li key={i}>{t}</li>)}</ol></details>}
                 {r.crossings > 0 && <p className="hint">남은 관통은 그 아이콘을 옆 열이나 아래 행으로 옮기면 없어져요. "Lens 는 Connect 위에 한 줄로" 처럼 적어 다시 정렬시켜도 됩니다.</p>}
                 {r.retried && !r.retried.ok && <p className="hint">점검 뒤 한 번 더 나눠 봤지만 더 나아지지 않아 1차 결과를 두었어요.</p>}

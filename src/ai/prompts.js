@@ -111,16 +111,18 @@ const CARD_NOTE = `\n\n이 다이어그램은 "솔루션 구성도"(카드 모�
 const CARD_DRAW_NOTE = `\n\n카드 모드다: 기능 블록은 {"op":"add_card","id"?,"icon"?,"label":"제목","body":"설명 1~2줄","parent"?,"w"?,"h"?} 로, 묶음은 {"op":"add_group","kind":"section","label":"섹션 이름","color"?:"#RRGGBB"} 로 만든다. 아이콘 노드(add_node)보다 카드를 우선 쓴다.`;
 
 export const FRAME = { w: 1840, h: 960 };   // 16:9 장표 한 칸의 사용 영역(px). 제목 띠를 뺀 크기
-export const ARRANGE_SYSTEM = `${COMMON_SYSTEM}
+/** 장표 맞춤: 이 크기면 장표 그림 영역(1020×501px)에 67% 로 줄여 들어가고 이름표가 7pt 로 읽힌다 */
+export const SLIDE_FRAME = { w: 1520, h: 750 };
+export const arrangeSystem = (frame = FRAME) => `${COMMON_SYSTEM}
 
 역할: 다이어그램을 제안서 장표(16:9 한 칸)에 "딱 들어가고 읽히는 구도"로 다시 잡는다. 너는 PowerPoint 에서 손으로 배치하는 디자이너처럼 생각한다: 틀이 정해져 있고, 요소 크기를 알고, 행과 열로 놓는다.
 
 ## 틀과 크기 (px)
-- 장표 사용 영역: 가로 ${FRAME.w} × 세로 ${FRAME.h}. 결과 전체가 이 안에 들어가야 한다(조금 넘으면 축소되지만, 가로:세로가 1.6~2.0 이어야 글자가 읽힌다).
+- 장표 사용 영역: 가로 ${frame.w} × 세로 ${frame.h}. 결과 전체가 이 안에 들어가야 한다(조금 넘으면 축소되지만, 가로:세로가 1.6~2.0 이어야 글자가 읽힌다).
 - 아이콘 한 칸: 가로 120 × 세로 82 (아이콘 48 + 이름표 2줄). 이름표가 3줄 이상이면 세로 100.
 - 상자: 안의 격자 크기 + 여백 48(가로) / 72(세로, 제목 포함). 상자 하나가 아이콘 4개를 한 줄로 품으면 약 540 × 160.
 - 격자 간격: 24.
-예산 감각: 가로 ${FRAME.w} 에는 아이콘 칸 12개 또는 폭 540 상자 3개가 들어간다. 세로 ${FRAME.h} 에는 아이콘 행 8개 또는 높이 160 상자 5개.
+예산 감각: 가로 ${frame.w} 에는 아이콘 칸 ${Math.floor(frame.w / 150)}개 또는 폭 540 상자 ${Math.floor(frame.w / 564)}개가 들어간다. 세로 ${frame.h} 에는 아이콘 행 ${Math.floor(frame.h / 112)}개 또는 높이 160 상자 ${Math.floor(frame.h / 184)}개.
 
 ## 두 단계
 1) 구도 재해석(ops, 선택): 읽는 데 방해되면 고친다.
@@ -149,6 +151,20 @@ export const ARRANGE_SYSTEM = `${COMMON_SYSTEM}
     "data": [["vpc"],["lambda","apigw"],["ddb","glue","athena","quicksight"],["s3","kms"],["cw"]]
   }
 }`;
+/** 장표 맞춤(작은 틀)일 때 덧붙이는 규칙: 세로 예산이 빡빡하므로 쌓지 말고 접고, 빈 껍데기 상자를 걷어내고, 이름표를 줄인다 */
+const SLIDE_NOTE = (frame) => `
+
+## 장표 맞춤 모드 (틀 ${frame.w}×${frame.h} — PPT 한 장에 읽히게 들어가야 한다)
+세로 ${frame.h} 가 특히 빡빡하다. 지켜라:
+- 아이콘을 세로 1열로 4개 이상 쌓지 않는다. 같은 상자 안 아이콘이 4개 이상이면 2열 격자(한 행에 2~4개)로 둔다.
+- 아이콘 하나만 품는 상자(AZ 하나에 서브넷 하나에 EC2 하나 같은 껍데기)는 remove 하고 아이콘을 그 부모로 move_into 한다. 중첩은 3단계(리전 > VPC > 서브넷)까지만.
+- 이름표는 update 로 한 줄(12자 안)로 줄인다. 괄호 설명은 뺀다.
+- 최상위 행은 2행 이상으로 나눠 가로 ${frame.w} 안에 넣는다.`;
+export const ARRANGE_SYSTEM = arrangeSystem(FRAME);
+export const isSlideFrame = (frame) => !!frame && frame.w < 1700;
+// 작은 틀이면 장표 맞춤 규칙을 덧붙인다
+export const arrangeSystemFor = (frame = FRAME) => arrangeSystem(frame) + (isSlideFrame(frame) ? SLIDE_NOTE(frame) : '');
+
 
 /** 첨부 그림이 있을 때 사용자 프롬프트 끝에 붙이는 안내 */
 export function imagesNote(images) {
@@ -158,25 +174,31 @@ export function imagesNote(images) {
 /** 그림이 있을 때 시스템 프롬프트 앞에 붙이는 한 줄(CLI 는 Read 도구로 열어야 보인다) */
 export const IMAGES_SYSTEM = `사용자가 그림을 첨부했다. 답하기 전에 반드시 그림을 본다: 프롬프트에 "# 첨부 그림" 절과 파일 경로가 있으면 Read 도구로 그 파일을 전부 열어 보고(이미 메시지에 그림이 들어 있으면 그것을 본다), 그림 내용을 근거로 답한다.\n\n`;
 
-export function buildArrangeMessages(graph, catalog, request = '') {
+export function buildArrangeMessages(graph, catalog, request = '', frame = FRAME) {
   const want = request && request.trim() ? `\n\n# 사용자가 이번 정렬에서 바라는 것 (최우선으로 따른다)\n${request.trim()}` : '';
-  const user = `# 제안서 컨텍스트\n${contextText(graph.context)}\n\n# 현재 다이어그램: ${graph.title}\n${summarizeGraph(graph, catalog)}${want}\n\n# 배치 요청\n위 다이어그램을 ${FRAME.w}×${FRAME.h} 틀에 들어가는 구도로 다시 잡아 출력 형식대로 JSON 으로 적어라. 부모마다 직접 자식 id 만 쓰고(손자는 그 부모 항목에), id 는 위 목록의 것을 그대로 쓴다.${want ? ' 사용자가 바라는 것을 먼저 반영한다.' : ''}`;
-  return { system: ARRANGE_SYSTEM, user };
+  const user = `# 제안서 컨텍스트\n${contextText(graph.context)}\n\n# 현재 다이어그램: ${graph.title}\n${summarizeGraph(graph, catalog)}${want}\n\n# 배치 요청\n위 다이어그램을 ${frame.w}×${frame.h} 틀에 들어가는 구도로 다시 잡아 출력 형식대로 JSON 으로 적어라. 부모마다 직접 자식 id 만 쓰고(손자는 그 부모 항목에), id 는 위 목록의 것을 그대로 쓴다.${want ? ' 사용자가 바라는 것을 먼저 반영한다.' : ''}`;
+  return { system: arrangeSystemFor(frame), user };
 }
 
 /** 1차 결과가 틀에 안 맞을 때 한 번 더: 지금 크기를 알려 주고 행만 다시 나누게 한다(ops 는 이미 적용됨). */
-export function buildArrangeRetryMessages(graph, catalog, measured, crossings = [], request = '') {
+export function buildArrangeRetryMessages(graph, catalog, measured, crossings = [], request = '', frame = FRAME) {
   const sizes = graph.groups.map((x) => `- ${x.id} "${x.label || ''}": ${Math.round(x.w)}×${Math.round(x.h)}`).join('\n');
   const ratio = measured.w / measured.h;
-  const aspectNote = ratio > 2.4 ? `틀 ${FRAME.w}×${FRAME.h}(1.92)에 비해 너무 넓다. 가로로 늘어선 것을 행으로 나눠 쌓아라(최상위 행을 둘로, 또는 넓은 상자 안을 더 많은 행으로).`
-    : ratio < 1.3 ? `틀 ${FRAME.w}×${FRAME.h}(1.92)에 비해 너무 높다. 세로로 쌓인 것을 한 행에 옆으로 펼쳐라.` : '비율은 괜찮다(그대로 두어도 됨).';
+  const aspectNote = ratio > 2.4 ? `틀 ${frame.w}×${frame.h}(${(frame.w / frame.h).toFixed(2)})에 비해 너무 넓다. 가로로 늘어선 것을 행으로 나눠 쌓아라(최상위 행을 둘로, 또는 넓은 상자 안을 더 많은 행으로).`
+    : ratio < 1.3 ? `틀 ${frame.w}×${frame.h}(${(frame.w / frame.h).toFixed(2)})에 비해 너무 높다. 세로로 쌓인 것을 한 행에 옆으로 펼쳐라.` : '비율은 괜찮다(그대로 두어도 됨).';
   const crossNote = crossings.length
     ? `\n\n# 선이 남의 아이콘을 관통하는 곳 (${crossings.length}건) — 이것을 없애는 것이 이번 재배치의 목적이다\n` + crossings.slice(0, 20).map((c) => `- ${c.id}: ${c.source} → ${c.target}${c.label ? ` "${c.label}"` : ''} 이(가) ${c.through.join(', ')} 을(를) 지나간다`).join('\n')
       + `\n고치는 법: 관통당하는 아이콘과 선의 대상이 같은 행에 줄줄이 있으면, 대상들을 허브 옆 열에 세로로 쌓거나 허브 아래 행으로 옮긴다. 사슬(A→B→C)이 아닌 것들을 한 행에 늘어놓지 않는다.`
     : '';
   const want = request && request.trim() ? `\n\n# 사용자가 이번 정렬에서 바라는 것 (최우선)\n${request.trim()}` : '';
-  const user = `# 현재 다이어그램(구도 재해석 적용 뒤): ${graph.title}\n${summarizeGraph(graph, catalog)}${want}\n\n# 1차 배치 결과\n전체 ${Math.round(measured.w)}×${Math.round(measured.h)} (가로:세로 ${ratio.toFixed(2)}) — ${aspectNote}\n상자 크기:\n${sizes}${crossNote}\n\n# 배치 요청\nops 없이 rows 만 다시 적어라(출력 형식의 summary 와 rows). 부모마다 직접 자식 전부를 정확히 한 번씩.`;
-  return { system: ARRANGE_SYSTEM, user };
+  const over = isSlideFrame(frame) && (measured.w > frame.w || measured.h > frame.h)
+    ? `
+
+# 장표 맞춤: 아직 틀보다 크다 — 가로 ${Math.round(measured.w / frame.w * 100)}%, 세로 ${Math.round(measured.h / frame.h * 100)}%
+세로부터 줄여라: 세로 1열로 쌓인 아이콘은 2열 격자로, 껍데기 상자는 remove + move_into, 긴 이름표는 update 로 한 줄로. 행 나누기만으로 안 되면 ops 를 써라.`
+    : '';
+  const user = `# 현재 다이어그램(구도 재해석 적용 뒤): ${graph.title}\n${summarizeGraph(graph, catalog)}${want}\n\n# 1차 배치 결과\n전체 ${Math.round(measured.w)}×${Math.round(measured.h)} (가로:세로 ${ratio.toFixed(2)}) — ${aspectNote}\n상자 크기:\n${sizes}${crossNote}${over}\n\n# 배치 요청\nops 없이 rows 만 다시 적어라(출력 형식의 summary 와 rows). 부모마다 직접 자식 전부를 정확히 한 번씩.`;
+  return { system: arrangeSystemFor(frame), user };
 }
 
 export function buildReviewMessages(graph, catalog, violations) {

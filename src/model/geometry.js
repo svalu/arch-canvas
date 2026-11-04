@@ -399,8 +399,18 @@ export function descendants(g, id) {
   return out;
 }
 
-const PAD = 32;
+let PAD = 32, G = 24;   // 상자 안 여백 · 형제 간격(px). 장표 맞춤(촘촘) 정렬이면 autoArrange 가 잠시 줄인다
+let M = { L: 32, T: 56, R: 32, B: 32 }, FOLD = 3;   // 상자 안 여백(왼·위(이름표)·오른·아래) · 아이콘만 모인 단을 몇 개씩 접을지
+const DENSITY = { normal: { pad: 32, gap: 24, m: { L: 32, T: 56, R: 32, B: 32 }, fold: 3 }, compact: { pad: 18, gap: 12, m: { L: 18, T: 44, R: 18, B: 18 }, fold: 4 } };
 const LABEL_SPACE = 34; // 아이콘 아래 라벨 공간
+
+/** 16:9 장표의 그림 영역(px, 1px = 11250 EMU): 좌우 1cm·위 제목 띠 2.4cm·아래 1cm 를 뺀 자리. export/scene.js SLIDE_BOX 와 같은 값 */
+export const SLIDE_PX = { w: 11472000 / 11250, h: 5634000 / 11250 };
+/** 그림 크기(px)가 장표에 들어가려면 얼마로 줄여야 하는지와 그때 아이콘 이름표 글자 크기(pt, 원래 10.5pt). 작으면 그대로(1) */
+export function slideFitOf(w, h, pt = 10.5) {
+  const scale = Math.min(1, w > 0 ? SLIDE_PX.w / w : 1, h > 0 ? SLIDE_PX.h / h : 1);
+  return { scale, pt: pt * scale, w: Math.round(w), h: Math.round(h) };
+}
 
 /** 자식이 그룹 밖으로 삐져나오면 그룹을 키운다(줄이지는 않음). 안쪽 그룹부터 처리. */
 export function fitGroups(g) {
@@ -545,7 +555,7 @@ function pushSiblings(g, grp, old, GAP) {
  */
 export function tightenGroups(g, ids, isOverlay = () => false) {
   if (!ids?.size) return g;
-  const L = 32, T = 56, R = 32, B = 32;                // 왼쪽·위(이름표 자리)·오른쪽·아래 여백
+  const { L, T, R, B } = M;                             // 왼쪽·위(이름표 자리)·오른쪽·아래 여백 (장표 맞춤이면 작게)
   const half = Math.max(0, (LABEL_WIDTH - ICON_SIZE) / 2);   // 아이콘 이름표가 양옆으로 넘치는 폭
   const depth = depthMap(g);
   const order = g.groups.filter((x) => ids.has(x.id) && !isOverlay(x)).sort((a, b) => depth.get(b.id) - depth.get(a.id));
@@ -777,7 +787,7 @@ function flowSiblings(g, pid, groupIds, nodeIds, isOverlay, GAP = 24, plan = nul
     const key = (i) => { const src = c ? columns[c - 1].filter((u) => W[u][i] || W[i][u]) : []; return src.length ? src.reduce((s, u) => s + at[u], 0) / src.length : null; };
     if (!given) columns[c].sort((i, j) => (key(i) ?? Infinity) - (key(j) ?? Infinity) || rankOf[i] - rankOf[j]);   // 이어진 것이 먼저, 그다음 읽는 순서 (AI 배치안은 그 순서대로)
     // 아이콘만 넷 이상 한 단에 몰리면 길게 늘어놓지 않고 3개씩 접어 격자로
-    const col = columns[c], per = col.every((i) => items[i].icon) && col.length > 3 ? Math.ceil(col.length / Math.ceil(col.length / 3)) : col.length;
+    const col = columns[c], per = col.every((i) => items[i].icon) && col.length > FOLD ? Math.ceil(col.length / Math.ceil(col.length / FOLD)) : col.length;
     let v = 0, m = 0, k = 0;
     for (const i of col) {
       if (k === per) { k = 0; v = 0; m += items[col[0]][len] + GAP; }
@@ -939,7 +949,12 @@ function hugMembers(g, list) {
   }
 }
 
-export function autoArrange(g, ids, isOverlay = () => false, skip = new Set(), { plan = null } = {}) {
+export function autoArrange(g, ids, isOverlay = () => false, skip = new Set(), { plan = null, compact = false } = {}) {
+  const d = compact ? DENSITY.compact : DENSITY.normal;
+  const keep = [PAD, G, M, FOLD]; PAD = d.pad; G = d.gap; M = d.m; FOLD = d.fold;
+  try { return autoArrangeInner(g, ids, isOverlay, skip, plan); } finally { [PAD, G, M, FOLD] = keep; }
+}
+function autoArrangeInner(g, ids, isOverlay, skip, plan) {
   // 흐름 배치 뒤의 줄 맞춤(평균 자리)은 한 번에 자리를 잡지 못할 수 있어, 자리가 더 안 바뀔 때까지(최대 3번) 되풀이한다
   // 3번 안에 안 멈추면(어지럽힌 큰 그림) 그중 가장 작게 나온 결과를 택한다 — 되풀이할수록 커지지 않게
   const snap = () => JSON.stringify([...g.groups.map((x) => [x.x, x.y, x.w, x.h]), ...g.nodes.map((n) => [n.x, n.y])]);
@@ -986,14 +1001,14 @@ function arrangeOnce(g, ids, isOverlay, skip, plan = null) {
   // 흐름대로 단 나누기: 안쪽 상자부터(자식 자리가 정해져야 그 상자 크기가 정해진다). 맨 바깥은 고른 상자끼리만
   const depth = depthMap(g);
   for (const grp of g.groups.filter((x) => groups.has(x.id) && !isOverlay(x)).sort((a, b) => depth.get(b.id) - depth.get(a.id))) {
-    if (flowSiblings(g, grp.id, groups, nodes, isOverlay, 24, plan)) tightenGroups(g, new Set([grp.id]), isOverlay);
+    if (flowSiblings(g, grp.id, groups, nodes, isOverlay, G, plan)) tightenGroups(g, new Set([grp.id]), isOverlay);
   }
-  flowSiblings(g, null, groups, nodes, isOverlay, 24, plan);
+  flowSiblings(g, null, groups, nodes, isOverlay, G, plan);
   // 맨 바깥 상자·아이콘끼리도 겹치거나 동떨어지지 않게 (선택에 든 것만)
-  tidySiblings(g.groups.filter((x) => !x.parent && !isOverlay(x) && groups.has(x.id)), g.nodes.filter((n) => !n.parent && nodes.has(n.id)));
+  tidySiblings(g.groups.filter((x) => !x.parent && !isOverlay(x) && groups.has(x.id)), g.nodes.filter((n) => !n.parent && nodes.has(n.id)), G);
   alignNodes(g, nodes);
   fitGroups(g);
-  separate(g, new Set([...groups, ...nodes]), isOverlay);
+  separate(g, new Set([...groups, ...nodes]), isOverlay, G);
   hugMembers(g, overlayMembers);
   trimGroups(g, groups, isOverlay);
   const B1 = box(absoluteRects(g));

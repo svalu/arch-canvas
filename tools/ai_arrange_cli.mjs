@@ -6,14 +6,16 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { normalizeGraph } from '../src/model/schema.js';
-import { buildArrangeMessages, parseJsonReply } from '../src/ai/prompts.js';
-import { autoArrange, absoluteRects, lineCrossings } from '../src/model/geometry.js';
+import { buildArrangeMessages, parseJsonReply, FRAME, SLIDE_FRAME } from '../src/ai/prompts.js';
+import { autoArrange, absoluteRects, lineCrossings, slideFitOf } from '../src/model/geometry.js';
 import { LABEL_DROP } from '../src/model/schema.js';
 import { isOverlay } from '../src/model/contain.js';
 import { applyPatch, alignParentsToPlan, bundleEdges } from '../src/model/patch.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
+const slideAt = args.indexOf('--slide');
+const slide = slideAt >= 0 && !!args.splice(slideAt, 1);   // 장표 맞춤: 작은 틀(1520×750) + 촘촘한 배치
 const replyAt = args.indexOf('--reply');
 const replyFile = replyAt >= 0 ? args.splice(replyAt, 2)[1] : null;
 const [inFile, outFile] = args;
@@ -21,7 +23,7 @@ if (!inFile) { console.error('사용: node tools/ai_arrange_cli.mjs <graph.json>
 const data = JSON.parse(fs.readFileSync(path.join(root, 'data/icons.json'), 'utf8'));
 const catalog = { icons: new Map(data.icons.map((i) => [i.key, i])), kinds: new Map(data.groupKinds.map((k) => [k.id, k])) };
 const g = normalizeGraph(JSON.parse(fs.readFileSync(inFile, 'utf8')));
-const { system, user } = buildArrangeMessages(g, catalog);
+const { system, user } = buildArrangeMessages(g, catalog, '', slide ? SLIDE_FRAME : FRAME);
 
 let text;
 if (replyFile) text = fs.readFileSync(replyFile, 'utf8');
@@ -56,12 +58,13 @@ for (const k of Object.keys(plan)) {
 }
 const before = absoluteRects(g2);
 const ids = [...g2.groups.map((x) => x.id), ...g2.nodes.map((x) => x.id)];
-autoArrange(g2, ids, isOverlay, new Set([...g2.groups, ...g2.nodes].filter((x) => x.locked).map((x) => x.id)), { plan });
+autoArrange(g2, ids, isOverlay, new Set([...g2.groups, ...g2.nodes].filter((x) => x.locked).map((x) => x.id)), { plan, compact: slide });
 const after = absoluteRects(g2);
 let moved = 0;
 for (const [id, r] of after) { const b = before.get(id); if (b && (Math.abs(b.x - r.x) > 1 || Math.abs(b.y - r.y) > 1)) moved++; }
 console.log(`moved ${moved} / ${after.size}`);
 { const rs = [...after.values()]; const x0 = Math.min(...rs.map((r) => r.x)), y0 = Math.min(...rs.map((r) => r.y)), x1 = Math.max(...rs.map((r) => r.x + r.w)), y1 = Math.max(...rs.map((r) => r.y + r.h)); console.log(`bbox ${Math.round(x1 - x0)}×${Math.round(y1 - y0)} aspect ${((x1 - x0) / (y1 - y0)).toFixed(2)}`); }
 { const lab = new Set(g2.nodes.filter((n) => n.type !== 'card' && n.type !== 'text' && n.type !== 'badge' && n.label).map((n) => n.id)); const cr = lineCrossings(g2, (id) => (lab.has(id) ? LABEL_DROP : 0)); console.log(`crossings ${cr.length}` + (cr.length ? ': ' + cr.slice(0, 8).map((c) => `${c.source}→${c.target} via ${c.through.join('/')}`).join(' | ') : '')); }
+{ const rs = [...after.values()]; const x0 = Math.min(...rs.map((r) => r.x)), y0 = Math.min(...rs.map((r) => r.y)), x1 = Math.max(...rs.map((r) => r.x + r.w)), y1 = Math.max(...rs.map((r) => r.y + r.h)); const f = slideFitOf(x1 - x0, y1 - y0); console.log(`slide fit: ${f.w}×${f.h} → ${Math.round(f.scale * 100)}% · 이름표 ${f.pt.toFixed(1)}pt${slide ? ' (장표 맞춤)' : ''}`); }
 console.log('top-level order:', g2.groups.filter((x) => !x.parent && !isOverlay(x)).sort((a, b) => a.x - b.x).map((x) => `${x.id}@${x.x}`).join(' '));
 if (outFile) fs.writeFileSync(outFile, JSON.stringify(g2, null, 1));
