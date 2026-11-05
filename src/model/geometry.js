@@ -673,7 +673,7 @@ const planFor = (plan, pid) => {
  */
 function layoutGrid(items, idx, rows, GAP) {
   // 칸: 행마다 id 를 왼쪽부터. 같은 id 가 아래 행의 같은 열에 또 나오면 세로로 걸친다(rowspan). 다른 열에 또 나오면 무시
-  const cell = new Map();   // item idx → { r0, r1, c }
+  const cell = new Map();   // item idx → { r0, r1, c, dy }  (dy = 같은 칸에 세로로 쌓였을 때 위에서부터의 자리)
   const grid = [];
   for (const row of rows) {
     const r = grid.length, line = [];
@@ -681,16 +681,33 @@ function layoutGrid(items, idx, rows, GAP) {
       const i = idx.get(String(id));
       if (i == null) return;
       const have = cell.get(i);
-      if (!have) { cell.set(i, { r0: r, r1: r, c }); line.push(i); }
+      if (!have) { cell.set(i, { r0: r, r1: r, c, dy: 0 }); line.push(i); }
       else if (have.c === c && have.r1 === r - 1) { have.r1 = r; line.push(i); }
     });
     if (line.length) grid.push(line);
   }
   const rest = items.map((_, i) => i).filter((i) => !cell.has(i));
-  if (rest.length) { const r = grid.length; rest.forEach((i, c) => cell.set(i, { r0: r, r1: r, c })); grid.push(rest); }
+  if (rest.length) { const r = grid.length; rest.forEach((i, c) => cell.set(i, { r0: r, r1: r, c, dy: 0 })); grid.push(rest); }
+  // 키 큰 것(상자) 옆에 작은 것(아이콘)들이 한 줄로 늘어서면 행이 상자 키만큼 높아져 아이콘 아래가 텅 빈다.
+  // 그런 행은 작은 것들을 세로로 쌓아 키를 맞춘다 (행 순서는 그대로, 걸친 칸은 손대지 않는다)
+  for (let r = 0; r < grid.length; r++) {
+    const own = grid[r].filter((i) => cell.get(i).r0 === r && cell.get(i).r1 === r);
+    if (own.length < 3) continue;
+    const tall = Math.max(...own.map((i) => items[i].h));
+    const shorts = own.filter((i) => items[i].h <= tall * 0.55);
+    if (shorts.length < 2 || shorts.length === own.length) continue;
+    const order = [...grid[r]].sort((p, q) => cell.get(p).c - cell.get(q).c);
+    let col = -1, stackH = Infinity;
+    for (const i of order) {
+      const s = cell.get(i);
+      if (s.r0 !== r || s.r1 !== r) { col++; s.c = col; stackH = Infinity; continue; }
+      if (items[i].h <= tall * 0.55 && stackH + GAP + items[i].h <= tall) { s.c = col; s.dy = stackH + GAP; stackH += GAP + items[i].h; }
+      else { col++; s.c = col; s.dy = 0; stackH = items[i].h; }
+    }
+  }
   const nrow = grid.length, ncol = Math.max(...[...cell.values()].map((s) => s.c)) + 1;
   const colW = Array.from({ length: ncol }, () => 0), rowH = Array.from({ length: nrow }, () => 0);
-  for (const [i, s] of cell) { colW[s.c] = Math.max(colW[s.c], items[i].w); if (s.r0 === s.r1) rowH[s.r0] = Math.max(rowH[s.r0], items[i].h); }
+  for (const [i, s] of cell) { colW[s.c] = Math.max(colW[s.c], items[i].w); if (s.r0 === s.r1) rowH[s.r0] = Math.max(rowH[s.r0], s.dy + items[i].h); }
   for (const [i, s] of cell) {   // 걸친 것: 걸친 행들의 합이 모자라면 마지막 행을 늘린다
     if (s.r0 === s.r1) continue;
     let sum = 0; for (let r = s.r0; r <= s.r1; r++) sum += rowH[r]; sum += GAP * (s.r1 - s.r0);
@@ -700,7 +717,7 @@ function layoutGrid(items, idx, rows, GAP) {
   const xs = [x0], ys = [y0];
   for (let c = 1; c < ncol; c++) xs[c] = xs[c - 1] + colW[c - 1] + GAP;
   for (let r = 1; r < nrow; r++) ys[r] = ys[r - 1] + rowH[r - 1] + GAP;
-  for (const [i, s] of cell) { items[i].x = xs[s.c]; items[i].y = ys[s.r0]; }
+  for (const [i, s] of cell) { items[i].x = xs[s.c]; items[i].y = ys[s.r0] + s.dy; }
 }
 
 function flowSiblings(g, pid, groupIds, nodeIds, isOverlay, GAP = 24, plan = null) {

@@ -47,4 +47,5 @@ try {
   console.log('calls:', await evaluate('JSON.stringify(window.__calls)'));
   if (logs.length) console.log('console:', logs.slice(-20).join('\n'));
   if (out) { await sleep(500); const shot = await send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(out, Buffer.from(shot.result.data, 'base64')); console.log('saved', out); }
+  if (out) { fs.writeFileSync(out.replace(/\.png$/i, '') + '.graph.json', await evaluate('JSON.stringify(window.__arch.graph())')); console.log('graph saved'); }
 } finally { try { ws?.close(); } catch { /* */ } child.kill(); }
