@@ -102,7 +102,7 @@ export function portOffsets(edges, rects, drops = () => 0, icons = null) {
     list.forEach((p, i) => { get(p.e.id)[p.end] = Math.round((i - (list.length - 1) / 2) * gap * 10) / 10; });
   }
   staggerBends(edges, rects, drops, bySide, out, busKeys);
-  if (icons) detourEdges(edges, rects, drops, out, icons);
+  if (icons) { detourEdges(edges, rects, drops, out, icons); placeLabels(edges, rects, drops, out, icons); }
   return out;
 }
 
@@ -207,6 +207,70 @@ function detourEdges(edges, rects, drops, out, icons) {
     list.sort((p, q) => (p.id < q.id ? -1 : 1));
     const base = list[0].m - ((list.length - 1) * LANE) / 2;
     list.forEach((d, i) => { const m = base + i * LANE; const o = out.get(d.id); if (o && d.span) o.b = Math.round(((m - d.p1) / d.span) * 1000) / 1000; });
+  }
+}
+
+/** 선 이름표가 차지하는 자리(px) 추정: 한글 10px·영숫자 6px + 여백, 높이 18. 캔버스 알약과 PPT 글상자 둘 다 이 안팎 */
+export function labelBox(label, mid) {
+  let w = 12; for (const ch of String(label || '')) w += ch.charCodeAt(0) > 0x7f ? 10 : 6;
+  w = Math.min(w, 140);
+  return { x: mid.x - w / 2, y: mid.y - 9, w, h: 18 };
+}
+const rectHit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+const segHitsRect = (p, q, r) => { const x0 = Math.min(p.x, q.x), x1 = Math.max(p.x, q.x), y0 = Math.min(p.y, q.y), y1 = Math.max(p.y, q.y); return x1 >= r.x && x0 <= r.x + r.w && y1 >= r.y && y0 <= r.y + r.h; };
+/**
+ * 이름표 자리 고르기: 직각선은 첫 구간·가운데 구간·마지막 구간 세 자리가 있다(짧은 가지는 가운데로 떨어진다).
+ * 후보마다 아이콘(이름표 포함)·다른 선·먼저 정한 이름표와 겹치는 정도를 재서 가장 덜 겹치는 자리를 lb 로 적는다.
+ * 줄기(bus)·우회가 이미 정한 자리는 조금 우대한다(분명히 나쁠 때만 옮긴다).
+ */
+function placeLabels(edges, rects, drops, out, icons) {
+  const labeled = edges.filter((e) => e.label);
+  if (!labeled.length) return;
+  // 모든 선의 꺾인 점들(포트·우회 반영)
+  const polys = new Map();
+  for (const e of edges) {
+    const a = endRect(rects, e.source, e.sp), b = endRect(rects, e.target, e.tp);
+    if (!a || !b) continue;
+    const po = out.get(e.id) || {};
+    const geo = edgeGeometry(a, b, drops(e.source), drops(e.target), po.s || 0, po.t || 0, po.sd || null);
+    polys.set(e.id, { geo, pts: elbowPoints(geo, e.shape, typeof e.bend === 'number' ? e.bend : po.b) });
+  }
+  // 아이콘 자리: 아이콘 + 아래 이름표(양옆으로 넘치는 폭까지)
+  const half = Math.max(0, (LABEL_WIDTH - ICON_SIZE) / 2);
+  const iconBoxes = [...icons].map(([id, r]) => ({ id, x: r.x - half, y: r.y, w: r.w + half * 2, h: r.h + LABEL_SPACE }));
+  const placed = [];
+  for (const e of labeled) {
+    const P = polys.get(e.id);
+    if (!P || P.pts.length < 2) continue;
+    const po = out.get(e.id) || { s: 0, t: 0 };
+    const bend = typeof e.bend === 'number' ? e.bend : po.b;
+    const cur = edgePath(P.geo, e.shape, bend, po.lb || null).mid;   // 지금 자리(줄기 가지·우회가 정한 것)
+    const cands = [];
+    // 후보: 구간마다 30·50·70% 자리 × (선 위 / 선 옆 13px 위아래)
+    for (let i = 0; i + 1 < P.pts.length; i++) {
+      const a = P.pts[i], b = P.pts[i + 1];
+      const horizontal = Math.abs(a.y - b.y) < 1, L = Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
+      if (L < 36) continue;
+      for (const t of [0.5, 0.3, 0.7]) {
+        const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+        for (const o of [0, -13, 13]) {
+          const mid = horizontal ? { x: p.x, y: p.y + o } : { x: p.x + o, y: p.y };
+          const box = labelBox(e.label, mid);
+          let score = (o ? 1 : 0) + (t === 0.5 ? 0 : 0.5);
+          for (const ib of iconBoxes) if (ib.id !== e.source && ib.id !== e.target && rectHit(box, ib)) score += 10;
+          for (const [id, Q] of polys) { if (id === e.id) continue; for (let k2 = 0; k2 + 1 < Q.pts.length; k2++) if (segHitsRect(Q.pts[k2], Q.pts[k2 + 1], box)) { score += 6; break; } }
+          if (o) { let own = 0; for (let k2 = 0; k2 + 1 < P.pts.length; k2++) if (k2 !== i && segHitsRect(P.pts[k2], P.pts[k2 + 1], box)) own++; score += own * 3; }   // 자기 선의 다른 구간(꺾인 데)에 걸치면 조금 감점
+          for (const pb of placed) if (rectHit(box, pb)) score += 8;
+          if (Math.abs(mid.x - cur.x) < 1 && Math.abs(mid.y - cur.y) < 1) score -= 2;
+          cands.push({ mid, box, score });
+        }
+      }
+    }
+    if (!cands.length) continue;
+    cands.sort((p, q) => p.score - q.score);
+    const best = cands[0];
+    placed.push(best.box);
+    if (Math.abs(best.mid.x - cur.x) >= 1 || Math.abs(best.mid.y - cur.y) >= 1) out.set(e.id, { ...po, lb: { x: Math.round(best.mid.x), y: Math.round(best.mid.y) } });
   }
 }
 
@@ -365,6 +429,7 @@ export const isBent = (geo, shape) => shape === 'elbow' && Math.abs(geo.p1.x - g
 
 /** labelAt: 'start' = 첫 구간 가운데, 'end' = 마지막 구간 가운데(줄기에서 갈라진 가지), 그 밖은 가운데 구간. 가지가 짧으면(70px 미만) 가운데로 */
 export function edgePath(geo, shape, bend, labelAt = null) {
+  if (labelAt && typeof labelAt === 'object') { const r = edgePath(geo, shape, bend, null); return { d: r.d, mid: { x: labelAt.x, y: labelAt.y } }; }   // placeLabels 가 고른 자리
   const { p1, p2, horizontal } = geo;
   const k = bendOf(bend);
   const straightish = Math.abs(p1.x - p2.x) < 1 || Math.abs(p1.y - p2.y) < 1;
