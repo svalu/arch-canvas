@@ -137,22 +137,32 @@ function iconsCrossed(pts, icons, skip) {
  * 후보는 (가로/세로 × 면 조합) × (가운데, 관통하는 아이콘들의 위아래/좌우 16px 바깥). 관통이 가장 적고 짧은 것을 고르고,
  * 원래 길보다 나아질 때만 바꾼다. PowerPoint 는 bentConnector3 의 adj 가 범위 밖이어도 그대로 그린다.
  */
+const BOX_COST = 3000, LANE = 8;   // 남의 상자 관통 벌점(아이콘 10000 보다 약함) · 같은 통로를 타는 선들의 간격(px)
 function detourEdges(edges, rects, drops, out, icons) {
+  const boxes = icons.boxes || null;
+  const chain = (id) => { const s = new Set(); let p = id, guard = 0; while (p != null && guard++ < 64) { s.add(p); p = boxes.parentOf.get(p) ?? null; } return s; };
+  const laneList = [];   // 통로를 탄 선들: 나중에 같은 통로끼리 차선을 띄운다
   for (const e of edges) {
     if (e.shape !== 'elbow' || typeof e.bend === 'number') continue;   // 사용자가 꺾임을 옮긴 선은 그대로
     const a = endRect(rects, e.source, e.sp), b = endRect(rects, e.target, e.tp);
     if (!a || !b) continue;
     const po = out.get(e.id) || { s: 0, t: 0 };
     const skip = new Set([e.source, e.target]);
+    // 남의 상자: 양 끝의 조상이 아닌 상자. 그 안을 지나면 벌점
+    let foreign = null;
+    if (boxes) { const anc = new Set([...(e.source ? chain(e.source) : []), ...(e.target ? chain(e.target) : [])]); foreign = new Map([...boxes.rects].filter(([id]) => !anc.has(id))); }
     const geo0 = edgeGeometry(a, b, drops(e.source), drops(e.target), po.s || 0, po.t || 0, po.sd || null);
-    const cur = iconsCrossed(elbowPoints(geo0, 'elbow', po.b), icons, skip);
-    if (!cur.length) continue;
+    const pts0 = elbowPoints(geo0, 'elbow', po.b);
+    const cur = iconsCrossed(pts0, icons, skip);
+    const curB = foreign ? iconsCrossed(pts0, foreign, skip).length : 0;
+    if (!cur.length && !curB) continue;
     const dx = b.x + b.w / 2 - (a.x + a.w / 2), dy = b.y + b.h / 2 - (a.y + a.h / 2);
     const pairs = [
       [dx >= 0 ? 'r' : 'l', dx >= 0 ? 'l' : 'r'], ['r', 'r'], ['l', 'l'],
       [dy >= 0 ? 'b' : 't', dy >= 0 ? 't' : 'b'], ['b', 'b'], ['t', 't'],
     ];
     const len = (pts) => { let L = 0; for (let i = 0; i + 1 < pts.length; i++) L += Math.abs(pts[i + 1].x - pts[i].x) + Math.abs(pts[i + 1].y - pts[i].y); return L; };
+    const cost0 = cur.length * 10000 + curB * BOX_COST + len(pts0);
     let best = null;
     for (const pair of pairs) {
       const geo = edgeGeometry(a, b, drops(e.source), drops(e.target), 0, 0, pair);
@@ -165,7 +175,7 @@ function detourEdges(edges, rects, drops, out, icons) {
       const lo = horizontal ? Math.min(p1.x, p2.x) : Math.min(p1.y, p2.y), hi = horizontal ? Math.max(p1.x, p2.x) : Math.max(p1.y, p2.y);
       const ms = [];
       if (!same) ms.push((lo + hi) / 2);
-      for (const [id, r] of icons) {
+      for (const [id, r] of [...icons, ...(foreign ? foreign : [])]) {
         if (skip.has(id)) continue;
         const c1 = horizontal ? r.x - DETOUR_GAP - HALO_PAD : r.y - DETOUR_GAP - HALO_PAD, c2 = horizontal ? r.x + r.w + DETOUR_GAP + HALO_PAD : r.y + r.h + DETOUR_GAP + HALO_PAD;
         for (const m of [c1, c2]) {
@@ -178,11 +188,25 @@ function detourEdges(edges, rects, drops, out, icons) {
         const k = (m - (horizontal ? p1.x : p1.y)) / span;
         const pts = elbowPoints(geo, 'elbow', k);
         const c = iconsCrossed(pts, icons, skip).length;
-        const cost = c * 10000 + len(pts) + (same ? 300 : 0) + (pair === pairs[0] || pair === pairs[3] ? 0 : 100);
-        if (!best || cost < best.cost) best = { cost, c, k: Math.round(k * 1000) / 1000, pair };
+        const cb = foreign ? iconsCrossed(pts, foreign, skip).length : 0;
+        const cost = c * 10000 + cb * BOX_COST + len(pts) + (same ? 300 : 0) + (pair === pairs[0] || pair === pairs[3] ? 0 : 100);
+        if (!best || cost < best.cost) best = { cost, c, cb, k: Math.round(k * 1000) / 1000, pair, m, horizontal, p1: horizontal ? p1.x : p1.y, span };
       }
     }
-    if (best && best.c < cur.length) out.set(e.id, { s: 0, t: 0, b: best.k, sd: best.pair });
+    // 아이콘 관통이 줄거나, 아이콘은 그대로인데 상자 관통이 줄 때만 바꾼다
+    if (best && (best.c < cur.length || (best.c === cur.length && best.cb < curB && best.cost < cost0))) {
+      out.set(e.id, { s: 0, t: 0, b: best.k, sd: best.pair, lb: 'start' });   // 우회한 선의 이름표는 통로(가운데 구간) 말고 나가는 쪽 첫 구간에
+      laneList.push({ id: e.id, horizontal: best.horizontal, m: best.m, p1: best.p1, span: best.span });
+    }
+  }
+  // 통로 차선: 같은 방향으로 같은 통로(±6px)를 타는 선들은 LANE 간격으로 나란히 (겹쳐서 한 줄로 보이지 않게)
+  const groups = new Map();
+  for (const d of laneList) { const key = (d.horizontal ? 'h' : 'v') + ':' + Math.round(d.m / 12); (groups.get(key) || groups.set(key, []).get(key)).push(d); }
+  for (const list of groups.values()) {
+    if (list.length < 2) continue;
+    list.sort((p, q) => (p.id < q.id ? -1 : 1));
+    const base = list[0].m - ((list.length - 1) * LANE) / 2;
+    list.forEach((d, i) => { const m = base + i * LANE; const o = out.get(d.id); if (o && d.span) o.b = Math.round(((m - d.p1) / d.span) * 1000) / 1000; });
   }
 }
 
@@ -322,7 +346,15 @@ export function lineCrossings(g, drops = () => 0) {
 }
 
 /** 우회 계산용 아이콘 사각형 지도(카드·글상자·배지 제외) */
-export const iconRects = (g, rects) => new Map(g.nodes.filter((n) => n.type !== 'card' && n.type !== 'text' && n.type !== 'badge' && rects.has(n.id)).map((n) => [n.id, rects.get(n.id)]));
+export const iconRects = (g, rects) => {
+  const m = new Map(g.nodes.filter((n) => n.type !== 'card' && n.type !== 'text' && n.type !== 'badge' && rects.has(n.id)).map((n) => [n.id, rects.get(n.id)]));
+  // 우회에 쓰는 상자 정보: 상자 사각형 + 부모 사슬 (남의 상자를 뚫고 가는 선을 상자 밖 통로로 돌리려고)
+  m.boxes = {
+    rects: new Map(g.groups.filter((x) => rects.has(x.id)).map((x) => [x.id, rects.get(x.id)])),
+    parentOf: new Map([...g.groups, ...g.nodes].map((x) => [x.id, x.parent ?? null])),
+  };
+  return m;
+};
 
 /** 선 한쪽 끝의 사각형: 요소면 그 사각형, 빈 곳이면 크기 0 인 점 */
 export const endRect = (rects, id, pt) => (id ? rects.get(id) : pt ? { x: pt.x, y: pt.y, w: 0, h: 0 } : null);
