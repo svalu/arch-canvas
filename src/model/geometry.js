@@ -691,10 +691,25 @@ function layoutGrid(items, idx, rows, GAP) {
   // 키 큰 것(상자) 옆에 작은 것(아이콘)들이 한 줄로 늘어서면 행이 상자 키만큼 높아져 아이콘 아래가 텅 빈다.
   // 그런 행은 작은 것들을 세로로 쌓아 키를 맞춘다 (행 순서는 그대로, 걸친 칸은 손대지 않는다)
   for (let r = 0; r < grid.length; r++) {
-    const own = grid[r].filter((i) => cell.get(i).r0 === r && cell.get(i).r1 === r);
-    if (own.length < 3) continue;
+    const ownOf = (rr) => grid[rr].filter((i) => cell.get(i).r0 === rr && cell.get(i).r1 === rr);
+    let own = ownOf(r);
+    if (!own.length) continue;
     const tall = Math.max(...own.map((i) => items[i].h));
-    const shorts = own.filter((i) => items[i].h <= tall * 0.55);
+    const isShort = (i) => items[i].h <= tall * 0.55;
+    if (!own.some((i) => !isShort(i))) continue;   // 키 큰 것이 없는 행은 그대로
+    // 바로 아래 행이 작은 것 한둘뿐이면(배치안에서 남은 아이콘이 혼자 행을 차지한 꼴) 이 행으로 끌어올려 상자 옆에 쌓는다
+    while (r + 1 < grid.length) {
+      const nx = grid[r + 1];
+      const liftable = nx.length <= 3 && nx.every((i) => { const s = cell.get(i); return s.r0 === r + 1 && s.r1 === r + 1 && isShort(i); });
+      if (!liftable) break;
+      const base = Math.max(...grid[r].map((i) => cell.get(i).c)) + 1;
+      nx.forEach((i, k) => { const s = cell.get(i); s.r0 = r; s.r1 = r; s.c = base + k; });
+      grid.splice(r + 1, 1);
+      for (const s of cell.values()) { if (s.r0 > r) { s.r0--; s.r1--; } else if (s.r1 > r) s.r1--; }
+      grid[r] = grid[r].concat(nx);
+    }
+    own = ownOf(r);
+    const shorts = own.filter(isShort);
     if (shorts.length < 2 || shorts.length === own.length) continue;
     const order = [...grid[r]].sort((p, q) => cell.get(p).c - cell.get(q).c);
     let col = -1, stackH = Infinity;
